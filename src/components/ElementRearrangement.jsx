@@ -103,9 +103,9 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
     }, [isSimulating]);
 
     return (
-        <div style={{ height: '100%', display: 'flex', gap: '20px', padding: '20px', backgroundColor: 'var(--bg-secondary)' }}>
+        <div style={{ height: '100%', display: 'flex', gap: '10px', padding: '10px', backgroundColor: 'var(--bg-secondary)' }}>
             {/* Left Panel: List & Controls */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            <div style={{ width: '350px', display: 'flex', flexDirection: 'column', gap: '10px', flexShrink: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>🔄 Rearrange Elements</h2>
                     <div style={{ display: 'flex', gap: '10px' }}>
@@ -165,28 +165,30 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
             </div>
 
             {/* Right Panel: Simulation Preview */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>📺 Simulation Preview</h3>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>📺 Simulation Preview</h3>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#ccc', fontSize: '0.9rem', cursor: 'pointer' }}>
                         <input
                             type="checkbox"
                             checked={showInfo}
                             onChange={(e) => setShowInfo(e.target.checked)}
                         />
-                        Tampilkan Informasi Elemen (Nama & Waktu)
+                        Tampilkan Informasi
                     </label>
                 </div>
 
                 <div style={{
                     width: '100%',
-                    aspectRatio: '16/9',
+                    flex: 1,
                     backgroundColor: '#000',
                     borderRadius: '8px',
                     overflow: 'hidden',
                     position: 'relative',
-                    border: '1px solid #444'
+                    border: '1px solid #444',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                 }}>
                     {videoSrc ? (
                         <video
@@ -233,7 +235,7 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
                     )}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', paddingBottom: '10px' }}>
                     {!isSimulating ? (
                         <button
                             className="btn"
@@ -257,17 +259,6 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
                             ⏹ Stop Simulation
                         </button>
                     )}
-                </div>
-
-                <div style={{ padding: '15px', backgroundColor: '#1a1a1a', borderRadius: '6px', fontSize: '0.9rem', color: '#ccc' }}>
-                    <p style={{ margin: '0 0 10px 0' }}><strong>ℹ️ Cara Penggunaan:</strong></p>
-                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
-                        <li>Drag & Drop elemen di list kiri untuk mengubah urutan.</li>
-                        <li>Gunakan tombol "Auto Arrange" untuk mengurutkan berdasarkan durasi.</li>
-                        <li>Klik "Start Simulation" untuk melihat preview video dengan urutan baru.</li>
-                        <li>Centang "Tampilkan Informasi" untuk melihat detail elemen saat simulasi.</li>
-                        <li>Klik "Simpan Urutan" untuk menerapkan perubahan ke data utama.</li>
-                    </ul>
                 </div>
             </div>
         </div>

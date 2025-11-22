@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 function PlaybackControls({
     videoState,
@@ -9,8 +9,30 @@ function PlaybackControls({
     onSetZoom,
     onToggleReverse
 }) {
+    const [useRatingSpeed, setUseRatingSpeed] = useState(false);
     const speedPresets = [0.25, 0.5, 1, 2, 4, 8];
     const zoomLevels = [0.5, 1, 1.5, 2, 3];
+
+    // Calculate average rating from measurements
+    const calculateRatingSpeed = () => {
+        if (!videoState.measurements || videoState.measurements.length === 0) return 1;
+
+        const measurementsWithRating = videoState.measurements.filter(m => m.rating && m.rating > 0);
+        if (measurementsWithRating.length === 0) return 1;
+
+        const avgRating = measurementsWithRating.reduce((sum, m) => sum + m.rating, 0) / measurementsWithRating.length;
+        return avgRating / 100; // Convert percentage to decimal
+    };
+
+    // Apply rating speed when toggle changes
+    useEffect(() => {
+        if (useRatingSpeed) {
+            const ratingSpeed = calculateRatingSpeed();
+            onSetSpeed(ratingSpeed);
+        } else {
+            onSetSpeed(1); // Reset to normal speed
+        }
+    }, [useRatingSpeed]);
 
     const formatTime = (seconds) => {
         const mins = Math.floor(seconds / 60);
@@ -18,6 +40,9 @@ function PlaybackControls({
         const ms = Math.floor((seconds % 1) * 100);
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
     };
+
+    const ratingSpeed = calculateRatingSpeed();
+    const hasRatings = videoState.measurements && videoState.measurements.some(m => m.rating && m.rating > 0);
 
     return (
         <div style={{
@@ -51,14 +76,15 @@ function PlaybackControls({
                     <select
                         value={videoState.playbackRate}
                         onChange={(e) => onSetSpeed(parseFloat(e.target.value))}
+                        disabled={useRatingSpeed}
                         style={{
                             padding: '6px 8px',
-                            backgroundColor: '#333',
+                            backgroundColor: useRatingSpeed ? '#444' : '#333',
                             border: '1px solid #555',
                             borderRadius: '4px',
                             color: '#fff',
                             fontSize: '0.85rem',
-                            cursor: 'pointer',
+                            cursor: useRatingSpeed ? 'not-allowed' : 'pointer',
                             minWidth: '80px'
                         }}
                         title="Playback Speed"
@@ -71,6 +97,25 @@ function PlaybackControls({
                         <option value="8">🐇 8x</option>
                     </select>
                 </div>
+
+                {/* Rating Speed Toggle */}
+                {hasRatings && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '8px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#ccc', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={useRatingSpeed}
+                                onChange={(e) => setUseRatingSpeed(e.target.checked)}
+                            />
+                            <span>⭐ Rating Speed</span>
+                        </label>
+                        {useRatingSpeed && (
+                            <span style={{ fontSize: '0.75rem', color: '#4da6ff', padding: '2px 6px', backgroundColor: '#1a1a1a', borderRadius: '3px' }}>
+                                {(ratingSpeed * 100).toFixed(0)}% = {ratingSpeed.toFixed(2)}x
+                            </span>
+                        )}
+                    </div>
+                )}
 
                 {/* Zoom Control - Dropdown */}
                 <div style={{ display: 'flex', alignItems: 'center', marginLeft: '8px' }}>

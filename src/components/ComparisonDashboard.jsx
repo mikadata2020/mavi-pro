@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAllSessions } from '../utils/database';
+import { exportComparisonToExcel } from '../utils/excelExport';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 function ComparisonDashboard() {
@@ -105,7 +106,18 @@ function ComparisonDashboard() {
 
             {/* Right Panel: Comparison Charts */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
-                <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>📊 Perbandingan Siklus</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>📊 Perbandingan Siklus</h2>
+                    {selectedData.length > 0 && (
+                        <button
+                            className="btn"
+                            onClick={() => exportComparisonToExcel(selectedData)}
+                            style={{ backgroundColor: '#05a', padding: '8px 16px' }}
+                        >
+                            📥 Export Excel
+                        </button>
+                    )}
+                </div>
 
                 {selectedSessionIds.length === 0 ? (
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', border: '2px dashed #444', borderRadius: '8px' }}>

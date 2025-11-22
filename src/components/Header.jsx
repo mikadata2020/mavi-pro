@@ -12,10 +12,7 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
             justifyContent: 'space-between'
         }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <h1 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--accent-blue)' }}>Analisis Gerakan</h1>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-                    Operasi mudah melalui antarmuka pengguna grafis yang intuitif.
-                </span>
+                <h1 style={{ margin: 0, fontSize: '1.5rem', color: 'var(--accent-blue)' }}>MAVi</h1>
             </div>
 
             {setCurrentView && (
@@ -24,45 +21,133 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                         className="btn"
                         style={{
                             backgroundColor: currentView === 'dashboard' ? 'var(--accent-blue)' : '',
-                            padding: '6px 12px'
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
                         }}
                         onClick={() => setCurrentView('dashboard')}
                         title="Video Analysis Workspace"
                     >
-                        🎬 Video
+                        🎬
                     </button>
                     <button
                         className="btn"
                         style={{
                             backgroundColor: currentView === 'analysis' ? 'var(--accent-blue)' : '',
-                            padding: '6px 12px'
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
                         }}
                         onClick={() => setCurrentView('analysis')}
                         title="Analysis Summary & Charts"
                     >
-                        📊 Analysis
+                        📊
                     </button>
                     <button
                         className="btn"
                         style={{
                             backgroundColor: currentView === 'rearrangement' ? 'var(--accent-blue)' : '',
-                            padding: '6px 12px'
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
                         }}
                         onClick={() => setCurrentView('rearrangement')}
                         title="Rearrange Elements & Simulate"
                     >
-                        🔄 Rearrange
+                        🔄
                     </button>
                     <button
                         className="btn"
                         style={{
                             backgroundColor: currentView === 'comparison' ? 'var(--accent-blue)' : '',
-                            padding: '6px 12px'
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
                         }}
                         onClick={() => setCurrentView('comparison')}
                         title="Compare Multiple Sessions"
                     >
-                        ⚖️ Comparison
+                        ⚖️
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'aggregation' ? 'var(--accent-blue)' : '',
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
+                        }}
+                        onClick={() => setCurrentView('aggregation')}
+                        title="Cycle Time Aggregation"
+                    >
+                        📈
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'standard-time' ? 'var(--accent-blue)' : '',
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
+                        }}
+                        onClick={() => setCurrentView('standard-time')}
+                        title="Standard Time Calculation"
+                    >
+                        ⏱️
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'waste-elimination' ? 'var(--accent-blue)' : '',
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
+                        }}
+                        onClick={() => setCurrentView('waste-elimination')}
+                        title="Waste Elimination Simulation"
+                    >
+                        🗑️
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'spaghetti' ? 'var(--accent-blue)' : '',
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
+                        }}
+                        onClick={() => setCurrentView('spaghetti')}
+                        title="Spaghetti Chart - Movement Diagram"
+                    >
+                        🍝
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'best-worst' ? 'var(--accent-blue)' : '',
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
+                        }}
+                        onClick={() => setCurrentView('best-worst')}
+                        title="Best vs Worst Cycle Analysis"
+                    >
+                        🏆
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'video-comparison' ? 'var(--accent-blue)' : '',
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
+                        }}
+                        onClick={() => setCurrentView('video-comparison')}
+                        title="Video Side-by-Side Comparison"
+                    >
+                        🎥
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'help' ? 'var(--accent-blue)' : '',
+                            padding: '8px 10px',
+                            fontSize: '1.2rem'
+                        }}
+                        onClick={() => setCurrentView('help')}
+                        title="Help & User Guide"
+                    >
+                        ❓
                     </button>
                     <button
                         className="btn"

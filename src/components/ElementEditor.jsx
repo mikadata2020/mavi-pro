@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { saveMeasurementSession } from '../utils/database';
 import { exportToExcel } from '../utils/excelExport';
+import NarrationRecorder from './NarrationRecorder';
 
-function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeasurements }) {
+function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeasurements, narration = null, onNarrationChange }) {
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
     const [editingId, setEditingId] = useState(null);
@@ -37,7 +38,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         setIsSaving(true);
         setSaveMessage('');
         try {
-            await saveMeasurementSession(videoName, measurements);
+            await saveMeasurementSession(videoName, measurements, narration);
             setSaveMessage('✓ Data berhasil disimpan!');
             setTimeout(() => setSaveMessage(''), 3000);
         } catch (error) {
@@ -94,6 +95,38 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         onUpdateMeasurements(measurements.map(m => m.id === id ? { ...m, rating } : m));
     };
 
+    const handleSplit = (element) => {
+        const splitTimeStr = prompt(`Masukkan waktu split (antara ${element.startTime.toFixed(2)}s - ${element.endTime.toFixed(2)}s):`, ((element.startTime + element.endTime) / 2).toFixed(2));
+        if (splitTimeStr === null) return;
+
+        const splitTime = parseFloat(splitTimeStr);
+        if (isNaN(splitTime) || splitTime <= element.startTime || splitTime >= element.endTime) {
+            alert('Waktu split tidak valid! Harus berada di antara waktu mulai dan selesai elemen.');
+            return;
+        }
+
+        const firstPart = {
+            ...element,
+            id: Date.now().toString(),
+            endTime: splitTime,
+            duration: splitTime - element.startTime,
+            elementName: `${element.elementName} (Part 1)`
+        };
+
+        const secondPart = {
+            ...element,
+            id: (Date.now() + 1).toString(),
+            startTime: splitTime,
+            duration: element.endTime - splitTime,
+            elementName: `${element.elementName} (Part 2)`
+        };
+
+        const index = measurements.findIndex(m => m.id === element.id);
+        const updated = [...measurements];
+        updated.splice(index, 1, firstPart, secondPart);
+        onUpdateMeasurements(updated);
+    };
+
     const getFilteredAndSortedMeasurements = () => {
         let filtered = [...measurements];
         if (searchQuery) {
@@ -130,21 +163,26 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-secondary)', padding: '10px' }}>
             {/* Filter Row with Action Buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 2fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px', padding: '10px', backgroundColor: '#2a2a2a', borderRadius: '6px', alignItems: 'center' }}>
-                <button onClick={handleSave} disabled={isSaving || measurements.length === 0} style={{ padding: '8px 12px', fontSize: '1.2rem', backgroundColor: measurements.length > 0 ? 'var(--accent-blue)' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '4px', color: 'white' }} title="Simpan ke Database">
-                    {isSaving ? '⏳' : '💾'}
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto 2fr 1fr 1fr 1fr', gap: '4px', marginBottom: '6px', padding: '3px 6px', backgroundColor: '#2a2a2a', borderRadius: '4px', alignItems: 'center' }}>
+                <button onClick={handleSave} disabled={isSaving || measurements.length === 0} style={{ padding: '3px 8px', fontSize: '0.9rem', backgroundColor: measurements.length > 0 ? 'var(--accent-blue)' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '3px', color: 'white' }} title="Simpan ke Database">
+                    {isSaving ? '⌛' : '💾'}
                 </button>
-                <button onClick={handleExport} disabled={measurements.length === 0} style={{ padding: '8px 12px', fontSize: '1.2rem', backgroundColor: measurements.length > 0 ? '#0a0' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '4px', color: 'white' }} title="Export ke Excel">
+                <button onClick={handleExport} disabled={measurements.length === 0} style={{ padding: '3px 8px', fontSize: '0.9rem', backgroundColor: measurements.length > 0 ? '#0a0' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '3px', color: 'white' }} title="Export ke Excel">
                     📊
                 </button>
-                <input type="text" placeholder="🔍 Cari elemen..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: '6px 10px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.85rem' }} />
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={{ padding: '6px 10px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.85rem' }}>
+                <NarrationRecorder
+                    sessionId={null}
+                    existingNarration={narration}
+                    onNarrationSaved={onNarrationChange}
+                />
+                <input type="text" placeholder="🔍 Cari elemen..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: '3px 8px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.8rem' }} />
+                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
                     <option value="all">Semua Kategori</option>
                     <option value="Value-added">Value-added</option>
                     <option value="Non value-added">Non value-added</option>
                     <option value="Waste">Waste</option>
                 </select>
-                <select value={filterRating} onChange={(e) => setFilterRating(e.target.value)} style={{ padding: '6px 10px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.85rem' }}>
+                <select value={filterRating} onChange={(e) => setFilterRating(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
                     <option value="all">Semua Rating</option>
                     <option value="5">⭐⭐⭐⭐⭐</option>
                     <option value="4">⭐⭐⭐⭐+</option>
@@ -152,7 +190,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                     <option value="2">⭐⭐+</option>
                     <option value="1">⭐+</option>
                 </select>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '6px 10px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.85rem' }}>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
                     <option value="order">Urutan Asli</option>
                     <option value="cycle">Cycle</option>
                     <option value="duration">Durasi (Terbesar)</option>
@@ -177,15 +215,15 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                 <table style={{ width: '100%', borderCollapse: 'collapse', color: '#fff', fontSize: '0.85rem' }}>
                     <thead style={{ position: 'sticky', top: 0, backgroundColor: '#333', zIndex: 1 }}>
                         <tr>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '40px' }}>No.</th>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '60px' }}>Cycle</th>
-                            <th style={{ padding: '8px', border: '1px solid #444' }}>Nama Elemen</th>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '150px' }}>Kategori</th>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '120px' }}>Rating</th>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '70px' }}>Start (s)</th>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '70px' }}>Finish (s)</th>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '80px' }}>Waktu (s)</th>
-                            <th style={{ padding: '8px', border: '1px solid #444', width: '180px' }}>Aksi</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '40px', fontSize: '0.7rem' }}>No.</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem' }}>Cycle</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', fontSize: '0.7rem' }}>Proses</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '150px', fontSize: '0.7rem' }}>Kategori</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '120px', fontSize: '0.7rem' }}>Rating</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Start (s)</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Finish (s)</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '80px', fontSize: '0.7rem' }}>Waktu (s)</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '180px', fontSize: '0.7rem' }}>Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -238,6 +276,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                 <div style={{ display: 'flex', gap: '3px', justifyContent: 'center', flexWrap: 'wrap' }}>
                                                     <button onClick={() => handleMoveUp(originalIndex)} disabled={originalIndex === 0} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: originalIndex === 0 ? '#333' : '#555', border: 'none', color: 'white', cursor: originalIndex === 0 ? 'not-allowed' : 'pointer', borderRadius: '3px' }} title="Pindah ke atas">▲</button>
                                                     <button onClick={() => handleMoveDown(originalIndex)} disabled={originalIndex === measurements.length - 1} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: originalIndex === measurements.length - 1 ? '#333' : '#555', border: 'none', color: 'white', cursor: originalIndex === measurements.length - 1 ? 'not-allowed' : 'pointer', borderRadius: '3px' }} title="Pindah ke bawah">▼</button>
+                                                    <button onClick={() => handleSplit(el)} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: '#d97706', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '3px' }} title="Split Element">✂️</button>
                                                     <button onClick={() => handleStartEdit(el)} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: '#05a', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '3px' }} title="Edit">✎</button>
                                                     <button onClick={() => handleDelete(el.id)} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: '#a00', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '3px' }} title="Hapus">🗑</button>
                                                 </div>

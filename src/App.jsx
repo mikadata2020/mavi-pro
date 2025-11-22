@@ -5,11 +5,18 @@ import FeatureMenu from './components/FeatureMenu';
 import AnalysisDashboard from './components/AnalysisDashboard';
 import ElementRearrangement from './components/ElementRearrangement';
 import ComparisonDashboard from './components/ComparisonDashboard';
+import CycleAggregation from './components/CycleAggregation';
+import StandardTime from './components/StandardTime';
+import WasteElimination from './components/WasteElimination';
+import BestWorstCycle from './components/BestWorstCycle';
+import VideoComparison from './components/VideoComparison';
+import Help from './components/Help';
+import SpaghettiChart from './components/SpaghettiChart';
 import SessionManager from './components/SessionManager';
 import './index.css';
 
 function App() {
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'features', 'analysis'
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'features', 'analysis', 'rearrangement', 'comparison', 'aggregation', 'standard-time', 'waste-elimination', 'best-worst', 'video-comparison', 'help', 'spaghetti'
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [measurements, setMeasurements] = useState([]);
@@ -76,6 +83,34 @@ function App() {
         ) : currentView === 'comparison' ? (
           <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
             <ComparisonDashboard />
+          </div>
+        ) : currentView === 'aggregation' ? (
+          <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+            <CycleAggregation />
+          </div>
+        ) : currentView === 'standard-time' ? (
+          <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+            <StandardTime />
+          </div>
+        ) : currentView === 'waste-elimination' ? (
+          <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+            <WasteElimination />
+          </div>
+        ) : currentView === 'best-worst' ? (
+          <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+            <BestWorstCycle />
+          </div>
+        ) : currentView === 'video-comparison' ? (
+          <div style={{ flex: 1, padding: '10px', overflow: 'hidden' }}>
+            <VideoComparison />
+          </div>
+        ) : currentView === 'help' ? (
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <Help />
+          </div>
+        ) : currentView === 'spaghetti' ? (
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <SpaghettiChart />
           </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', gap: '10px', padding: '10px' }}>

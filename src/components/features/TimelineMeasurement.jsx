@@ -81,127 +81,163 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
     return (
         <div style={{
             backgroundColor: 'var(--bg-secondary)',
-            padding: '10px',
+            padding: '8px',
             borderRadius: '4px',
             marginTop: '10px'
         }}>
-            {/* Measurement Controls */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                {measurementStart === null ? (
-                    <button
-                        className="btn"
-                        onClick={handleStartMeasurement}
-                        style={{ backgroundColor: 'var(--accent-blue)' }}
-                    >
-                        ⏱ Start Measurement {quickMode && '(M)'}
-                    </button>
-                ) : (
-                    <>
-                        <div style={{
-                            padding: '5px 10px',
-                            backgroundColor: '#333',
-                            borderRadius: '4px',
-                            fontSize: '0.85rem',
-                            color: '#0f0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '5px'
-                        }}>
-                            🔴 Recording... Start: {measurementStart.toFixed(2)}s
-                        </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center', justifyContent: 'space-between' }}>
+                {/* Left side: Start button or Recording controls */}
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flex: 1 }}>
+                    {measurementStart === null ? (
                         <button
                             className="btn"
-                            onClick={handleEndMeasurement}
+                            onClick={handleStartMeasurement}
                             style={{
-                                backgroundColor: '#0a0',
-                                padding: '8px 14px',
-                                fontSize: '1.2rem',
-                                minWidth: '40px'
+                                width: '40px',
+                                height: '40px',
+                                backgroundColor: 'var(--accent-blue)',
+                                border: 'none',
+                                borderRadius: '50%',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                fontSize: '1.3rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 3px 10px rgba(0,150,255,0.4)',
+                                transition: 'all 0.2s',
+                                padding: 0,
+                                flexShrink: 0
                             }}
-                            title="End & Save (E key)"
-                        >
-                            ✓
-                        </button>
-                        <button
-                            className="btn"
-                            onClick={handleCancelMeasurement}
-                            style={{
-                                backgroundColor: '#a00',
-                                padding: '8px 14px',
-                                fontSize: '1.2rem',
-                                minWidth: '40px'
+                            onMouseEnter={(e) => {
+                                e.target.style.transform = 'scale(1.1)';
+                                e.target.style.boxShadow = '0 5px 14px rgba(0,150,255,0.6)';
                             }}
-                            title="Cancel"
+                            onMouseLeave={(e) => {
+                                e.target.style.transform = 'scale(1)';
+                                e.target.style.boxShadow = '0 3px 10px rgba(0,150,255,0.4)';
+                            }}
+                            title={`Start Measurement${quickMode ? ' (M)' : ''}`}
                         >
-                            ✗
+                            ⏱️
                         </button>
-                        {!quickMode && (
-                            <input
-                                type="text"
-                                placeholder="Element Name"
-                                value={newElementName}
-                                onChange={(e) => setNewElementName(e.target.value)}
-                                autoFocus
+                    ) : (
+                        <>
+                            <div style={{
+                                padding: '4px 10px',
+                                backgroundColor: '#1a1a1a',
+                                borderRadius: '20px',
+                                fontSize: '0.75rem',
+                                color: '#0f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                border: '1px solid #0a0',
+                                flexShrink: 0
+                            }}>
+                                🔴 {measurementStart.toFixed(2)}s
+                            </div>
+                            <button
+                                className="btn"
+                                onClick={handleEndMeasurement}
                                 style={{
-                                    padding: '5px 10px',
+                                    backgroundColor: '#0a0',
+                                    padding: '6px 12px',
+                                    fontSize: '1rem',
+                                    minWidth: '36px',
+                                    borderRadius: '4px',
+                                    flexShrink: 0
+                                }}
+                                title="End & Save (E key)"
+                            >
+                                ✓
+                            </button>
+                            <button
+                                className="btn"
+                                onClick={handleCancelMeasurement}
+                                style={{
+                                    backgroundColor: '#a00',
+                                    padding: '6px 12px',
+                                    fontSize: '1rem',
+                                    minWidth: '36px',
+                                    borderRadius: '4px',
+                                    flexShrink: 0
+                                }}
+                                title="Cancel"
+                            >
+                                ✗
+                            </button>
+                            {!quickMode && (
+                                <input
+                                    type="text"
+                                    placeholder="Element Name"
+                                    value={newElementName}
+                                    onChange={(e) => setNewElementName(e.target.value)}
+                                    autoFocus
+                                    style={{
+                                        padding: '4px 8px',
+                                        backgroundColor: '#333',
+                                        border: '1px solid #555',
+                                        color: 'white',
+                                        borderRadius: '4px',
+                                        fontSize: '0.8rem',
+                                        flex: 1,
+                                        minWidth: '120px'
+                                    }}
+                                />
+                            )}
+                            {quickMode && (
+                                <div style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: '#222',
+                                    borderRadius: '4px',
+                                    fontSize: '0.8rem',
+                                    color: '#0ff',
+                                    border: '1px solid #555',
+                                    flexShrink: 0
+                                }}>
+                                    {newElementName}
+                                </div>
+                            )}
+                            <select
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                                style={{
+                                    padding: '4px 8px',
                                     backgroundColor: '#333',
                                     border: '1px solid #555',
                                     color: 'white',
                                     borderRadius: '4px',
-                                    fontSize: '0.85rem',
-                                    width: '250px'
+                                    fontSize: '0.75rem',
+                                    flexShrink: 0
                                 }}
-                            />
-                        )}
-                        {quickMode && (
-                            <div style={{
-                                padding: '5px 10px',
-                                backgroundColor: '#222',
-                                borderRadius: '4px',
-                                fontSize: '0.85rem',
-                                color: '#0ff',
-                                border: '1px solid #555'
-                            }}>
-                                {newElementName}
-                            </div>
-                        )}
-                        <select
-                            value={selectedCategory}
-                            onChange={(e) => setSelectedCategory(e.target.value)}
-                            style={{
-                                padding: '5px 10px',
-                                backgroundColor: '#333',
-                                border: '1px solid #555',
-                                color: 'white',
-                                borderRadius: '4px',
-                                fontSize: '0.85rem'
-                            }}
-                        >
-                            {categories.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </select>
-                    </>
-                )}
+                            >
+                                {categories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </>
+                    )}
+                </div>
 
-                {/* Cycle Control */}
+                {/* Right side: Cycle Control */}
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    marginLeft: 'auto',
+                    gap: '8px',
                     backgroundColor: '#1a1a1a',
-                    padding: '5px 10px',
+                    padding: '4px 10px',
                     borderRadius: '4px',
-                    border: '1px solid #444'
+                    border: '1px solid #444',
+                    flexShrink: 0
                 }}>
-                    <span style={{ color: '#aaa', fontSize: '0.85rem' }}>Cycle:</span>
-                    <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '1rem' }}>{currentCycle}</span>
+                    <span style={{ color: '#aaa', fontSize: '0.75rem' }}>Cycle:</span>
+                    <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '0.95rem' }}>{currentCycle}</span>
                     <button
                         className="btn"
                         onClick={handleNextCycle}
                         title="Next Cycle"
-                        style={{ padding: '4px 8px', fontSize: '0.8rem', backgroundColor: '#444' }}
+                        style={{ padding: '3px 8px', fontSize: '0.75rem', backgroundColor: '#444', borderRadius: '4px' }}
                     >
                         Next ⏭
                     </button>
@@ -223,58 +259,7 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
                 </div>
             )}
 
-            {/* Timeline Visualization */}
-            <div style={{
-                position: 'relative',
-                height: '60px',
-                backgroundColor: '#1a1a1a',
-                borderRadius: '4px',
-                overflow: 'hidden'
-            }}>
-                {/* Measurements */}
-                {videoState.measurements.map(measurement => {
-                    const left = (measurement.startTime / videoState.duration) * 100;
-                    const width = ((measurement.endTime - measurement.startTime) / videoState.duration) * 100;
 
-                    return (
-                        <div
-                            key={measurement.id}
-                            style={{
-                                position: 'absolute',
-                                left: `${left}%`,
-                                width: `${width}%`,
-                                height: '40px',
-                                top: '10px',
-                                backgroundColor: getCategoryColor(measurement.category),
-                                border: '1px solid #fff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '0.7rem',
-                                color: 'white',
-                                overflow: 'hidden',
-                                cursor: 'pointer'
-                            }}
-                            title={`${measurement.elementName} (${measurement.duration.toFixed(2)}s) - Cycle ${measurement.cycle || 1}`}
-                            onClick={() => onRemoveMeasurement(measurement.id)}
-                        >
-                            {measurement.elementName}
-                        </div>
-                    );
-                })}
-
-                {/* Current Time Indicator */}
-                <div
-                    style={{
-                        position: 'absolute',
-                        left: `${(videoState.currentTime / videoState.duration) * 100}%`,
-                        width: '2px',
-                        height: '100%',
-                        backgroundColor: '#f00',
-                        zIndex: 10
-                    }}
-                />
-            </div>
 
             {/* Measurements List */}
             {videoState.measurements.length > 0 && (

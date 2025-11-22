@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ElementEditor from './ElementEditor';
 import PlaybackControls from './features/PlaybackControls';
 import TimelineMeasurement from './features/TimelineMeasurement';
@@ -10,6 +10,39 @@ function VideoWorkspace({ onMeasurementsChange, videoSrc, setVideoSrc, measureme
     const [logoUrl, setLogoUrl] = useState(null);
     const [logoPosition, setLogoPosition] = useState('bottom-right');
     const [logoOpacity, setLogoOpacity] = useState(0.7);
+    const [leftPanelWidth, setLeftPanelWidth] = useState(35); // Initial width in percentage
+    const containerRef = useRef(null);
+    const isResizing = useRef(false);
+
+    const startResizing = useCallback(() => {
+        isResizing.current = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    }, []);
+
+    const stopResizing = useCallback(() => {
+        isResizing.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    }, []);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!isResizing.current || !containerRef.current) return;
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+        if (newWidth > 15 && newWidth < 85) { // Min/Max constraints
+            setLeftPanelWidth(newWidth);
+        }
+    }, []);
+
+    useEffect(() => {
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', stopResizing);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', stopResizing);
+        };
+    }, [handleMouseMove, stopResizing]);
 
     const {
         videoRef,
@@ -124,9 +157,9 @@ function VideoWorkspace({ onMeasurementsChange, videoSrc, setVideoSrc, measureme
     };
 
     return (
-        <div style={{ flex: 2, display: 'flex', gap: '10px', minHeight: '0' }}>
+        <div ref={containerRef} style={{ flex: 2, display: 'flex', minHeight: '0' }}>
             {/* Video Player Section */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: '#000', position: 'relative' }}>
+            <div style={{ width: `${leftPanelWidth}%`, display: 'flex', flexDirection: 'column', backgroundColor: '#000', position: 'relative' }}>
                 <div style={{
                     flex: 1,
                     display: 'flex',
@@ -228,8 +261,38 @@ function VideoWorkspace({ onMeasurementsChange, videoSrc, setVideoSrc, measureme
                 )}
             </div>
 
+            {/* Resizer Handle */}
+            <div
+                onMouseDown={startResizing}
+                style={{
+                    width: '12px',
+                    background: '#1a1a1a',
+                    cursor: 'col-resize',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10,
+                    borderLeft: '1px solid #333',
+                    borderRight: '1px solid #333',
+                    transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.target.style.background = '#333'}
+                onMouseLeave={(e) => e.target.style.background = '#1a1a1a'}
+                title="Drag to resize"
+            >
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '3px'
+                }}>
+                    <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                    <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                    <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                </div>
+            </div>
+
             {/* Right Panel: Element Editor + Timeline */}
-            <div style={{ flex: 1, minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ flex: 1, minWidth: '0', display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '10px' }}>
                 <div style={{ flex: 1, minHeight: '300px' }}>
                     <ElementEditor
                         measurements={videoState.measurements}

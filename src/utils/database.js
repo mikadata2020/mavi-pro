@@ -24,7 +24,7 @@ export const initDB = () => {
 };
 
 // Save measurement session
-export const saveMeasurementSession = async (videoName, measurements) => {
+export const saveMeasurementSession = async (videoName, measurements, narration = null) => {
     const db = await initDB();
 
     return new Promise((resolve, reject) => {
@@ -34,7 +34,8 @@ export const saveMeasurementSession = async (videoName, measurements) => {
         const data = {
             videoName: videoName || 'Untitled',
             timestamp: new Date().toISOString(),
-            measurements: measurements
+            measurements: measurements,
+            narration: narration
         };
 
         const request = store.add(data);
@@ -87,7 +88,7 @@ export const deleteSession = async (id) => {
 };
 
 // Update session
-export const updateSession = async (id, videoName, measurements) => {
+export const updateSession = async (id, videoName, measurements, narration = null) => {
     const db = await initDB();
 
     return new Promise((resolve, reject) => {
@@ -98,7 +99,8 @@ export const updateSession = async (id, videoName, measurements) => {
             id: id,
             videoName: videoName || 'Untitled',
             timestamp: new Date().toISOString(),
-            measurements: measurements
+            measurements: measurements,
+            narration: narration
         };
 
         const request = store.put(data);
