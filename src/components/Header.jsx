@@ -1,6 +1,6 @@
 import React from 'react';
 
-function Header({ currentView, setCurrentView, onOpenSessionManager }) {
+function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessionManager, theme, toggleTheme }) {
     return (
         <header style={{
             height: 'var(--header-height)',
@@ -63,6 +63,14 @@ function Header({ currentView, setCurrentView, onOpenSessionManager }) {
                         title="Compare Multiple Sessions"
                     >
                         ⚖️ Comparison
+                    </button>
+                    <button
+                        className="btn"
+                        onClick={toggleTheme}
+                        title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+                        style={{ padding: '6px 10px', fontSize: '1.2rem' }}
+                    >
+                        {theme === 'dark' ? '☀️' : '🌙'}
                     </button>
 
                     <div style={{ width: '1px', height: '30px', backgroundColor: '#555', margin: '0 5px' }}></div>

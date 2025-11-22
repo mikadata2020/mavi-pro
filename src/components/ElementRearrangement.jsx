@@ -53,7 +53,7 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
     const startSimulation = () => {
         if (!videoRef.current || elements.length === 0) return;
         setIsSimulating(true);
-        playElement(0);
+        setCurrentSimulatingIndex(0);
     };
 
     const stopSimulation = () => {
@@ -67,38 +67,31 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
         }
     };
 
-    const playElement = (index) => {
-        if (index >= elements.length || !isSimulating) {
-            stopSimulation();
-            return;
-        }
-
-        setCurrentSimulatingIndex(index);
-        const element = elements[index];
-
-        if (videoRef.current) {
-            videoRef.current.currentTime = element.startTime;
-            videoRef.current.play();
-
-            const durationMs = element.duration * 1000;
-
-            simulationTimeoutRef.current = setTimeout(() => {
-                if (index + 1 < elements.length) {
-                    playElement(index + 1);
-                } else {
-                    stopSimulation();
-                }
-            }, durationMs);
-        }
-    };
-
     useEffect(() => {
+        if (isSimulating && currentSimulatingIndex >= 0) {
+            if (currentSimulatingIndex >= elements.length) {
+                stopSimulation();
+                return;
+            }
+
+            const element = elements[currentSimulatingIndex];
+            if (videoRef.current) {
+                videoRef.current.currentTime = element.startTime;
+                videoRef.current.play().catch(err => console.error("Video play error:", err));
+
+                const durationMs = element.duration * 1000;
+                simulationTimeoutRef.current = setTimeout(() => {
+                    setCurrentSimulatingIndex(prev => prev + 1);
+                }, durationMs);
+            }
+        }
+
         return () => {
             if (simulationTimeoutRef.current) {
                 clearTimeout(simulationTimeoutRef.current);
             }
         };
-    }, []);
+    }, [isSimulating, currentSimulatingIndex, elements]);
 
     useEffect(() => {
         if (!isSimulating && videoRef.current) {

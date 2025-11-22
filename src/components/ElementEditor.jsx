@@ -116,6 +116,9 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
             case 'name':
                 filtered.sort((a, b) => a.elementName.localeCompare(b.elementName));
                 break;
+            case 'cycle':
+                filtered.sort((a, b) => (a.cycle || 1) - (b.cycle || 1));
+                break;
             default:
                 break;
         }
@@ -151,6 +154,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                 </select>
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '6px 10px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.85rem' }}>
                     <option value="order">Urutan Asli</option>
+                    <option value="cycle">Cycle</option>
                     <option value="duration">Durasi (Terbesar)</option>
                     <option value="rating">Rating (Tertinggi)</option>
                     <option value="name">Nama (A-Z)</option>
@@ -174,6 +178,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                     <thead style={{ position: 'sticky', top: 0, backgroundColor: '#333', zIndex: 1 }}>
                         <tr>
                             <th style={{ padding: '8px', border: '1px solid #444', width: '40px' }}>No.</th>
+                            <th style={{ padding: '8px', border: '1px solid #444', width: '60px' }}>Cycle</th>
                             <th style={{ padding: '8px', border: '1px solid #444' }}>Nama Elemen</th>
                             <th style={{ padding: '8px', border: '1px solid #444', width: '150px' }}>Kategori</th>
                             <th style={{ padding: '8px', border: '1px solid #444', width: '120px' }}>Rating</th>
@@ -186,7 +191,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                     <tbody>
                         {filteredMeasurements.length === 0 ? (
                             <tr>
-                                <td colSpan="8" style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                                <td colSpan="9" style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
                                     {measurements.length === 0 ? 'Belum ada elemen. Mulai pengukuran untuk menambahkan elemen.' : 'Tidak ada elemen yang sesuai dengan filter.'}
                                 </td>
                             </tr>
@@ -196,6 +201,11 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                 return (
                                     <tr key={el.id} style={{ borderBottom: '1px solid #333' }}>
                                         <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>{originalIndex + 1}</td>
+                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
+                                            <span style={{ backgroundColor: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>
+                                                {el.cycle || 1}
+                                            </span>
+                                        </td>
                                         <td style={{ padding: '6px', border: '1px solid #444' }}>
                                             {editingId === el.id ? (
                                                 <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem' }} />
@@ -240,12 +250,12 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                         {measurements.length > 0 && (
                             <>
                                 <tr style={{ backgroundColor: '#222', fontWeight: 'bold' }}>
-                                    <td colSpan="6" style={{ padding: '8px', border: '1px solid #444' }}>Total</td>
+                                    <td colSpan="7" style={{ padding: '8px', border: '1px solid #444' }}>Total</td>
                                     <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{totalTime.toFixed(2)}</td>
                                     <td style={{ border: '1px solid #444' }}></td>
                                 </tr>
                                 <tr style={{ backgroundColor: '#1a1a1a', fontSize: '0.8rem' }}>
-                                    <td colSpan="8" style={{ padding: '10px', border: '1px solid #444' }}>
+                                    <td colSpan="9" style={{ padding: '10px', border: '1px solid #444' }}>
                                         <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-around', flexWrap: 'wrap' }}>
                                             <div><span style={{ color: '#005a9e' }}>■</span> Value-added: {valueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((valueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>
                                             <div><span style={{ color: '#bfa900' }}>■</span> Non value-added: {nonValueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((nonValueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>

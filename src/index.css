@@ -11,12 +11,25 @@
   --header-height: 60px;
 }
 
+[data-theme="light"] {
+  --bg-primary: #f3f4f6;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e5e7eb;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --accent-blue: #2563eb;
+  --accent-yellow: #d97706;
+  --accent-red: #dc2626;
+  --border-color: #d1d5db;
+}
+
 body {
   margin: 0;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  overflow: hidden; /* Prevent scroll on main body, handle in components */
+  overflow: hidden;
+  /* Prevent scroll on main body, handle in components */
 }
 
 #root {
@@ -30,13 +43,16 @@ body {
   width: 8px;
   height: 8px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--bg-primary);
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--bg-tertiary);
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-color);
 }
@@ -49,6 +65,7 @@ body {
   cursor: pointer;
   transition: background-color 0.2s;
 }
+
 .btn:hover {
   background-color: var(--border-color);
 }

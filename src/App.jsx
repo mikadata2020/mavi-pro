@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import VideoWorkspace from './components/VideoWorkspace';
 import FeatureMenu from './components/FeatureMenu';
@@ -14,6 +14,17 @@ function App() {
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [measurements, setMeasurements] = useState([]);
   const [videoSrc, setVideoSrc] = useState(null); // Add video state at App level
+  const [videoName, setVideoName] = useState('');
+  const [theme, setTheme] = useState(() => localStorage.getItem('app-theme') || 'dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('app-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   const handleFeatureSelect = (category, feature) => {
     setSelectedFeature({ category, feature });
@@ -27,9 +38,17 @@ function App() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)' }}>
       <Header
+        videoName={videoName}
+        onUpload={(file) => {
+          const url = URL.createObjectURL(file);
+          setVideoSrc(url);
+          setVideoName(file.name);
+        }}
         currentView={currentView}
         setCurrentView={setCurrentView}
         onOpenSessionManager={() => setShowSessionManager(true)}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
 
       <div className="main-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>

@@ -6,6 +6,7 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
     const [selectedCategory, setSelectedCategory] = useState('Value-added');
     const [quickMode, setQuickMode] = useState(false);
     const [autoCounter, setAutoCounter] = useState(1);
+    const [currentCycle, setCurrentCycle] = useState(1);
 
     const categories = ['Value-added', 'Non value-added', 'Waste'];
 
@@ -34,7 +35,8 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
                 elementName: newElementName,
                 category: selectedCategory,
                 duration: videoState.currentTime - measurementStart,
-                rating: 0
+                rating: 0,
+                cycle: currentCycle
             };
             onAddMeasurement(measurement);
             setMeasurementStart(null);
@@ -48,6 +50,12 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
     const handleCancelMeasurement = () => {
         setMeasurementStart(null);
         setNewElementName('');
+    };
+
+    const handleNextCycle = () => {
+        setCurrentCycle(prev => prev + 1);
+        // Optional: Reset autoCounter if desired for new cycle
+        // setAutoCounter(1); 
     };
 
     // Keyboard shortcut for quick measurement
@@ -68,7 +76,7 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
 
         window.addEventListener('keydown', handleKeyPress);
         return () => window.removeEventListener('keydown', handleKeyPress);
-    }, [measurementStart, newElementName, selectedCategory, quickMode, autoCounter]);
+    }, [measurementStart, newElementName, selectedCategory, quickMode, autoCounter, currentCycle]);
 
     return (
         <div style={{
@@ -78,7 +86,7 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
             marginTop: '10px'
         }}>
             {/* Measurement Controls */}
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                 {measurementStart === null ? (
                     <button
                         className="btn"
@@ -175,6 +183,29 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
                         </select>
                     </>
                 )}
+
+                {/* Cycle Control */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginLeft: 'auto',
+                    backgroundColor: '#1a1a1a',
+                    padding: '5px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid #444'
+                }}>
+                    <span style={{ color: '#aaa', fontSize: '0.85rem' }}>Cycle:</span>
+                    <span style={{ color: '#fff', fontWeight: 'bold', fontSize: '1rem' }}>{currentCycle}</span>
+                    <button
+                        className="btn"
+                        onClick={handleNextCycle}
+                        title="Next Cycle"
+                        style={{ padding: '4px 8px', fontSize: '0.8rem', backgroundColor: '#444' }}
+                    >
+                        Next ⏭
+                    </button>
+                </div>
             </div>
 
             {/* Quick Mode Info */}
@@ -224,7 +255,7 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
                                 overflow: 'hidden',
                                 cursor: 'pointer'
                             }}
-                            title={`${measurement.elementName} (${measurement.duration.toFixed(2)}s)`}
+                            title={`${measurement.elementName} (${measurement.duration.toFixed(2)}s) - Cycle ${measurement.cycle || 1}`}
                             onClick={() => onRemoveMeasurement(measurement.id)}
                         >
                             {measurement.elementName}
@@ -264,20 +295,25 @@ function TimelineMeasurement({ videoState, onAddMeasurement, onRemoveMeasurement
                                     borderLeft: `4px solid ${getCategoryColor(m.category)}`
                                 }}
                             >
-                                <span>{m.elementName}</span>
-                                <span>{m.duration.toFixed(2)}s</span>
-                                <button
-                                    onClick={() => onRemoveMeasurement(m.id)}
-                                    style={{
-                                        background: 'none',
-                                        border: 'none',
-                                        color: '#f00',
-                                        cursor: 'pointer',
-                                        fontSize: '0.9rem'
-                                    }}
-                                >
-                                    ✗
-                                </button>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <span style={{ color: '#888', fontSize: '0.75rem', border: '1px solid #555', padding: '0 4px', borderRadius: '3px' }}>C{m.cycle || 1}</span>
+                                    <span>{m.elementName}</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <span>{m.duration.toFixed(2)}s</span>
+                                    <button
+                                        onClick={() => onRemoveMeasurement(m.id)}
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: '#f00',
+                                            cursor: 'pointer',
+                                            fontSize: '0.9rem'
+                                        }}
+                                    >
+                                        ✗
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>
