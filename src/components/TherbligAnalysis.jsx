@@ -10,6 +10,7 @@ function TherbligAnalysis({ measurements = [] }) {
     const [sessions, setSessions] = useState([]);
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
+    const [draggingId, setDraggingId] = useState(null);
 
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
@@ -37,6 +38,27 @@ function TherbligAnalysis({ measurements = [] }) {
         };
 
         setIcons([...icons, newIcon]);
+    };
+
+    const handleIconMouseDown = (id, e) => {
+        e.stopPropagation();
+        setDraggingId(id);
+    };
+
+    const handleCanvasMouseMove = (e) => {
+        if (draggingId) {
+            const rect = containerRef.current.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            setIcons(icons.map(icon =>
+                icon.id === draggingId ? { ...icon, x, y } : icon
+            ));
+        }
+    };
+
+    const handleCanvasMouseUp = () => {
+        setDraggingId(null);
     };
 
     const handleRemoveIcon = (id, e) => {
@@ -97,7 +119,9 @@ function TherbligAnalysis({ measurements = [] }) {
                         code: m.therblig,
                         x: currentX,
                         y: currentY,
-                        sequence: index + 1
+                        sequence: index + 1,
+                        elementName: m.elementName,
+                        category: m.category
                     });
 
                     // Calculate next position
@@ -117,6 +141,15 @@ function TherbligAnalysis({ measurements = [] }) {
 
             setIcons(newIcons);
             setShowSessionModal(false);
+        }
+    };
+
+    const getCategoryColor = (category) => {
+        switch (category) {
+            case 'Value-added': return '#005a9e';
+            case 'Non value-added': return '#bfa900';
+            case 'Waste': return '#c50f1f';
+            default: return '#555';
         }
     };
 
@@ -200,13 +233,16 @@ function TherbligAnalysis({ measurements = [] }) {
                 <div
                     ref={containerRef}
                     onClick={handleCanvasClick}
+                    onMouseMove={handleCanvasMouseMove}
+                    onMouseUp={handleCanvasMouseUp}
+                    onMouseLeave={handleCanvasMouseUp}
                     style={{
                         flex: 1,
                         backgroundColor: '#1a1a1a',
                         borderRadius: '8px',
                         position: 'relative',
                         overflow: 'hidden',
-                        cursor: selectedTherblig ? 'crosshair' : 'default',
+                        cursor: selectedTherblig ? 'crosshair' : (draggingId ? 'grabbing' : 'default'),
                         backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
                         backgroundSize: 'contain',
                         backgroundRepeat: 'no-repeat',
@@ -232,7 +268,7 @@ function TherbligAnalysis({ measurements = [] }) {
                                     y1={icon.y}
                                     x2={nextIcon.x}
                                     y2={nextIcon.y}
-                                    stroke="#555"
+                                    stroke={getCategoryColor(icon.category)}
                                     strokeWidth="2"
                                     strokeDasharray="5,5"
                                 />
@@ -259,14 +295,20 @@ function TherbligAnalysis({ measurements = [] }) {
                                     justifyContent: 'center',
                                     border: `2px solid ${therblig.color}`,
                                     color: therblig.color,
-                                    cursor: 'pointer',
+                                    cursor: 'grab',
                                     boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
                                     zIndex: 1
                                 }}
-                                title={`${index + 1}. ${therblig.name} (Click to remove)`}
-                                onClick={(e) => handleRemoveIcon(icon.id, e)}
+                                title={`${index + 1}. ${therblig.name} (Drag to move, Shift+Click to remove)`}
+                                onMouseDown={(e) => handleIconMouseDown(icon.id, e)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (e.shiftKey) {
+                                        handleRemoveIcon(icon.id, e);
+                                    }
+                                }}
                             >
-                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style={{ pointerEvents: 'none' }}>
                                     {therblig.icon}
                                 </svg>
                                 <span style={{
@@ -279,10 +321,26 @@ function TherbligAnalysis({ measurements = [] }) {
                                     backgroundColor: '#333',
                                     padding: '1px 4px',
                                     borderRadius: '3px',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    pointerEvents: 'none'
                                 }}>
                                     {index + 1}
                                 </span>
+                                {icon.elementName && (
+                                    <span style={{
+                                        position: 'absolute',
+                                        bottom: '-20px',
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        fontSize: '0.7rem',
+                                        color: '#fff',
+                                        textShadow: '0 1px 2px black',
+                                        whiteSpace: 'nowrap',
+                                        pointerEvents: 'none'
+                                    }}>
+                                        {icon.elementName}
+                                    </span>
+                                )}
                             </div>
                         );
                     })}
