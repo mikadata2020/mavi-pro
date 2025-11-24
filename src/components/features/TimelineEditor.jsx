@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 
-function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement, onAddMeasurement }) {
+function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement, onAddMeasurement, onUpdateMeasurements }) {
     const timelineRef = useRef(null);
     const [hoveredMeasurement, setHoveredMeasurement] = useState(null);
+    const [dragState, setDragState] = useState(null); // { type: 'move' | 'resize-left' | 'resize-right', id: string, startX: number, originalStart: number, originalEnd: number }
 
     const getCategoryColor = (category) => {
         switch (category) {
@@ -13,8 +14,91 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
         }
     };
 
+    const handleMouseDown = (e, measurement, type) => {
+        e.stopPropagation();
+        if (!onUpdateMeasurements) return;
+
+        setDragState({
+            type,
+            id: measurement.id,
+            startX: e.clientX,
+            originalStart: measurement.startTime,
+            originalEnd: measurement.endTime
+        });
+
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = type === 'move' ? 'grabbing' : 'col-resize';
+    };
+
+    const handleMouseMove = (e) => {
+        if (!dragState || !timelineRef.current || !videoState.duration) return;
+
+        const rect = timelineRef.current.getBoundingClientRect();
+        const deltaPixels = e.clientX - dragState.startX;
+        const deltaTime = (deltaPixels / rect.width) * videoState.duration;
+
+        let newStart = dragState.originalStart;
+        let newEnd = dragState.originalEnd;
+
+        if (dragState.type === 'move') {
+            newStart += deltaTime;
+            newEnd += deltaTime;
+        } else if (dragState.type === 'resize-left') {
+            newStart += deltaTime;
+        } else if (dragState.type === 'resize-right') {
+            newEnd += deltaTime;
+        }
+
+        // Constraints
+        if (newStart < 0) newStart = 0;
+        if (newEnd > videoState.duration) newEnd = videoState.duration;
+
+        // Minimum duration constraint (0.1s)
+        if (newEnd - newStart < 0.1) {
+            if (dragState.type === 'resize-left') newStart = newEnd - 0.1;
+            else if (dragState.type === 'resize-right') newEnd = newStart + 0.1;
+        }
+
+        // Update measurements
+        const updatedMeasurements = measurements.map(m => {
+            if (m.id === dragState.id) {
+                return {
+                    ...m,
+                    startTime: newStart,
+                    endTime: newEnd,
+                    duration: newEnd - newStart
+                };
+            }
+            return m;
+        });
+
+        onUpdateMeasurements(updatedMeasurements);
+    };
+
+    const handleMouseUp = () => {
+        if (dragState) {
+            setDragState(null);
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        }
+    };
+
+    React.useEffect(() => {
+        if (dragState) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [dragState, videoState.duration]);
+
     const handleTimelineClick = (e) => {
         if (!timelineRef.current || !videoState.duration) return;
+
+        // Prevent click if we just finished dragging
+        if (dragState) return;
 
         const rect = timelineRef.current.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
@@ -83,7 +167,7 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
                 fontSize: '0.75rem',
                 color: '#888'
             }}>
-                <span>Timeline Editor - Click to set end time of new element</span>
+                <span>Timeline Editor - Drag to move/resize, Click empty space to add</span>
                 <span>{measurements.length} measurements</span>
             </div>
 
@@ -144,6 +228,7 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
                 {measurements.map((measurement, index) => {
                     const startPercent = (measurement.startTime / (videoState.duration || 1)) * 100;
                     const widthPercent = (measurement.duration / (videoState.duration || 1)) * 100;
+                    const isHovered = hoveredMeasurement?.id === measurement.id;
 
                     return (
                         <div
@@ -151,6 +236,7 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
                             data-measurement-id={measurement.id}
                             onMouseEnter={() => setHoveredMeasurement(measurement)}
                             onMouseLeave={() => setHoveredMeasurement(null)}
+                            onMouseDown={(e) => handleMouseDown(e, measurement, 'move')}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 if (onSelectMeasurement) {
@@ -167,16 +253,16 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
                                 width: `${widthPercent}%`,
                                 height: '30px',
                                 backgroundColor: getCategoryColor(measurement.category),
-                                border: hoveredMeasurement?.id === measurement.id ? '2px solid white' : '1px solid rgba(0,0,0,0.3)',
+                                border: isHovered ? '2px solid white' : '1px solid rgba(0,0,0,0.3)',
                                 borderRadius: '2px',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                transform: hoveredMeasurement?.id === measurement.id ? 'scaleY(1.2)' : 'scaleY(1)',
-                                zIndex: hoveredMeasurement?.id === measurement.id ? 10 : 1,
+                                cursor: 'grab',
+                                transition: dragState?.id === measurement.id ? 'none' : 'all 0.2s',
+                                transform: isHovered ? 'scaleY(1.2)' : 'scaleY(1)',
+                                zIndex: isHovered || dragState?.id === measurement.id ? 10 : 1,
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                overflow: 'hidden'
+                                overflow: 'visible' // Changed to visible for handles
                             }}
                             title={`${measurement.elementName} (${measurement.duration.toFixed(2)}s)`}
                         >
@@ -188,10 +274,43 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
-                                padding: '0 4px'
+                                padding: '0 4px',
+                                pointerEvents: 'none'
                             }}>
                                 {widthPercent > 5 ? measurement.elementName : ''}
                             </span>
+
+                            {/* Resize Handles (only visible on hover) */}
+                            {isHovered && (
+                                <>
+                                    <div
+                                        onMouseDown={(e) => handleMouseDown(e, measurement, 'resize-left')}
+                                        style={{
+                                            position: 'absolute',
+                                            left: 0,
+                                            top: 0,
+                                            bottom: 0,
+                                            width: '6px',
+                                            cursor: 'col-resize',
+                                            backgroundColor: 'rgba(255,255,255,0.5)',
+                                            zIndex: 20
+                                        }}
+                                    />
+                                    <div
+                                        onMouseDown={(e) => handleMouseDown(e, measurement, 'resize-right')}
+                                        style={{
+                                            position: 'absolute',
+                                            right: 0,
+                                            top: 0,
+                                            bottom: 0,
+                                            width: '6px',
+                                            cursor: 'col-resize',
+                                            backgroundColor: 'rgba(255,255,255,0.5)',
+                                            zIndex: 20
+                                        }}
+                                    />
+                                </>
+                            )}
                         </div>
                     );
                 })}

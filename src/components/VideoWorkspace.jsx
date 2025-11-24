@@ -319,6 +319,7 @@ function VideoWorkspace({
                         measurements={videoState.measurements}
                         onSeek={seekTo}
                         onAddMeasurement={addMeasurement}
+                        onUpdateMeasurements={updateMeasurements}
                     />
                 )}
 

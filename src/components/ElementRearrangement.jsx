@@ -7,6 +7,8 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
     const [isSimulating, setIsSimulating] = useState(false);
     const [currentSimulatingIndex, setCurrentSimulatingIndex] = useState(-1);
     const [showInfo, setShowInfo] = useState(true);
+    const [selectedElements, setSelectedElements] = useState([]);
+    const [showJointOptions, setShowJointOptions] = useState(false);
     const videoRef = useRef(null);
     const simulationTimeoutRef = useRef(null);
 
@@ -49,6 +51,58 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
             sorted.sort((a, b) => b.duration - a.duration);
         }
         setElements(sorted);
+    };
+
+    const toggleSelection = (index) => {
+        setSelectedElements(prev => {
+            if (prev.includes(index)) {
+                return prev.filter(i => i !== index);
+            } else {
+                if (prev.length >= 2) {
+                    // Keep only the most recently selected and the new one, or just prevent?
+                    // Let's prevent selecting more than 2 for clarity, or just replace the first one.
+                    // User requirement implies selecting 2 specific elements.
+                    // Let's allow max 2.
+                    return [...prev, index].slice(-2);
+                }
+                return [...prev, index];
+            }
+        });
+    };
+
+    const handleJointClick = () => {
+        if (selectedElements.length !== 2) {
+            alert('Pilih tepat 2 elemen untuk digabungkan (Joint).');
+            return;
+        }
+        setShowJointOptions(true);
+    };
+
+    const handleJointConfirm = (position) => {
+        const [firstIndex, secondIndex] = selectedElements;
+        // Ensure indices are valid and sorted to handle removal correctly if needed, 
+        // but here we are moving one relative to another.
+
+        // We need to identify the actual elements because indices might shift if we remove one.
+        const firstElement = elements[firstIndex];
+        const secondElement = elements[secondIndex];
+
+        let newElements = elements.filter((_, idx) => idx !== firstIndex);
+
+        // Find the new index of the second element
+        let newSecondIndex = newElements.indexOf(secondElement);
+
+        if (position === 'front') {
+            // Insert before the second element
+            newElements.splice(newSecondIndex, 0, firstElement);
+        } else {
+            // Insert after the second element
+            newElements.splice(newSecondIndex + 1, 0, firstElement);
+        }
+
+        setElements(newElements);
+        setSelectedElements([]);
+        setShowJointOptions(false);
     };
 
     const startSimulation = () => {
@@ -153,11 +207,45 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '10px', padding: '10px', backgroundColor: '#2a2a2a', borderRadius: '6px' }}>
-                    <span style={{ color: '#aaa', fontSize: '0.9rem', alignSelf: 'center' }}>Auto Arrange:</span>
-                    <button className="btn" onClick={() => handleAutoArrange('asc')} style={{ fontSize: '0.8rem' }}>⏱ Duration (Shortest)</button>
-                    <button className="btn" onClick={() => handleAutoArrange('desc')} style={{ fontSize: '0.8rem' }}>⏱ Duration (Longest)</button>
+                <div style={{ display: 'flex', gap: '10px', padding: '10px', backgroundColor: '#2a2a2a', borderRadius: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ color: '#aaa', fontSize: '0.9rem', alignSelf: 'center', width: '100%' }}>Auto Arrange:</span>
+                    <button className="btn" onClick={() => handleAutoArrange('asc')} style={{ fontSize: '0.8rem', flex: 1 }}>⏱ Shortest</button>
+                    <button className="btn" onClick={() => handleAutoArrange('desc')} style={{ fontSize: '0.8rem', flex: 1 }}>⏱ Longest</button>
+                    <button
+                        className="btn"
+                        onClick={handleJointClick}
+                        style={{
+                            fontSize: '0.8rem',
+                            flex: '1 1 100%',
+                            backgroundColor: selectedElements.length === 2 ? 'var(--accent-blue)' : '#555',
+                            cursor: selectedElements.length === 2 ? 'pointer' : 'not-allowed'
+                        }}
+                        disabled={selectedElements.length !== 2}
+                    >
+                        🔗 Joint Element
+                    </button>
                 </div>
+
+                {showJointOptions && (
+                    <div style={{
+                        padding: '10px',
+                        backgroundColor: '#444',
+                        borderRadius: '6px',
+                        border: '1px solid var(--accent-blue)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '5px'
+                    }}>
+                        <div style={{ color: '#fff', fontSize: '0.9rem', marginBottom: '5px' }}>
+                            Gabungkan <strong>Element {selectedElements[0] + 1}</strong> ke <strong>Element {selectedElements[1] + 1}</strong>:
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button className="btn" onClick={() => handleJointConfirm('front')} style={{ flex: 1, backgroundColor: '#0a5' }}>Depan</button>
+                            <button className="btn" onClick={() => handleJointConfirm('back')} style={{ flex: 1, backgroundColor: '#c50f1f' }}>Belakang</button>
+                            <button className="btn" onClick={() => setShowJointOptions(false)} style={{ width: '30px', padding: 0 }}>✕</button>
+                        </div>
+                    </div>
+                )}
 
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {elements.map((element, index) => (
@@ -169,8 +257,9 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
                             onDragEnd={handleDragEnd}
                             style={{
                                 padding: '10px',
-                                backgroundColor: currentSimulatingIndex === index ? 'var(--accent-blue)' : '#333',
-                                border: '1px solid #555',
+                                backgroundColor: currentSimulatingIndex === index ? 'var(--accent-blue)' :
+                                    selectedElements.includes(index) ? '#444' : '#333',
+                                border: selectedElements.includes(index) ? '1px solid var(--accent-blue)' : '1px solid #555',
                                 borderRadius: '4px',
                                 cursor: isSimulating ? 'default' : 'grab',
                                 display: 'flex',
@@ -181,6 +270,12 @@ function ElementRearrangement({ measurements, videoSrc, onUpdateMeasurements }) 
                             }}
                         >
                             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={selectedElements.includes(index)}
+                                    onChange={() => toggleSelection(index)}
+                                    style={{ cursor: 'pointer' }}
+                                />
                                 <span style={{ color: '#888', width: '20px' }}>{index + 1}.</span>
                                 <span style={{ fontWeight: 'bold', color: '#fff' }}>{element.elementName}</span>
                             </div>

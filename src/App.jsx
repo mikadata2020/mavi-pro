@@ -4,7 +4,7 @@ import VideoWorkspace from './components/VideoWorkspace';
 import FeatureMenu from './components/FeatureMenu';
 import AnalysisDashboard from './components/AnalysisDashboard';
 import ElementRearrangement from './components/ElementRearrangement';
-import ComparisonDashboard from './components/ComparisonDashboard';
+import CycleTimeAnalysis from './components/CycleTimeAnalysis';
 import CycleAggregation from './components/CycleAggregation';
 import StandardTime from './components/StandardTime';
 import WasteElimination from './components/WasteElimination';
@@ -21,7 +21,7 @@ import { importProject } from './utils/projectExport';
 import './index.css';
 
 function App() {
-  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'features', 'analysis', 'rearrangement', 'comparison', 'aggregation', 'standard-time', 'waste-elimination', 'best-worst', 'video-comparison', 'help', 'spaghetti'
+  const [currentView, setCurrentView] = useState('dashboard');
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [measurements, setMeasurements] = useState([]);
@@ -210,9 +210,9 @@ function App() {
           <div style={{ flex: 1, padding: '10px', overflow: 'hidden' }}>
             <ElementRearrangement measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} />
           </div>
-        ) : currentView === 'comparison' ? (
+        ) : currentView === 'cycle-analysis' ? (
           <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-            <ComparisonDashboard measurements={measurements} />
+            <CycleTimeAnalysis />
           </div>
         ) : currentView === 'aggregation' ? (
           <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>

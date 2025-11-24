@@ -212,3 +212,61 @@ export const exportStandardTimeToExcel = (elementData, globalAllowance) => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     XLSX.writeFile(workbook, `StandardTime_${timestamp}.xlsx`);
 };
+
+// Export Cycle Time Analysis data to Excel
+export const exportCycleTimeAnalysisToExcel = (aggregatedData, maxCycles) => {
+    if (!aggregatedData || aggregatedData.length === 0) {
+        alert('Tidak ada data untuk di-export!');
+        return;
+    }
+
+    // Prepare headers
+    const headers = ['No.', 'Element Name', 'Category'];
+    for (let i = 1; i <= maxCycles; i++) {
+        headers.push(`Cycle ${i} (s)`);
+    }
+    headers.push('Min (s)', 'Max (s)', 'Average (s)');
+
+    // Prepare data rows
+    const data = aggregatedData.map((item, index) => {
+        const row = {
+            'No.': index + 1,
+            'Element Name': item.elementName,
+            'Category': item.category
+        };
+
+        // Add cycle values
+        for (let i = 1; i <= maxCycles; i++) {
+            row[`Cycle ${i} (s)`] = item.cycleValues[i] ? item.cycleValues[i].toFixed(2) : '-';
+        }
+
+        // Add stats
+        row['Min (s)'] = item.min.toFixed(2);
+        row['Max (s)'] = item.max.toFixed(2);
+        row['Average (s)'] = item.average.toFixed(2);
+
+        return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(data, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cycle Time Analysis');
+
+    // Set column widths
+    const wscols = [
+        { wch: 5 },  // No
+        { wch: 30 }, // Element Name
+        { wch: 20 }, // Category
+    ];
+    // Add widths for cycle columns
+    for (let i = 0; i < maxCycles; i++) {
+        wscols.push({ wch: 12 });
+    }
+    // Add widths for stats
+    wscols.push({ wch: 12 }, { wch: 12 }, { wch: 12 });
+
+    worksheet['!cols'] = wscols;
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    XLSX.writeFile(workbook, `CycleTimeAnalysis_${timestamp}.xlsx`);
+};

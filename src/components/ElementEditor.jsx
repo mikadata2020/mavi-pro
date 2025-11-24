@@ -78,16 +78,43 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         }
     };
 
+    const [editStartTime, setEditStartTime] = useState(0);
+    const [editEndTime, setEditEndTime] = useState(0);
+
     const handleStartEdit = (element) => {
         setEditingId(element.id);
         setEditName(element.elementName);
         setEditCategory(element.category);
         setEditTherblig(element.therblig || '');
         setEditCycle(element.cycle || 1);
+        setEditStartTime(element.startTime);
+        setEditEndTime(element.endTime);
     };
 
     const handleSaveEdit = () => {
-        onUpdateMeasurements(measurements.map(m => m.id === editingId ? { ...m, elementName: editName, category: editCategory, therblig: editTherblig, cycle: parseInt(editCycle) || 1 } : m));
+        const startTime = parseFloat(editStartTime);
+        const endTime = parseFloat(editEndTime);
+
+        if (isNaN(startTime) || isNaN(endTime) || startTime < 0 || endTime < 0) {
+            alert('Waktu Start dan Finish harus berupa angka positif.');
+            return;
+        }
+
+        if (startTime >= endTime) {
+            alert('Waktu Start harus lebih kecil dari waktu Finish.');
+            return;
+        }
+
+        onUpdateMeasurements(measurements.map(m => m.id === editingId ? {
+            ...m,
+            elementName: editName,
+            category: editCategory,
+            therblig: editTherblig,
+            cycle: parseInt(editCycle) || 1,
+            startTime: startTime,
+            endTime: endTime,
+            duration: endTime - startTime
+        } : m));
         setEditingId(null);
     };
 
@@ -97,6 +124,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         setEditCategory('');
         setEditTherblig('');
         setEditCycle(1);
+        setEditStartTime(0);
+        setEditEndTime(0);
     };
 
     const handleMoveUp = (index) => {
@@ -274,7 +303,10 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                 return (
                                     <tr key={el.id} style={{ borderBottom: '1px solid #333' }}>
                                         <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>{originalIndex + 1}</td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
+                                        <td
+                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
+                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'center', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                        >
                                             {editingId === el.id ? (
                                                 <input
                                                     type="number"
@@ -289,12 +321,18 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                 </span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444' }}>
+                                        <td
+                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
+                                            style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                        >
                                             {editingId === el.id ? (
                                                 <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem' }} />
                                             ) : el.elementName}
                                         </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444' }}>
+                                        <td
+                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
+                                            style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                        >
                                             {editingId === el.id ? (
                                                 <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)} style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem' }}>
                                                     {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -303,7 +341,10 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                 <span style={{ display: 'inline-block', padding: '3px 8px', backgroundColor: getCategoryColor(el.category), borderRadius: '3px', fontSize: '0.8rem' }}>{el.category}</span>
                                             )}
                                         </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444' }}>
+                                        <td
+                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
+                                            style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                        >
                                             {editingId === el.id ? (
                                                 <select value={editTherblig} onChange={(e) => setEditTherblig(e.target.value)} style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem' }}>
                                                     <option value="">-- Pilih --</option>
@@ -325,9 +366,39 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                 <span key={star} onClick={() => handleRatingChange(el.id, star)} style={{ cursor: 'pointer', color: (el.rating || 0) >= star ? '#ffa500' : '#444', fontSize: '1.1rem', marginRight: '2px' }} title={`Rating ${star}`}>★</span>
                                             ))}
                                         </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#aaa' }}>{el.startTime.toFixed(2)}</td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#aaa' }}>{el.endTime.toFixed(2)}</td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right' }}>{el.duration.toFixed(2)}</td>
+                                        <td
+                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
+                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#aaa', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                        >
+                                            {editingId === el.id ? (
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editStartTime}
+                                                    onChange={(e) => setEditStartTime(e.target.value)}
+                                                    style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem', textAlign: 'right' }}
+                                                />
+                                            ) : el.startTime.toFixed(2)}
+                                        </td>
+                                        <td
+                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
+                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#aaa', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                        >
+                                            {editingId === el.id ? (
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editEndTime}
+                                                    onChange={(e) => setEditEndTime(e.target.value)}
+                                                    style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem', textAlign: 'right' }}
+                                                />
+                                            ) : el.endTime.toFixed(2)}
+                                        </td>
+                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right' }}>
+                                            {editingId === el.id ? (
+                                                (parseFloat(editEndTime) - parseFloat(editStartTime)).toFixed(2)
+                                            ) : el.duration.toFixed(2)}
+                                        </td>
                                         <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
                                             {editingId === el.id ? (
                                                 <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
@@ -348,28 +419,30 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                 );
                             })
                         )}
-                        {measurements.length > 0 && (
-                            <>
-                                <tr style={{ backgroundColor: '#222', fontWeight: 'bold' }}>
-                                    <td colSpan="7" style={{ padding: '8px', border: '1px solid #444' }}>Total</td>
-                                    <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{totalTime.toFixed(2)}</td>
-                                    <td style={{ border: '1px solid #444' }}></td>
-                                </tr>
-                                <tr style={{ backgroundColor: '#1a1a1a', fontSize: '0.8rem' }}>
-                                    <td colSpan="9" style={{ padding: '10px', border: '1px solid #444' }}>
-                                        <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-around', flexWrap: 'wrap' }}>
-                                            <div><span style={{ color: '#005a9e' }}>■</span> Value-added: {valueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((valueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>
-                                            <div><span style={{ color: '#bfa900' }}>■</span> Non value-added: {nonValueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((nonValueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>
-                                            <div><span style={{ color: '#c50f1f' }}>■</span> Waste: {wasteTime.toFixed(2)}s {totalTime > 0 && `(${((wasteTime / totalTime) * 100).toFixed(1)}%)`}</div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+                        {
+                            measurements.length > 0 && (
+                                <>
+                                    <tr style={{ backgroundColor: '#222', fontWeight: 'bold' }}>
+                                        <td colSpan="7" style={{ padding: '8px', border: '1px solid #444' }}>Total</td>
+                                        <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{totalTime.toFixed(2)}</td>
+                                        <td style={{ border: '1px solid #444' }}></td>
+                                    </tr>
+                                    <tr style={{ backgroundColor: '#1a1a1a', fontSize: '0.8rem' }}>
+                                        <td colSpan="9" style={{ padding: '10px', border: '1px solid #444' }}>
+                                            <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-around', flexWrap: 'wrap' }}>
+                                                <div><span style={{ color: '#005a9e' }}>■</span> Value-added: {valueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((valueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>
+                                                <div><span style={{ color: '#bfa900' }}>■</span> Non value-added: {nonValueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((nonValueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>
+                                                <div><span style={{ color: '#c50f1f' }}>■</span> Waste: {wasteTime.toFixed(2)}s {totalTime > 0 && `(${((wasteTime / totalTime) * 100).toFixed(1)}%)`}</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </>
+                            )
+                        }
+                    </tbody >
+                </table >
+            </div >
+        </div >
     );
 }
 

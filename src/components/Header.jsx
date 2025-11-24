@@ -92,7 +92,7 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                     <button
                         className="btn"
                         style={{
-                            backgroundColor: currentView === 'comparison' ? 'var(--accent-blue)' : '',
+                            backgroundColor: currentView === 'cycle-analysis' ? 'var(--accent-blue)' : '',
                             padding: '8px',
                             fontSize: '1.2rem',
                             width: '40px',
@@ -101,10 +101,10 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                             justifyContent: 'center',
                             alignItems: 'center'
                         }}
-                        onClick={() => setCurrentView('comparison')}
-                        title="Compare Multiple Sessions"
+                        onClick={() => setCurrentView('cycle-analysis')}
+                        title="Cycle Time Analysis"
                     >
-                        ⚖️
+                        📈
                     </button>
                     <button
                         className="btn"
