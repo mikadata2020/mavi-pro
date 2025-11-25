@@ -3,6 +3,7 @@ import ElementEditor from './ElementEditor';
 import PlaybackControls from './features/PlaybackControls';
 import TimelineMeasurement from './features/TimelineMeasurement';
 import TimelineEditor from './features/TimelineEditor';
+import VideoAnnotation from './features/VideoAnnotation';
 import ProjectButtons from './ProjectButtons';
 import { useVideoPlayer } from '../hooks/useVideoPlayer';
 import { captureScreenshot, exportAnalysisData } from '../utils/screenshotCapture';
@@ -26,6 +27,8 @@ function VideoWorkspace({
     const [logoPosition, setLogoPosition] = useState('bottom-right');
     const [logoOpacity, setLogoOpacity] = useState(0.7);
     const [leftPanelWidth, setLeftPanelWidth] = useState(35); // Initial width in percentage
+    const [drawingAnnotations, setDrawingAnnotations] = useState([]);
+    const [showAnnotationTool, setShowAnnotationTool] = useState(false);
     const containerRef = useRef(null);
     const isResizing = useRef(false);
 
@@ -187,7 +190,8 @@ function VideoWorkspace({
                         <div style={{
                             transform: `scale(${videoState.zoom})`,
                             transformOrigin: 'center center',
-                            transition: 'transform 0.2s'
+                            transition: 'transform 0.2s',
+                            position: 'relative'
                         }}>
                             <video
                                 ref={videoRef}
@@ -200,6 +204,16 @@ function VideoWorkspace({
                                     display: 'block'
                                 }}
                             />
+
+                            {/* Video Annotation Overlay */}
+                            {showAnnotationTool && (
+                                <VideoAnnotation
+                                    videoRef={videoRef}
+                                    videoState={videoState}
+                                    annotations={drawingAnnotations}
+                                    onUpdateAnnotations={setDrawingAnnotations}
+                                />
+                            )}
                         </div>
                     ) : (
                         <div style={{ color: '#666', textAlign: 'center' }}>
@@ -290,6 +304,45 @@ function VideoWorkspace({
                             title="Logout dari aplikasi"
                         >
                             🔒
+                        </button>
+                    )}
+
+                    {/* Annotation Toggle Button */}
+                    {videoSrc && (
+                        <button
+                            onClick={() => setShowAnnotationTool(!showAnnotationTool)}
+                            style={{
+                                position: 'absolute',
+                                top: '10px',
+                                left: onLogout ? '55px' : '10px',
+                                zIndex: 100,
+                                backgroundColor: showAnnotationTool ? '#005a9e' : '#333',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                fontSize: '1.1rem',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '35px',
+                                height: '35px',
+                                boxShadow: showAnnotationTool ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.transform = 'scale(1.1)';
+                                e.target.style.boxShadow = showAnnotationTool ? '0 4px 12px rgba(0, 90, 158, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.transform = 'scale(1)';
+                                e.target.style.boxShadow = showAnnotationTool ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
+                            }}
+                            title={showAnnotationTool ? "Hide Drawing Tools" : "Show Drawing Tools"}
+                        >
+                            🎨
                         </button>
                     )}
 

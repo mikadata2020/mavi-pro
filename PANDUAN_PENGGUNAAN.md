@@ -19,9 +19,9 @@
 - ✅ Menganalisis video kerja/operasi
 - ✅ Mengukur waktu setiap elemen gerakan
 - ✅ Mengklasifikasikan aktivitas (Value-added, Non value-added, Waste)
-- ✅ Menghitung standard time
+- ✅ Menghitung standard time & productivity metrics
 - ✅ Membandingkan sesi recording
-- ✅ Simulasi improvement
+- ✅ Simulasi improvement & eliminasi waste
 
 ---
 
@@ -45,14 +45,19 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
 | Icon | Fitur | Fungsi |
 |------|-------|--------|
 | 🎬 | Video | Workspace analisis video |
-| 📊 | Analysis | Dashboard analisis & charts |
+| 📊 | Analysis | Dashboard analisis, OEE, & charts |
 | 🔄 | Rearrange | Simulasi penyusunan ulang elemen |
-| ⚖️ | Comparison | Bandingkan multiple sesi |
-| 📈 | Aggregation | Agregasi data cycle time |
+| 📈 | Cycle Analysis | Analisis detail cycle time |
+| Σ | Aggregation | Agregasi data cycle time |
 | ⏱️ | Std Time | Kalkulasi standard time |
 | 🗑️ | Waste | Simulasi eliminasi waste |
+| 📍 | Therblig | Analisis Therblig & Spaghetti Chart |
+| 📉 | Statistical | Analisis statistik (Cp, Cpk, Control Chart) |
+| ⏱️ | MTM Calc | Kalkulasi waktu baku metode MTM-1 |
+| 🔧 | Allowance | Kalkulasi kelonggaran & fatigue |
 | 🏆 | Best/Worst | Analisis cycle terbaik/terburuk |
-| 🎥 | Compare | Video side-by-side |
+| 🎥 | Compare | Video side-by-side comparison |
+| ❓ | Help | Panduan penggunaan |
 
 ---
 
@@ -87,7 +92,7 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
 - **Zoom**: 0.5x - 3x
 - ◀/▶ : Normal/Reverse mode
 
-#### D. Rating Speed (Fitur Baru!)
+#### D. Rating Speed
 - Jika elemen punya **Rating** (bintang 1-5)
 - Toggle **⭐ Rating Speed** akan muncul
 - Speed otomatis = Average Rating / 100
@@ -103,296 +108,195 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
 - Filter kategori & rating
 - Sort by: Order, Cycle, Duration, Rating, Name
 
-**Tabel Elemen:**
-| Kolom | Keterangan |
-|-------|------------|
-| No. | Nomor urut |
-| Cycle | Nomor siklus |
-| Nama Elemen | Nama aktivitas |
-| Kategori | VA / NVA / Waste |
-| Rating | Bintang 1-5 (klik untuk ubah) |
-| Start/Finish | Waktu mulai & selesai |
-| Waktu | Durasi (detik) |
-| Aksi | Tombol kontrol |
-
 **Tombol Aksi:**
 - ▲/▼ : Pindah urutan atas/bawah
 - ✎ : Edit nama & kategori
-- ✂️ : **[BARU!]** Split elemen
+- ✂️ : Split elemen
 - 🗑 : Hapus elemen
 
 ---
 
 ### 3. 📊 Analysis Dashboard
 
-**🎯 Tujuan:** Mendapatkan insight ringkas dan visual dari hasil analisis video untuk evaluasi cepat performa dan identifikasi area improvement.
+**🎯 Tujuan:** Mendapatkan insight ringkas, visual, dan metrik produktivitas dari hasil analisis.
 
 **Menampilkan:**
 1. **Summary Cards**
-   - Total Time
-   - Number of Elements
-   - Average per Element
-   - Efficiency %
-
-2. **Category Distribution (Pie Chart)**
+   - Total Time & Elements
+   - Average Rating
    - Value-added %
-   - Non value-added %
-   - Waste %
 
-3. **Timeline Bars**
-   - Visual representasi setiap elemen
-   - Warna sesuai kategori
+2. **Productivity Metrics (BARU!)**
+   - **OEE (Overall Equipment Effectiveness)**: Availability x Performance x Quality
+   - **Efficiency**: Rasio output aktual vs standar
+   - **Takt vs Cycle**: Analisis kesesuaian dengan demand pelanggan
+   - **Productivity Index**: Indeks komprehensif performa
 
-4. **Element Duration Chart**
-   - Bar chart durasi per elemen
-   - Sorted by duration
+3. **Charts**
+   - **Category Distribution**: Pie chart VA/NVA/Waste
+   - **Top Elements**: Bar chart durasi elemen terlama
+   - **Gantt Chart**: Visualisasi urutan kerja
 
 ---
 
-### 4. 🔄 Element Rearrangement
+### 4. 📉 Statistical Analysis (BARU!)
 
-**🎯 Tujuan:** Mencari susunan elemen optimal untuk mengurangi cycle time dengan simulasi tanpa perlu melakukan percobaan fisik.
+**🎯 Tujuan:** Analisis mendalam variabilitas proses dan kapabilitas sistem.
 
-**Fungsi:** Simulasi penyusunan ulang elemen untuk optimasi
+**Fitur:**
+1. **Summary Statistics**: Mean, Median, Std Dev, Min/Max, CV.
+2. **Confidence Interval**: Estimasi rentang rata-rata populasi (90%, 95%, 99%).
+3. **Process Capability**:
+   - **Cp/Cpk**: Mengukur kemampuan proses memenuhi spesifikasi (LSL/USL).
+   - Indikator kapabilitas (Capable/Not Capable).
+4. **Control Chart (I-Chart)**:
+   - Visualisasi stabilitas proses.
+   - Garis UCL (Upper Control Limit) dan LCL (Lower Control Limit).
+5. **Histogram**: Distribusi frekuensi data.
+6. **Outlier Detection**: Deteksi data pencilan yang tidak wajar.
+7. **Export PDF**: Download laporan statistik lengkap.
+
+---
+
+### 5. ⏱️ MTM Calculator (BARU!)
+
+**🎯 Tujuan:** Menghitung waktu baku menggunakan metode *Methods-Time Measurement* (MTM-1) tanpa stopwatch.
+
+**Cara Pakai:**
+1. Pilih **Motion Type** (Reach, Move, Grasp, Position, dll).
+2. Tentukan parameter (Jarak, Case, Type).
+3. Klik **Add Motion**.
+4. Sistem menghitung **TMU** (Time Measurement Unit) dan konversi ke detik/menit.
+5. Total waktu akan terakumulasi otomatis.
+
+**Referensi:** 1 TMU = 0.036 detik.
+
+---
+
+### 6. 🔧 Allowance Calculator (BARU!)
+
+**🎯 Tujuan:** Menghitung kelonggaran (allowance) secara ilmiah untuk penetapan waktu standar.
+
+**Fitur:**
+1. **Input Normal Time**.
+2. **Basic Allowances**: Personal needs, Basic fatigue, Delay.
+3. **Variable Fatigue**:
+   - Standing/Posture
+   - Lifting weight
+   - Light/Atmosphere
+   - Mental strain/Monotony
+4. **Output**:
+   - Total Fatigue %
+   - Standard Time final.
+
+---
+
+### 7. 🔄 Element Rearrangement
+
+**🎯 Tujuan:** Mencari susunan elemen optimal untuk mengurangi cycle time dengan simulasi.
 
 **Cara Pakai:**
 1. Klik icon **🔄**
 2. Drag & drop elemen untuk ubah urutan
-3. Lihat perbandingan:
-   - **Original Order**
-   - **New Order**
-   - **Time Saved**
+3. Lihat perbandingan **Time Saved**
 
 ---
 
-### 5. ⚖️ Comparison Dashboard
+### 8. ⚖️ Comparison Dashboard
 
-**🎯 Tujuan:** Membandingkan performa antar sesi untuk validasi konsistensi, identifikasi best practice, atau evaluasi improvement.
-
-**Fungsi:** Bandingkan multiple sesi recording
+**🎯 Tujuan:** Membandingkan performa antar sesi untuk validasi konsistensi.
 
 **Langkah:**
-1. Klik **⚖️ Comparison**
+1. Klik **⚖️ Comparison** (atau icon Compare di menu)
 2. Pilih minimal 2 sesi dari dropdown
-3. Review:
-   - Comparison table (elemen per sesi)
-   - Total time comparison
-   - Element-by-element difference
-4. **Export to Excel** untuk dokumentasi
+3. Review comparison table & element differences
+4. Export to Excel
 
 ---
 
-### 6. 📈 Cycle Aggregation
+### 9. 📈 Cycle Aggregation
 
-**🎯 Tujuan:** Mendapatkan data statistik yang reliable dengan mengagregasi multiple sesi untuk decision making yang lebih akurat.
-
-**Fungsi:** Agregasi data dari multiple sesi
+**🎯 Tujuan:** Agregasi data statistik dari multiple sesi.
 
 **Fitur:**
 1. Select multiple sessions
-2. View statistics:
-   - Min, Max, Average, Std Dev per elemen
-   - Total cycle time stats
+2. View statistics (Min, Max, Avg) per elemen
 3. Export aggregation data
 
 ---
 
-### 7. ⏱️ Standard Time Calculation
+### 10. ⏱️ Standard Time Calculation
 
-**🎯 Tujuan:** Menetapkan waktu standar yang fair dan realistic untuk perencanaan produksi, costing, dan performance measurement.
+**🎯 Tujuan:** Menetapkan waktu standar produksi.
 
 **Formula:** `Standard Time = Normal Time × (1 + Allowances)`
 
 **Input:**
-1. Select sessions
-2. Pilih rating factor (60%-140%)
-3. Set allowances:
-   - Personal (5-10%)
-   - Fatigue (5-15%)
-   - Delay (5-10%)
-
-**Output:**
-- Observed Time
-- Normal Time
-- Standard Time
-- Export to Excel
+1. Select sessions & Rating factor
+2. Set allowances (Personal, Fatigue, Delay)
+3. Output: Observed, Normal, & Standard Time
 
 ---
 
-### 8. 🗑️ Waste Elimination Simulation
+### 11. 🗑️ Waste Elimination Simulation
 
-**🎯 Tujuan:** Menghitung dan memvisualisasikan potential savings dari eliminasi waste untuk justifikasi project improvement.
-
-**Fungsi:** Simulasi penghapusan waste
+**🎯 Tujuan:** Menghitung potential savings dari eliminasi waste.
 
 **Tampilan:**
-- **Before**: Total time dengan waste
-- **After**: Total time tanpa waste  
+- **Before vs After** comparison
 - **Time Saved** & **% Improvement**
 - Detail waste yang dieliminasi
 
 ---
 
-### 9. 🏆 Best/Worst Cycle Analysis **[FITUR BARU!]**
+### 12. 🏆 Best/Worst Cycle Analysis
 
-**🎯 Tujuan:** Mengidentifikasi variabilitas performa untuk standardisasi best practice dan eliminasi faktor penyebab cycle lambat.
+**🎯 Tujuan:** Identifikasi variabilitas performa ekstrem.
 
-**Fungsi:** Identifikasi cycle terbaik & terburuk
-
-**Cara Pakai:**
-1. Klik icon **🏆**
-2. Pilih minimal 2 sesi dari list
-3. Review hasil:
-   - 🏆 **Best Cycle** (tercepat)
-   - 📉 **Worst Cycle** (terlambat)
-   - ⚡ **Potential Savings**
-   - 📊 **All Cycles Ranking**
-   - 📋 **Element Comparison** table dengan % difference
+**Fitur:**
+- Identifikasi **Best Cycle** (tercepat) & **Worst Cycle** (terlambat)
+- Hitung **Potential Savings** jika semua cycle seperti best cycle
+- Ranking semua cycle
 
 ---
 
-### 10. 🎥 Video Side-by-Side Comparison **[FITUR BARU!]**
+### 13. 🎥 Video Side-by-Side Comparison
 
-**🎯 Tujuan:** Melakukan visual comparison untuk training, validasi improvement, atau benchmarking method kerja secara real-time.
+**🎯 Tujuan:** Visual comparison method kerja secara real-time.
 
-**Fungsi:** Bandingkan 2 video secara visual
-
-**Cara Pakai:**
-1. Klik icon **🎥**
-2. Pilih **Left Video** dari dropdown
-3. Pilih **Right Video** dari dropdown
-4. Toggle **🔗 Synchronized Playback** (on/off)
-5. Control:
-   - ▶/⏸ Play/Pause (both videos)
-   - Speed: 0.5x, 1x, 1.5x, 2x
-6. Lihat stats total per video
+**Fitur:**
+- Play 2 video secara sinkron
+- Speed control independent atau linked
+- Visualisasi perbedaan gerakan operator
 
 ---
 
-### 11. 🍝 Spaghetti Chart **[FITUR BARU!]**
+### 14. 📍 Therblig & Spaghetti Chart
 
-**🎯 Tujuan:** Menganalisis dan mengoptimasi layout workstation dengan visualisasi flow pattern untuk mengurangi waste transport dan walking distance.
+**🎯 Tujuan:** Analisis gerakan mikro (Therblig) dan aliran perpindahan (Spaghetti Chart).
 
-**Fungsi:** Visualisasi diagram pergerakan (movement diagram)
-
-**Cara Pakai:**
-1. Klik icon **🍝**
-2. Pilih session dari dropdown
-3. Chart otomatis generate:
-   - 🔵 Nodes (stations) dari nama elemen
-   - ➡️ Paths (arrows) menunjukkan flow
-   - 🎨 Colors sesuai kategori
-4. **Drag nodes** untuk arrange layout optimal
-5. Adjust **Grid Size** dengan slider (25-100px)
-6. Review statistics:
-   - Total moves
-   - Number of stations  
-   - Path distribution by category
-
-**Interpretasi Visual:**
-- 🔵 **Blue Circle** = Station/Location point
-- ➡️ **Curved Arrow** = Movement path dengan direction
-- **(Nx)** = Visit frequency (berapa kali dikunjungi)
-- **Path Colors**:
-  - 🟦 Blue = Value-added movement
-  - 🟨 Yellow = Non value-added movement
-  - 🟥 Red = Waste (backtracking, excess transport)
-
-**Analisis:**
-- ✅ Identifikasi **backtracking** (bolak-balik tidak perlu)
-- ✅ Cari **waste transport** (jarak berlebihan)
-- ✅ Optimasi **workstation layout**
-- ✅ Reduce **walking distance**
-- ✅ Improve **flow efficiency**
-
-**Red Flags:**
-- ⚠️ Banyak garis merah = waste movement tinggi
-- ⚠️ Crossing paths = layout kurang optimal
-- ⚠️ High visit count (>3x) = bottleneck station
-- ⚠️ Long distance red paths = prioritas improvement
-
-**Tips Optimasi:**
-1. **Minimize crossings** - arrange nodes agar path tidak bersilangan
-2. **Group related stations** - dekatkan station yang sering connected
-3. **Eliminate backtracking** - rearrange untuk one-way flow
-4. **Balance load** - cek station dengan visit count tinggi
+**Fitur:**
+- **Spaghetti Chart**: Visualisasi path pergerakan operator di layout.
+- Identifikasi backtracking dan long travel distance.
+- Analisis elemen Therblig (Search, Select, Grasp, dll).
 
 ---
 
-### 12. 🎙️ Narration Recording **[FITUR BARU!]**
+### 15. 🎙️ Narration Recording
 
-**🎯 Tujuan:** Mendokumentasikan analisis dengan narasi audio untuk keperluan training, presentasi, atau dokumentasi improvement.
-
-**Fungsi:** Merekam narasi audio (voice commentary)
+**🎯 Tujuan:** Dokumentasi audio untuk analisis.
 
 **Cara Pakai:**
-1. Buka **🎬 Video** workspace
-2. Scroll ke panel kanan (di bawah Element Editor)
-3. Klik **🎙️ Start Recording**
-4. **Allow microphone permission** (browser akan prompt)
-5. Mulai berbicara untuk record narasi Anda
-6. Gunakan controls:
-   - ⏸ **Pause** - pause recording sementara
-   - ▶ **Resume** - lanjutkan recording
-   - ⏹ **Stop** - selesai recording
-7. Narasi tersimpan otomatis dengan session
-
-**Playback & Management:**
-- ▶ **Play Narration** - dengar hasil recording
-- 🔄 **Re-record** - rekam ulang jika tidak puas  
-- 🗑 **Delete** - hapus narration
-
-**Recording Indicator:**
-- 🔴 Blinking red dot = sedang recording
-- ⏸ PAUSED = recording di-pause
-- Timer menunjukkan durasi recording
-
-**Technical Details:**
-- Menggunakan **MediaRecorder API**
-- Audio format: WebM
-- Storage: Base64 string di IndexedDB
-- Terintegrasi dengan session data
-
-**Best Practices:**
-- ✅ Rekam di **lingkungan tenang** untuk audio jernih
-- ✅ Gunakan **external microphone** untuk kualitas lebih baik
-- ✅ Test microphone sebelum recording penting
-- ✅ Pause recording jika ada interupsi
-- ✅ Re-record jika ada kesalahan
-
-**Use Cases:**
-1. **Training Material**
-   - Record penjelasan step-by-step
-   - Voice-over untuk video analysis
-   - Instruksi untuk operator baru
-
-2. **Improvement Documentation**
-   - Narasi before/after improvement
-   - Penjelasan waste yang ditemukan
-   - Justifikasi perubahan layout/method
-
-3. **Presentation**
-   - Narasi untuk presentation ke management
-   - Walkthrough analysis results
-   - Project review dengan audio commentary
-
-4. **Review Session**
-   - Catatan lisan saat analisis
-   - Observasi langsung yang perlu didokumentasi
-   - Diskusi team yang direkam
-
-**Tips:**
-- 💡 Record narasi setelah selesai analisis
-- 💡 Buat outline sebelum recording untuk flow yang baik
-- 💡 Pause recording jika perlu mikir atau cek data
-- 💡 Simpan session setelah recording selesai
+1. Di Video Workspace, buka panel kanan bawah.
+2. Klik **🎙️ Start Recording**.
+3. Rekam komentar/penjelasan.
+4. Playback atau re-record sesuai kebutuhan.
 
 ---
 
 ## 📝 Panduan Step-by-Step
 
 ### Workflow 1: Analisis Video Baru
-
 ```
 1. Upload Video (🎬)
    ↓
@@ -400,198 +304,34 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
    ↓
 3. Input Nama & Kategori
    ↓
-4. Beri Rating (opsional)
+4. Simpan ke Database (💾)
    ↓
-5. Simpan ke Database (💾)
-   ↓
-6. Lihat Analysis (📊)
-   ↓
-7. Export to Excel (📊)
+5. Lihat Analysis & Metrics (📊)
 ```
 
-### Workflow 2: Perbandingan Multiple Sesi
-
+### Workflow 2: Penetapan Waktu Standar Lengkap
 ```
-1. Rekam 3-5 sesi video yang sama
+1. Analisis Video & Rating (🎬)
    ↓
-2. Simpan semua ke database
+2. Cek Statistik & Outlier (📉)
    ↓
-3. Buka Comparison (⚖️)
+3. Hitung Allowance (🔧)
    ↓
-4. Select all sessions
-   ↓
-5. Review comparison table
-   ↓
-6. Export comparison data
+4. Kalkulasi Standard Time (⏱️)
 ```
-
-### Workflow 3: Kalkulasi Standard Time
-
-```
-1. Rekam minimal 10 cycle
-   ↓
-2. Beri rating setiap elemen (1-5 bintang)
-   ↓
-3. Buka Standard Time (⏱️)
-   ↓
-4. Select sessions dengan rating
-   ↓
-5. Set allowances (Personal, Fatigue, Delay)
-   ↓
-6. Review standard time
-   ↓
-7. Export to Excel
-```
-
-### Workflow 4: Improvement Analysis
-
-```
-1. Identifikasi waste (Analysis 📊)
-   ↓
-2. Simulasi eliminasi (Waste 🗑️)
-   ↓
-3. Simulasi rearrangement (Rearrange 🔄)
-   ↓
-4. Bandingkan before/after
-   ↓
-5. Hitung potential savings
-   ↓
-6. Dokumentasi improvement
-```
-
----
-
-## 🔧 Fitur Lanjutan
-
-### Element Split ✂️ **[FITUR BARU!]**
-
-**Kapan digunakan:**
-- Elemen terlalu panjang
-- Perlu detail breakdown
-
-**Cara:**
-1. Klik tombol **✂️** pada elemen
-2. Input waktu split (dalam detik)
-   - Contoh: Element 2.5s-5.0s → split di 3.5s
-3. Hasil: 2 elemen baru
-   - `Nama (1)` : 2.5s - 3.5s
-   - `Nama (2)` : 3.5s - 5.0s
-
-### Keyboard Shortcuts
-
-| Key | Fungsi |
-|-----|--------|
-| **Space** | Play/Pause |
-| **S** | Start measurement |
-| **E** | End measurement |
-| **→** | Next frame |
-| **←** | Previous frame |
-
-### Session Management
-
-**Menyimpan Sesi:**
-1. Setelah selesai analisis, klik 💾
-2. Data tersimpan di IndexedDB browser
-3. Nama session = nama video + timestamp
-
-**Load Sesi:**
-1. Klik icon Sessions di header
-2. Pilih sesi dari list
-3. Data akan dimuat ke workspace
-
----
-
-## 💡 Tips & Trik
-
-### 1. Pengukuran Akurat
-- ✅ Gunakan **frame-by-frame** (← →) untuk presisi
-- ✅ Zoom in jika gerakan detail
-- ✅ Gunakan slow motion (0.25x-0.5x)
-
-### 2. Kategorisasi yang Benar
-- **Value-added**: Mengubah bentuk/fungsi produk
-- **Non value-added**: Perlu tapi tidak VA (setup, inspeksi)
-- **Waste**: Bisa dieliminasi (tunggu, cari, transport berlebih)
-
-### 3. Rating yang Konsisten
-- ⭐⭐⭐⭐⭐ (100%): Operator sangat cepat & terampil
-- ⭐⭐⭐ (60%): Operator normal
-- ⭐ (20%): Operator sangat lambat
-
-### 4. Optimasi Workflow
-1. **Grouping**: Ukur beberapa cycle sekaligus
-2. **Template**: Simpan kategori umum untuk reuse
-3. **Batch Export**: Export multiple sessions sekaligus
-
-### 5. Best Practices
-- 📹 Rekam minimal **10 cycles** untuk data statistik
-- 🎯 Fokus pada **1 operasi** per sesi
-- 📊 Selalu **export data** untuk backup
-- 🔄 Lakukan **cycle time aggregation** untuk validasi
-- 🏆 Gunakan **Best/Worst analysis** untuk identifikasi variasi
-
----
-
-## 📞 Troubleshooting
-
-### Video tidak muncul
-- ✅ Cek format: MP4, WebM, Ogg supported
-- ✅ Cek ukuran file (max ~500MB)
-- ✅ Refresh browser (Ctrl+F5)
-
-### Data hilang setelah refresh
-- ⚠️ Data belum disimpan ke database
-- ✅ Selalu klik 💾 sebelum close
-
-### Performance lambat
-- ✅ Kurangi zoom level
-- ✅ Close tab lain
-- ✅ Gunakan browser modern (Chrome/Edge recommended)
-
----
-
-## 📚 Glossary
-
-- **Cycle**: Satu putaran lengkap operasi
-- **Element**: Bagian kecil dari cycle
-- **VA**: Value-Added (aktivitas menambah nilai)
-- **NVA**: Non Value-Added
-- **Standard Time**: Waktu standar untuk 1 cycle
-- **Rating**: Performance rating (kecepatan operator)
-- **Allowance**: Kelonggaran waktu (personal, fatigue, delay)
-
----
-
-## 🎓 Contoh Kasus Penggunaan
-
-### Kasus 1: Assembly Line
-**Tujuan:** Analisis waktu assembly 1 produk
-
-1. Rekam video assembly complete
-2. Breakdown menjadi elemen:
-   - Ambil komponen A (VA)
-   - Pasang komponen A (VA)
-   - Kencangkan baut (VA)
-   - Cek visual (NVA)
-   - Tunggu operator lain (Waste)
-3. Analisis waste → 15% waiting time
-4. Simulasi eliminasi → saving 8 detik per cycle
-5. Dokumentasi improvement proposal
-
-### Kasus 2: Packing Station
-**Tujuan:** Standardisasi waktu packing
-
-1. Rekam 10 cycles dari 3 operator berbeda
-2. Beri rating setiap operator
-3. Kalkulasi standard time
-4. Identifikasi best practice (best cycle analysis)
-5. Training berdasarkan best practice
 
 ---
 
 ## 📈 Update Log
 
-### Version 2.0 (Latest)
+### Version 2.1 (Current)
+- ✅ **New**: Statistical Analysis Module (Cp, Cpk, Control Charts)
+- ✅ **New**: MTM-1 Calculator
+- ✅ **New**: Allowance Calculator with variable fatigue factors
+- ✅ **New**: Productivity Metrics (OEE, Takt Time, Efficiency)
+- ✅ **Update**: Enhanced Analysis Dashboard
+
+### Version 2.0
 - ✅ Best/Worst Cycle Analysis
 - ✅ Rating Speed Playback
 - ✅ Video Side-by-Side Comparison
@@ -604,10 +344,7 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
 - Analysis dashboard
 - Comparison & aggregation
 - Standard time calculation
-- Waste elimination simulation
 
 ---
 
 **© 2024 MAVi - Motion Analysis & Visualization**
-
-*Untuk support & feedback, hubungi development team.*

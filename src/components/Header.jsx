@@ -182,6 +182,57 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                     <button
                         className="btn"
                         style={{
+                            backgroundColor: currentView === 'statistical-analysis' ? 'var(--accent-blue)' : '',
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}
+                        onClick={() => setCurrentView('statistical-analysis')}
+                        title="Statistical Analysis"
+                    >
+                        📉
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'mtm-calculator' ? 'var(--accent-blue)' : '',
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}
+                        onClick={() => setCurrentView('mtm-calculator')}
+                        title="MTM Calculator"
+                    >
+                        ⏱️
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'allowance-calculator' ? 'var(--accent-blue)' : '',
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}
+                        onClick={() => setCurrentView('allowance-calculator')}
+                        title="Allowance Calculator"
+                    >
+                        🔧
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
                             backgroundColor: currentView === 'best-worst' ? 'var(--accent-blue)' : '',
                             padding: '8px',
                             fontSize: '1.2rem',

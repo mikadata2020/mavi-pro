@@ -1,6 +1,7 @@
 import React from 'react';
 import { PieChart, Pie, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ProjectGanttChart from './ProjectGanttChart';
+import { calculateAllProductivityMetrics } from '../utils/productivityMetrics';
 
 function AnalysisDashboard({ measurements = [] }) {
     if (measurements.length === 0) {
@@ -16,6 +17,18 @@ function AnalysisDashboard({ measurements = [] }) {
     const valueAddedTime = measurements.filter(m => m.category === 'Value-added').reduce((sum, m) => sum + m.duration, 0);
     const nonValueAddedTime = measurements.filter(m => m.category === 'Non value-added').reduce((sum, m) => sum + m.duration, 0);
     const wasteTime = measurements.filter(m => m.category === 'Waste').reduce((sum, m) => sum + m.duration, 0);
+    // Compute advanced analytics metrics
+    const advancedMetrics = calculateAllProductivityMetrics({
+        measurements,
+        plannedTime: totalTime * 1.1, // assume 10% planned buffer
+        actualTime: totalTime,
+        standardTime: totalTime / (measurements.length || 1),
+        taktTime: totalTime / (measurements.length || 1),
+        totalUnits: measurements.length,
+        goodUnits: measurements.filter(m => m.rating && m.rating >= 3).length
+    });
+    const { valueAdded, efficiency, taktAnalysis, summary } = advancedMetrics;
+    const { oee, availability, performance, quality, classification: oeeClass } = advancedMetrics.oee ? advancedMetrics.oee : {};
 
     // Pie chart data
     const pieData = [
@@ -73,6 +86,23 @@ function AnalysisDashboard({ measurements = [] }) {
                     <div style={{ fontSize: '1.5rem', color: '#005a9e', fontWeight: 'bold' }}>
                         {totalTime > 0 ? ((valueAddedTime / totalTime) * 100).toFixed(1) : 0}%
                     </div>
+                </div>
+                {/* Advanced Analytics Cards */}
+                <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>OEE</div>
+                    <div style={{ fontSize: '1.5rem', color: '#00ff00', fontWeight: 'bold' }}>{(advancedMetrics.oee?.oee ?? 0).toFixed(1)}%</div>
+                </div>
+                <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Efficiency</div>
+                    <div style={{ fontSize: '1.5rem', color: '#ffdd00', fontWeight: 'bold' }}>{efficiency?.efficiency?.toFixed(1)}%</div>
+                </div>
+                <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Takt vs Cycle</div>
+                    <div style={{ fontSize: '1.5rem', color: taktAnalysis?.status === 'On Target' ? '#00ff00' : '#ff4444', fontWeight: 'bold' }}>{taktAnalysis?.status}</div>
+                </div>
+                <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Productivity Index</div>
+                    <div style={{ fontSize: '1.5rem', color: '#00cfff', fontWeight: 'bold' }}>{summary?.productivityIndex?.toFixed(1) ?? 'N/A'}</div>
                 </div>
             </div>
 

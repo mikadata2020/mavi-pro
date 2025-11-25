@@ -17,6 +17,9 @@ import NewProjectDialog from './components/NewProjectDialog';
 import OpenProjectDialog from './components/OpenProjectDialog';
 import Login from './components/Login';
 import StandardWorkCombinationSheet from './components/StandardWorkCombinationSheet';
+import StatisticalAnalysis from './components/StatisticalAnalysis';
+import MTMCalculator from './components/MTMCalculator';
+import AllowanceCalculator from './components/AllowanceCalculator';
 import { saveProject, getProjectByName, updateProject } from './utils/database';
 import { importProject } from './utils/projectExport';
 import { LanguageProvider } from './i18n/LanguageContext';
@@ -252,6 +255,18 @@ function App() {
           ) : currentView === 'spaghetti' ? (
             <div style={{ flex: 1, overflow: 'hidden' }}>
               <TherbligAnalysis measurements={measurements} />
+            </div>
+          ) : currentView === 'statistical-analysis' ? (
+            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+              <StatisticalAnalysis measurements={measurements} />
+            </div>
+          ) : currentView === 'mtm-calculator' ? (
+            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+              <MTMCalculator />
+            </div>
+          ) : currentView === 'allowance-calculator' ? (
+            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+              <AllowanceCalculator />
             </div>
           ) : (
             <div style={{ flex: 1, display: 'flex', gap: '10px', padding: '10px' }}>

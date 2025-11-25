@@ -4,6 +4,12 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
     const timelineRef = useRef(null);
     const [hoveredMeasurement, setHoveredMeasurement] = useState(null);
     const [dragState, setDragState] = useState(null); // { type: 'move' | 'resize-left' | 'resize-right', id: string, startX: number, originalStart: number, originalEnd: number }
+    const [cuttingMode, setCuttingMode] = useState(false);
+    const [autoAddMode, setAutoAddMode] = useState(true); // Auto add element mode
+    const [rulerHoverTime, setRulerHoverTime] = useState(null);
+    const [textAnnotations, setTextAnnotations] = useState([]);
+    const [showTextDialog, setShowTextDialog] = useState(false);
+    const [selectedAnnotation, setSelectedAnnotation] = useState(null);
 
     const getCategoryColor = (category) => {
         switch (category) {
@@ -108,7 +114,15 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
         // Check if click was on empty space (not on a measurement block)
         const clickedOnMeasurement = e.target.closest('[data-measurement-id]');
 
-        if (!clickedOnMeasurement && onAddMeasurement) {
+        // If in cutting mode, try to cut the measurement at current time
+        if (cuttingMode && clickedOnMeasurement) {
+            const measurementId = clickedOnMeasurement.getAttribute('data-measurement-id');
+            handleCut(measurementId, videoState.currentTime);
+            return;
+        }
+
+        // Only auto-add if autoAddMode is enabled
+        if (!clickedOnMeasurement && autoAddMode && onAddMeasurement) {
             // Find the last measurement (by end time)
             let startTime = 0;
 
@@ -140,9 +154,98 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
                 duration: duration
             });
         } else if (onSeek) {
-            // If clicked on empty space but no onAddMeasurement, just seek
+            // If clicked on empty space but no auto-add or not in auto-add mode, just seek
             onSeek(clickedTime);
         }
+    };
+
+    // Handle cutting measurement
+    const handleCut = (measurementId, cutTime) => {
+        if (!onUpdateMeasurements) return;
+
+        const measurement = measurements.find(m => m.id === measurementId);
+        if (!measurement) return;
+
+        // Check if cut time is within measurement bounds
+        if (cutTime <= measurement.startTime || cutTime >= measurement.endTime) {
+            alert('Cut time must be within the measurement duration');
+            return;
+        }
+
+        // Create two new measurements
+        const firstPart = {
+            ...measurement,
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            endTime: cutTime,
+            duration: cutTime - measurement.startTime,
+            elementName: measurement.elementName + ' (1)'
+        };
+
+        const secondPart = {
+            ...measurement,
+            id: (Date.now() + 1).toString() + Math.random().toString(36).substr(2, 9),
+            startTime: cutTime,
+            duration: measurement.endTime - cutTime,
+            elementName: measurement.elementName + ' (2)'
+        };
+
+        // Replace the original measurement with the two parts
+        const updatedMeasurements = measurements
+            .filter(m => m.id !== measurementId)
+            .concat([firstPart, secondPart])
+            .sort((a, b) => a.startTime - b.startTime);
+
+        onUpdateMeasurements(updatedMeasurements);
+        setCuttingMode(false); // Exit cutting mode after cut
+    };
+
+    // Handle text annotation functions
+    const addTextAnnotation = () => {
+        const newAnnotation = {
+            id: Date.now().toString(),
+            text: '',
+            startTime: videoState.currentTime,
+            endTime: videoState.currentTime + 2,
+            position: { x: 50, y: 50 }, // percentage
+            style: {
+                fontSize: 24,
+                color: '#ffffff',
+                backgroundColor: 'rgba(0,0,0,0.7)',
+                fontWeight: 'bold'
+            }
+        };
+        setSelectedAnnotation(newAnnotation);
+        setShowTextDialog(true);
+    };
+
+    const saveTextAnnotation = (annotation) => {
+        if (annotation.id && textAnnotations.find(a => a.id === annotation.id)) {
+            // Update existing
+            setTextAnnotations(prev => prev.map(a => a.id === annotation.id ? annotation : a));
+        } else {
+            // Add new
+            setTextAnnotations(prev => [...prev, annotation]);
+        }
+        setShowTextDialog(false);
+        setSelectedAnnotation(null);
+    };
+
+    const deleteTextAnnotation = (id) => {
+        setTextAnnotations(prev => prev.filter(a => a.id !== id));
+    };
+
+    // Handle ruler hover
+    const handleRulerMouseMove = (e) => {
+        if (!timelineRef.current || !videoState.duration) return;
+        const rect = timelineRef.current.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percentage = x / rect.width;
+        const time = percentage * videoState.duration;
+        setRulerHoverTime({ time, x });
+    };
+
+    const handleRulerMouseLeave = () => {
+        setRulerHoverTime(null);
     };
 
     const formatTime = (seconds) => {
@@ -159,16 +262,156 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
             borderRadius: '4px',
             marginBottom: '5px'
         }}>
-            {/* Timeline Header */}
+            {/* Timeline Header with Toolbar */}
             <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
+                alignItems: 'center',
                 marginBottom: '8px',
                 fontSize: '0.75rem',
                 color: '#888'
             }}>
-                <span>Timeline Editor - Drag to move/resize, Click empty space to add</span>
-                <span>{measurements.length} measurements</span>
+                <span>Timeline Editor - {measurements.length} measurements</span>
+
+                {/* Toolbar */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                        onClick={() => setCuttingMode(!cuttingMode)}
+                        style={{
+                            backgroundColor: cuttingMode ? '#005a9e' : '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s'
+                        }}
+                        title="Cutting Mode (Click measurement to split at playhead)"
+                    >
+                        ✂️ {cuttingMode ? 'Cutting ON' : 'Cut'}
+                    </button>
+                    <button
+                        onClick={addTextAnnotation}
+                        style={{
+                            backgroundColor: '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s'
+                        }}
+                        title="Add Text Annotation"
+                    >
+                        📝 Text
+                    </button>
+                    <button
+                        onClick={() => setAutoAddMode(!autoAddMode)}
+                        style={{
+                            backgroundColor: autoAddMode ? '#107c10' : '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s'
+                        }}
+                        title={autoAddMode ? "Auto Add ON - Click timeline to add measurement" : "Auto Add OFF - Click timeline to seek only"}
+                    >
+                        ➕ {autoAddMode ? 'Auto Add ON' : 'Auto Add'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Ruler - Enhanced with detailed markers */}
+            <div
+                style={{
+                    position: 'relative',
+                    height: '20px',
+                    backgroundColor: '#0a0a0a',
+                    borderRadius: '4px 4px 0 0',
+                    border: '1px solid #333',
+                    borderBottom: 'none',
+                    overflow: 'hidden'
+                }}
+                onMouseMove={handleRulerMouseMove}
+                onMouseLeave={handleRulerMouseLeave}
+            >
+                {/* Major time markers (every second or adjusted by duration) */}
+                {(() => {
+                    const duration = videoState.duration || 1;
+                    const markerCount = Math.min(Math.floor(duration) + 1, 60); // Max 60 markers
+                    const interval = duration / markerCount;
+
+                    return Array.from({ length: markerCount + 1 }, (_, i) => {
+                        const time = i * interval;
+                        const pos = (time / duration) * 100;
+                        const isMajor = i % 5 === 0;
+
+                        return (
+                            <div
+                                key={i}
+                                style={{
+                                    position: 'absolute',
+                                    left: `${pos}%`,
+                                    top: 0,
+                                    bottom: 0,
+                                    width: '1px',
+                                    backgroundColor: isMajor ? '#666' : '#333',
+                                    display: 'flex',
+                                    alignItems: 'flex-end',
+                                    paddingBottom: '2px'
+                                }}
+                            >
+                                {isMajor && (
+                                    <span style={{
+                                        fontSize: '0.6rem',
+                                        color: '#888',
+                                        transform: 'translateX(-50%)',
+                                        backgroundColor: '#0a0a0a',
+                                        padding: '0 2px',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        {formatTime(time)}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    });
+                })()}
+
+                {/* Hover tooltip */}
+                {rulerHoverTime && (
+                    <div style={{
+                        position: 'absolute',
+                        left: `${rulerHoverTime.x}px`,
+                        top: '-25px',
+                        transform: 'translateX(-50%)',
+                        backgroundColor: '#005a9e',
+                        color: 'white',
+                        padding: '2px 6px',
+                        borderRadius: '3px',
+                        fontSize: '0.7rem',
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'none',
+                        zIndex: 100,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.5)'
+                    }}>
+                        {formatTime(rulerHoverTime.time)}
+                    </div>
+                )}
             </div>
 
             {/* Timeline Track */}
@@ -179,50 +422,50 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
                     position: 'relative',
                     height: '60px',
                     backgroundColor: '#0a0a0a',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
+                    borderRadius: '0 0 4px 4px',
+                    cursor: cuttingMode ? 'crosshair' : 'pointer',
                     border: '1px solid #333',
+                    borderTop: 'none',
                     overflow: 'hidden'
                 }}
             >
-                {/* Time markers */}
-                <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: '100%',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    pointerEvents: 'none'
-                }}>
-                    {[0, 0.25, 0.5, 0.75, 1].map((pos, i) => (
+                {/* Text Annotation Track */}
+                {textAnnotations.map((annotation) => {
+                    const startPercent = (annotation.startTime / (videoState.duration || 1)) * 100;
+                    const widthPercent = ((annotation.endTime - annotation.startTime) / (videoState.duration || 1)) * 100;
+
+                    return (
                         <div
-                            key={i}
+                            key={annotation.id}
                             style={{
                                 position: 'absolute',
-                                left: `${pos * 100}%`,
-                                top: 0,
-                                bottom: 0,
-                                width: '1px',
-                                backgroundColor: '#333',
+                                left: `${startPercent}%`,
+                                top: '2px',
+                                width: `${widthPercent}%`,
+                                height: '12px',
+                                backgroundColor: 'rgba(0, 90, 158, 0.6)',
+                                border: '1px solid #005a9e',
+                                borderRadius: '2px',
+                                cursor: 'pointer',
                                 display: 'flex',
-                                alignItems: 'flex-end',
-                                paddingBottom: '2px'
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.6rem',
+                                color: 'white',
+                                overflow: 'hidden',
+                                zIndex: 5
                             }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedAnnotation(annotation);
+                                setShowTextDialog(true);
+                            }}
+                            title={annotation.text}
                         >
-                            <span style={{
-                                fontSize: '0.65rem',
-                                color: '#666',
-                                transform: 'translateX(-50%)',
-                                backgroundColor: '#0a0a0a',
-                                padding: '0 2px'
-                            }}>
-                                {formatTime(pos * (videoState.duration || 0))}
-                            </span>
+                            📝 {widthPercent > 8 ? annotation.text.substring(0, 20) : ''}
                         </div>
-                    ))}
-                </div>
+                    );
+                })}
 
                 {/* Measurement blocks */}
                 {measurements.map((measurement, index) => {
@@ -346,25 +589,176 @@ function TimelineEditor({ videoState, measurements, onSeek, onSelectMeasurement,
             </div>
 
             {/* Hovered measurement info */}
-            {hoveredMeasurement && (
+            {/* Hovered measurement info - Always render to prevent layout shift */}
+            <div style={{
+                marginTop: '8px',
+                padding: '6px 8px',
+                backgroundColor: '#222',
+                borderRadius: '4px',
+                fontSize: '0.75rem',
+                color: '#fff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                minHeight: '28px', // Fixed height
+                visibility: hoveredMeasurement ? 'visible' : 'hidden' // Hide instead of unmount
+            }}>
+                <span style={{ fontWeight: 'bold' }}>{hoveredMeasurement ? hoveredMeasurement.elementName : '-'}</span>
+                <span style={{ color: '#888' }}>
+                    {hoveredMeasurement ? (
+                        <>
+                            {formatTime(hoveredMeasurement.startTime)} - {formatTime(hoveredMeasurement.endTime)}
+                            <span style={{ marginLeft: '8px', color: getCategoryColor(hoveredMeasurement.category) }}>
+                                ({hoveredMeasurement.duration.toFixed(2)}s)
+                            </span>
+                        </>
+                    ) : '-'}
+                </span>
+            </div>
+
+            {/* Text Annotation Dialog */}
+            {showTextDialog && selectedAnnotation && (
                 <div style={{
-                    marginTop: '8px',
-                    padding: '6px 8px',
-                    backgroundColor: '#222',
-                    borderRadius: '4px',
-                    fontSize: '0.75rem',
-                    color: '#fff',
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.7)',
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
                 }}>
-                    <span style={{ fontWeight: 'bold' }}>{hoveredMeasurement.elementName}</span>
-                    <span style={{ color: '#888' }}>
-                        {formatTime(hoveredMeasurement.startTime)} - {formatTime(hoveredMeasurement.endTime)}
-                        <span style={{ marginLeft: '8px', color: getCategoryColor(hoveredMeasurement.category) }}>
-                            ({hoveredMeasurement.duration.toFixed(2)}s)
-                        </span>
-                    </span>
+                    <div style={{
+                        backgroundColor: '#1a1a1a',
+                        padding: '20px',
+                        borderRadius: '8px',
+                        width: '400px',
+                        maxWidth: '90%',
+                        border: '1px solid #333'
+                    }}>
+                        <h3 style={{ margin: '0 0 15px 0', color: 'white' }}>Text Annotation</h3>
+
+                        <div style={{ marginBottom: '12px' }}>
+                            <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.85rem' }}>
+                                Text:
+                            </label>
+                            <input
+                                type="text"
+                                value={selectedAnnotation.text}
+                                onChange={(e) => setSelectedAnnotation({ ...selectedAnnotation, text: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px',
+                                    backgroundColor: '#0a0a0a',
+                                    border: '1px solid #333',
+                                    borderRadius: '4px',
+                                    color: 'white',
+                                    fontSize: '0.9rem'
+                                }}
+                                placeholder="Enter annotation text..."
+                                autoFocus
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.85rem' }}>
+                                    Start Time (s):
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={selectedAnnotation.startTime}
+                                    onChange={(e) => setSelectedAnnotation({ ...selectedAnnotation, startTime: parseFloat(e.target.value) })}
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px',
+                                        backgroundColor: '#0a0a0a',
+                                        border: '1px solid #333',
+                                        borderRadius: '4px',
+                                        color: 'white',
+                                        fontSize: '0.9rem'
+                                    }}
+                                />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label style={{ display: 'block', marginBottom: '4px', color: '#888', fontSize: '0.85rem' }}>
+                                    End Time (s):
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={selectedAnnotation.endTime}
+                                    onChange={(e) => setSelectedAnnotation({ ...selectedAnnotation, endTime: parseFloat(e.target.value) })}
+                                    style={{
+                                        width: '100%',
+                                        padding: '8px',
+                                        backgroundColor: '#0a0a0a',
+                                        border: '1px solid #333',
+                                        borderRadius: '4px',
+                                        color: 'white',
+                                        fontSize: '0.9rem'
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                            {textAnnotations.find(a => a.id === selectedAnnotation.id) && (
+                                <button
+                                    onClick={() => {
+                                        deleteTextAnnotation(selectedAnnotation.id);
+                                        setShowTextDialog(false);
+                                        setSelectedAnnotation(null);
+                                    }}
+                                    style={{
+                                        padding: '8px 16px',
+                                        backgroundColor: '#c50f1f',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.85rem'
+                                    }}
+                                >
+                                    Delete
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    setShowTextDialog(false);
+                                    setSelectedAnnotation(null);
+                                }}
+                                style={{
+                                    padding: '8px 16px',
+                                    backgroundColor: '#333',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => saveTextAnnotation(selectedAnnotation)}
+                                style={{
+                                    padding: '8px 16px',
+                                    backgroundColor: '#005a9e',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.85rem'
+                                }}
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

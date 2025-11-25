@@ -12,7 +12,7 @@ function Help() {
 ✅ Menganalisis video kerja/operasi
 ✅ Mengukur waktu setiap elemen gerakan  
 ✅ Mengklasifikasikan aktivitas (Value-added, Non value-added, Waste)
-✅ Menghitung standard time
+✅ Menghitung standard time & productivity metrics
 ✅ Membandingkan sesi recording
 ✅ Simulasi improvement
             `
@@ -41,13 +41,16 @@ function Help() {
 **Navigation Icons:**
 
 🎬 **Video** - Workspace analisis video utama
-📊 **Analysis** - Dashboard charts & summary
+📊 **Analysis** - Dashboard charts, OEE, & summary
 🔄 **Rearrange** - Simulasi penyusunan ulang elemen
 📈 **Cycle Analysis** - Analisis waktu cycle individual
 Σ **Aggregation** - Agregasi cycle time dari multiple projects
 ⏱️ **Std Time** - Kalkulasi standard time dengan rating & allowance
 🗑️ **Waste** - Simulasi eliminasi waste
 📍 **Therblig** - Therblig flow diagram & layout analysis
+📉 **Statistical** - Analisis statistik (Cp, Cpk, Control Chart)
+⏱️ **MTM Calc** - Kalkulasi waktu baku metode MTM-1
+🔧 **Allowance** - Kalkulasi kelonggaran & fatigue
 🏆 **Best/Worst** - Analisis cycle terbaik vs terburuk
 🎥 **Compare** - Video side-by-side comparison
 ❓ **Help** - Panduan penggunaan aplikasi
@@ -162,17 +165,64 @@ Dashboard visualisasi hasil analisis dengan charts dan summary statistics.
    • Timeline - Sequence visualization
    • Summary stats - Total time, cycle time, dll
 
-**Metrics yang Ditampilkan:**
-• Total Cycle Time
-• Value Added Time & Percentage
-• Non Value Added Time & Percentage
-• Waste Time & Percentage
-• Element count per kategori
+**Metrics Baru:**
+• **OEE**: Availability x Performance x Quality
+• **Efficiency**: Output Actual vs Standard
+• **Takt vs Cycle**: Kesesuaian dengan demand
+• **Productivity Index**: Indeks performa total
 
 **Export:**
 • Screenshot dashboard
 • Export data ke Excel
 • Export chart sebagai image
+            `
+        },
+        statistical: {
+            title: '📉 Statistical Analysis',
+            content: `
+**Fungsi:**
+Analisis statistik mendalam untuk variabilitas proses dan kapabilitas sistem.
+
+**Fitur:**
+1. **Summary Stats**: Mean, Median, Std Dev, Min/Max
+2. **Confidence Interval**: 90%, 95%, 99%
+3. **Process Capability**: Cp, Cpk, Capable/Not Capable
+4. **Control Chart**: I-Chart dengan UCL/LCL
+5. **Histogram**: Distribusi data & Outlier detection
+
+**Cara Pakai:**
+1. Klik icon 📉 di header
+2. Review statistik otomatis dari data pengukuran
+3. Export PDF Report untuk dokumentasi
+            `
+        },
+        mtm: {
+            title: '⏱️ MTM Calculator',
+            content: `
+**Fungsi:**
+Kalkulasi waktu baku menggunakan metode Methods-Time Measurement (MTM-1).
+
+**Cara Pakai:**
+1. Klik icon ⏱️ (MTM) di header
+2. Pilih Motion Type (Reach, Move, Grasp, etc)
+3. Input parameter (Jarak, Case)
+4. Add Motion -> TMU terhitung otomatis
+
+**Konversi:**
+1 TMU = 0.036 detik
+            `
+        },
+        allowance: {
+            title: '🔧 Allowance Calculator',
+            content: `
+**Fungsi:**
+Menghitung kelonggaran (allowance) untuk penetapan waktu standar.
+
+**Fitur:**
+• Input Normal Time
+• Basic Allowances (Personal, Fatigue, Delay)
+• Variable Fatigue (Standing, Lifting, Lighting, etc)
+• Output: Standard Time final
             `
         },
         rearrange: {
@@ -497,7 +547,7 @@ Standard Time = Normal Time × (1 + Allowances)
 
                 {/* Footer Info */}
                 <div style={{ textAlign: 'center', color: '#666', fontSize: '0.85rem', padding: '10px' }}>
-                    <p>MAVi v2.0 - Motion Analysis & Visualization</p>
+                    <p>MAVi v2.1 - Motion Analysis & Visualization</p>
                     <p>Untuk panduan lengkap, lihat file: <code style={{ backgroundColor: '#2a2a2a', padding: '2px 6px', borderRadius: '3px' }}>PANDUAN_PENGGUNAAN.md</code></p>
                 </div>
             </div>

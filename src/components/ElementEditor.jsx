@@ -18,7 +18,6 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     const [searchQuery, setSearchQuery] = useState('');
     const [filterCategory, setFilterCategory] = useState('all');
     const [filterTherblig, setFilterTherblig] = useState('all');
-    const [filterRating, setFilterRating] = useState('all');
     const [sortBy, setSortBy] = useState('order');
 
     const categories = ['Value-added', 'Non value-added', 'Waste'];
@@ -214,17 +213,12 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         if (filterTherblig !== 'all') {
             filtered = filtered.filter(m => m.therblig === filterTherblig);
         }
-        if (filterRating !== 'all') {
-            const rating = parseInt(filterRating);
-            filtered = filtered.filter(m => (m.rating || 0) >= rating);
-        }
+
         switch (sortBy) {
             case 'duration':
                 filtered.sort((a, b) => b.duration - a.duration);
                 break;
-            case 'rating':
-                filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-                break;
+
             case 'name':
                 filtered.sort((a, b) => a.elementName.localeCompare(b.elementName));
                 break;
@@ -270,19 +264,12 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                         <option key={code} value={code}>{code} - {name}</option>
                     ))}
                 </select>
-                <select value={filterRating} onChange={(e) => setFilterRating(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
-                    <option value="all">Semua Rating</option>
-                    <option value="5">⭐⭐⭐⭐⭐</option>
-                    <option value="4">⭐⭐⭐⭐+</option>
-                    <option value="3">⭐⭐⭐+</option>
-                    <option value="2">⭐⭐+</option>
-                    <option value="1">⭐+</option>
-                </select>
+
                 <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
                     <option value="order">Urutan Asli</option>
                     <option value="cycle">Cycle</option>
                     <option value="duration">Durasi (Terbesar)</option>
-                    <option value="rating">Rating (Tertinggi)</option>
+
                     <option value="name">Nama (A-Z)</option>
                 </select>
             </div>
@@ -293,7 +280,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                 </div>
             )}
 
-            {(searchQuery || filterCategory !== 'all' || filterTherblig !== 'all' || filterRating !== 'all') && (
+            {(searchQuery || filterCategory !== 'all' || filterTherblig !== 'all') && (
                 <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px', padding: '4px 8px', backgroundColor: '#2a2a2a', borderRadius: '4px' }}>
                     Menampilkan {filteredMeasurements.length} dari {measurements.length} elemen
                 </div>
@@ -310,12 +297,12 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                             <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ffd700' }}>Manual</th>
                             <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#00ff00' }}>Auto</th>
                             <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ff4d4d' }}>Walk</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '120px', fontSize: '0.7rem' }}>Therblig</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '120px', fontSize: '0.7rem' }}>Rating</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '100px', fontSize: '0.7rem' }}>Therblig</th>
+
                             <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Start (s)</th>
                             <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Finish (s)</th>
                             <th style={{ padding: '4px', border: '1px solid #444', width: '80px', fontSize: '0.7rem' }}>Waktu (s)</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '180px', fontSize: '0.7rem' }}>Aksi</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '150px', fontSize: '0.7rem' }}>Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -437,11 +424,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                 ) : '-'
                                             )}
                                         </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
-                                            {[1, 2, 3, 4, 5].map(star => (
-                                                <span key={star} onClick={() => handleRatingChange(el.id, star)} style={{ cursor: 'pointer', color: (el.rating || 0) >= star ? '#ffa500' : '#444', fontSize: '1.1rem', marginRight: '2px' }} title={`Rating ${star}`}>★</span>
-                                            ))}
-                                        </td>
+
                                         <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#aaa', cursor: editingId !== el.id ? 'pointer' : 'default' }}
