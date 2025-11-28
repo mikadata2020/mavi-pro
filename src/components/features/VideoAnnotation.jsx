@@ -1,15 +1,19 @@
 import React, { useRef, useState, useEffect } from 'react';
 
-function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotations }) {
+function VideoAnnotation({
+    videoRef,
+    videoState,
+    annotations,
+    onUpdateAnnotations,
+    currentTool = 'pen',
+    drawColor = '#ff0000',
+    lineWidth = 3
+}) {
     const canvasRef = useRef(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    const [currentTool, setCurrentTool] = useState('pen'); // pen, line, arrow, rectangle, circle, text, eraser
-    const [drawColor, setDrawColor] = useState('#ff0000');
-    const [lineWidth, setLineWidth] = useState(3);
-    const [drawingData, setDrawingData] = useState([]);
     const [currentPath, setCurrentPath] = useState([]);
     const [startPoint, setStartPoint] = useState(null);
-    const [showToolbar, setShowToolbar] = useState(true);
+    const [textInput, setTextInput] = useState({ x: 0, y: 0, visible: false, text: '', canvasX: 0, canvasY: 0 });
 
     // Initialize canvas
     useEffect(() => {
@@ -24,7 +28,7 @@ function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotation
 
         // Redraw annotations
         redrawCanvas();
-    }, [videoState.currentTime, drawingData, annotations]);
+    }, [videoState.currentTime, annotations, currentPath, startPoint]); // Added dependencies for live drawing
 
     const redrawCanvas = () => {
         if (!canvasRef.current) return;
@@ -45,10 +49,35 @@ function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotation
             drawAnnotation(ctx, annotation);
         });
 
-        // Draw current drawing
-        drawingData.forEach(item => {
-            drawAnnotation(ctx, item);
-        });
+        // Draw current drawing preview
+        if (isDrawing) {
+            // For pen, we draw the path
+            if (currentTool === 'pen' && currentPath.length > 0) {
+                ctx.strokeStyle = drawColor;
+                ctx.lineWidth = lineWidth;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                ctx.beginPath();
+                ctx.moveTo(currentPath[0].x, currentPath[0].y);
+                currentPath.forEach(point => {
+                    ctx.lineTo(point.x, point.y);
+                });
+                ctx.stroke();
+            }
+            // For shapes, we draw the preview shape
+            else if (startPoint && currentPath.length > 0) { // currentPath holds the current mouse position for shapes
+                const endPoint = currentPath[currentPath.length - 1];
+                const tempAnnotation = {
+                    type: currentTool,
+                    start: startPoint,
+                    end: endPoint,
+                    color: drawColor,
+                    lineWidth: lineWidth
+                };
+                drawAnnotation(ctx, tempAnnotation);
+            }
+        }
     };
 
     const drawAnnotation = (ctx, annotation) => {
@@ -107,8 +136,24 @@ function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotation
 
             case 'text':
                 if (annotation.position && annotation.text) {
-                    ctx.font = `${annotation.fontSize || 24}px Arial`;
+                    ctx.font = `bold ${annotation.fontSize || 24}px Arial`;
+                    ctx.fillStyle = annotation.color || drawColor;
+                    ctx.textBaseline = 'middle'; // Center text vertically at click point
+                    ctx.textAlign = 'left';
+
+                    // Add text shadow for better visibility
+                    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+                    ctx.shadowBlur = 4;
+                    ctx.shadowOffsetX = 2;
+                    ctx.shadowOffsetY = 2;
+
                     ctx.fillText(annotation.text, annotation.position.x, annotation.position.y);
+
+                    // Reset shadow
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetX = 0;
+                    ctx.shadowOffsetY = 0;
                 }
                 break;
         }
@@ -142,9 +187,12 @@ function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotation
     const getCanvasPoint = (e) => {
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            x: (e.clientX - rect.left) * scaleX,
+            y: (e.clientY - rect.top) * scaleY
         };
     };
 
@@ -152,10 +200,29 @@ function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotation
         if (!canvasRef.current) return;
 
         const point = getCanvasPoint(e);
+
+        if (currentTool === 'text') {
+            // Use screen coordinates for the input box position
+            const canvas = canvasRef.current;
+            const rect = canvas.getBoundingClientRect();
+            setTextInput({
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top,
+                visible: true,
+                text: '',
+                canvasX: point.x,  // Store canvas coordinates for actual text rendering
+                canvasY: point.y
+            });
+            return;
+        }
+
         setIsDrawing(true);
         setStartPoint(point);
 
         if (currentTool === 'pen') {
+            setCurrentPath([point]);
+        } else {
+            // For shapes, we use currentPath to store the current mouse position (end point)
             setCurrentPath([point]);
         }
     };
@@ -164,38 +231,15 @@ function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotation
         if (!isDrawing || !canvasRef.current) return;
 
         const point = getCanvasPoint(e);
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
 
         if (currentTool === 'pen') {
             setCurrentPath(prev => [...prev, point]);
-
-            // Draw immediately for smooth feedback
-            ctx.strokeStyle = drawColor;
-            ctx.lineWidth = lineWidth;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            if (currentPath.length > 0) {
-                ctx.beginPath();
-                ctx.moveTo(currentPath[currentPath.length - 1].x, currentPath[currentPath.length - 1].y);
-                ctx.lineTo(point.x, point.y);
-                ctx.stroke();
-            }
         } else {
-            // For shapes, redraw with preview
-            redrawCanvas();
-
-            const tempAnnotation = {
-                type: currentTool,
-                start: startPoint,
-                end: point,
-                color: drawColor,
-                lineWidth: lineWidth
-            };
-
-            drawAnnotation(ctx, tempAnnotation);
+            // For shapes, update the end point
+            setCurrentPath([point]);
         }
+
+        // Redraw happens via useEffect dependency on currentPath
     };
 
     const handleMouseUp = (e) => {
@@ -218,199 +262,93 @@ function VideoAnnotation({ videoRef, videoState, annotations, onUpdateAnnotation
             newAnnotation.end = point;
         }
 
-        setDrawingData(prev => [...prev, newAnnotation]);
+        // Auto-save: Update parent state immediately
+        if (onUpdateAnnotations) {
+            onUpdateAnnotations([...(annotations || []), newAnnotation]);
+        }
+
         setIsDrawing(false);
         setCurrentPath([]);
         setStartPoint(null);
     };
 
-    const saveAnnotations = () => {
-        if (onUpdateAnnotations) {
-            onUpdateAnnotations([...(annotations || []), ...drawingData]);
-            setDrawingData([]);
+    const handleTextSubmit = () => {
+        if (textInput.text.trim()) {
+            const newAnnotation = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                type: 'text',
+                timestamp: videoState.currentTime,
+                color: drawColor,
+                text: textInput.text,
+                position: { x: textInput.canvasX || textInput.x, y: textInput.canvasY || textInput.y },
+                fontSize: lineWidth * 6 + 14 // Scale font size
+            };
+
+            if (onUpdateAnnotations) {
+                onUpdateAnnotations([...(annotations || []), newAnnotation]);
+            }
         }
+        setTextInput({ x: 0, y: 0, visible: false, text: '', canvasX: 0, canvasY: 0 });
     };
-
-    const clearAll = () => {
-        setDrawingData([]);
-        if (onUpdateAnnotations) {
-            onUpdateAnnotations([]);
-        }
-    };
-
-    const tools = [
-        { id: 'pen', icon: '✏️', label: 'Pen' },
-        { id: 'line', icon: '📏', label: 'Line' },
-        { id: 'arrow', icon: '➡️', label: 'Arrow' },
-        { id: 'rectangle', icon: '⬜', label: 'Rectangle' },
-        { id: 'circle', icon: '⭕', label: 'Circle' }
-    ];
-
-    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff', '#000000'];
 
     return (
-        <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
             {/* Canvas Overlay */}
             <canvas
                 ref={canvasRef}
+                style={{ pointerEvents: 'all' }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={() => setIsDrawing(false)}
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    cursor: 'crosshair',
-                    pointerEvents: showToolbar ? 'auto' : 'none',
-                    zIndex: 10
-                }}
             />
 
-            {/* Toolbar */}
-            {showToolbar && (
-                <div style={{
-                    position: 'absolute',
-                    top: '10px',
-                    right: '10px',
-                    backgroundColor: 'rgba(0,0,0,0.8)',
-                    padding: '10px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    zIndex: 20
-                }}>
-                    {/* Tools */}
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '200px' }}>
-                        {tools.map(tool => (
-                            <button
-                                key={tool.id}
-                                onClick={() => setCurrentTool(tool.id)}
-                                style={{
-                                    padding: '6px',
-                                    backgroundColor: currentTool === tool.id ? '#005a9e' : '#333',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '1rem',
-                                    minWidth: '36px'
-                                }}
-                                title={tool.label}
-                            >
-                                {tool.icon}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Colors */}
-                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '200px' }}>
-                        {colors.map(color => (
-                            <button
-                                key={color}
-                                onClick={() => setDrawColor(color)}
-                                style={{
-                                    width: '24px',
-                                    height: '24px',
-                                    backgroundColor: color,
-                                    border: drawColor === color ? '2px solid white' : '1px solid #666',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    padding: 0
-                                }}
-                            />
-                        ))}
-                    </div>
-
-                    {/* Line Width */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: 'white', fontSize: '0.75rem' }}>Width:</span>
-                        <input
-                            type="range"
-                            min="1"
-                            max="10"
-                            value={lineWidth}
-                            onChange={(e) => setLineWidth(parseInt(e.target.value))}
-                            style={{ flex: 1 }}
-                        />
-                        <span style={{ color: 'white', fontSize: '0.75rem' }}>{lineWidth}</span>
-                    </div>
-
-                    {/* Actions */}
-                    <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                        <button
-                            onClick={saveAnnotations}
-                            style={{
-                                flex: 1,
-                                padding: '6px',
-                                backgroundColor: '#107c10',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '0.75rem'
-                            }}
-                        >
-                            💾 Save
-                        </button>
-                        <button
-                            onClick={clearAll}
-                            style={{
-                                flex: 1,
-                                padding: '6px',
-                                backgroundColor: '#c50f1f',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontSize: '0.75rem'
-                            }}
-                        >
-                            🗑️ Clear
-                        </button>
-                    </div>
-
-                    {/* Toggle Toolbar */}
-                    <button
-                        onClick={() => setShowToolbar(false)}
-                        style={{
-                            padding: '4px',
-                            backgroundColor: '#333',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '0.7rem'
-                        }}
-                    >
-                        Hide
-                    </button>
-                </div>
-            )}
-
-            {/* Show Toolbar Button (when hidden) */}
-            {!showToolbar && (
-                <button
-                    onClick={() => setShowToolbar(true)}
+            {/* Text Input Overlay - Modal Style */}
+            {textInput.visible && (
+                <div
                     style={{
-                        position: 'absolute',
-                        top: '10px',
-                        right: '10px',
-                        padding: '8px',
-                        backgroundColor: 'rgba(0,0,0,0.8)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        zIndex: 20
+                        position: 'fixed',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        pointerEvents: 'all',
+                        zIndex: 99999,
+                        backgroundColor: 'rgba(0, 0, 0, 0.95)',
+                        padding: '20px',
+                        borderRadius: '8px',
+                        border: `3px solid ${drawColor}`,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.8)'
                     }}
                 >
-                    🎨 Draw
-                </button>
+                    <div style={{ marginBottom: '10px', color: 'white', fontSize: '14px' }}>
+                        Enter text annotation:
+                    </div>
+                    <input
+                        autoFocus
+                        type="text"
+                        value={textInput.text}
+                        onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleTextSubmit();
+                            if (e.key === 'Escape') setTextInput({ x: 0, y: 0, visible: false, text: '', canvasX: 0, canvasY: 0 });
+                        }}
+                        placeholder="Type text here..."
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            color: 'white',
+                            border: `2px solid ${drawColor}`,
+                            padding: '8px 12px',
+                            borderRadius: '4px',
+                            outline: 'none',
+                            fontSize: '16px',
+                            width: '300px',
+                            display: 'block'
+                        }}
+                    />
+                    <div style={{ marginTop: '10px', fontSize: '12px', color: '#888' }}>
+                        Press Enter to save, Escape to cancel
+                    </div>
+                </div>
             )}
         </div>
     );

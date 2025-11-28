@@ -29,6 +29,13 @@ function VideoWorkspace({
     const [leftPanelWidth, setLeftPanelWidth] = useState(35); // Initial width in percentage
     const [drawingAnnotations, setDrawingAnnotations] = useState([]);
     const [showAnnotationTool, setShowAnnotationTool] = useState(false);
+    const [fullScreenMode, setFullScreenMode] = useState('none'); // 'none', 'video', 'editor'
+
+    // Drawing State
+    const [currentTool, setCurrentTool] = useState('pen'); // pen, line, arrow, rectangle, circle, text, eraser
+    const [drawColor, setDrawColor] = useState('#ff0000');
+    const [lineWidth, setLineWidth] = useState(3);
+
     const containerRef = useRef(null);
     const isResizing = useRef(false);
 
@@ -174,10 +181,27 @@ function VideoWorkspace({
         }
     };
 
+    const tools = [
+        { id: 'pen', icon: '✏️', label: 'Pen' },
+        { id: 'line', icon: '📏', label: 'Line' },
+        { id: 'arrow', icon: '➡️', label: 'Arrow' },
+        { id: 'rectangle', icon: '⬜', label: 'Rectangle' },
+        { id: 'circle', icon: '⭕', label: 'Circle' },
+        { id: 'text', icon: '📝', label: 'Text' }
+    ];
+
+    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffffff', '#000000'];
+
     return (
-        <div ref={containerRef} style={{ flex: 2, display: 'flex', minHeight: '0' }}>
+        <div ref={containerRef} style={{ flex: 2, display: 'flex', minHeight: '0', position: 'relative' }}>
             {/* Video Player Section */}
-            <div style={{ width: `${leftPanelWidth}%`, display: 'flex', flexDirection: 'column', backgroundColor: '#000', position: 'relative' }}>
+            <div style={{
+                width: fullScreenMode === 'video' ? '100%' : fullScreenMode === 'editor' ? '0%' : `${leftPanelWidth}%`,
+                display: fullScreenMode === 'editor' ? 'none' : 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#000',
+                position: 'relative'
+            }}>
                 <div style={{
                     flex: 1,
                     display: 'flex',
@@ -212,6 +236,9 @@ function VideoWorkspace({
                                     videoState={videoState}
                                     annotations={drawingAnnotations}
                                     onUpdateAnnotations={setDrawingAnnotations}
+                                    currentTool={currentTool}
+                                    drawColor={drawColor}
+                                    lineWidth={lineWidth}
                                 />
                             )}
                         </div>
@@ -346,6 +373,45 @@ function VideoWorkspace({
                         </button>
                     )}
 
+                    {/* Full Screen Video Button */}
+                    {videoSrc && (
+                        <button
+                            onClick={() => setFullScreenMode(fullScreenMode === 'video' ? 'none' : 'video')}
+                            style={{
+                                position: 'absolute',
+                                top: '10px',
+                                right: '10px',
+                                zIndex: 100,
+                                backgroundColor: fullScreenMode === 'video' ? '#005a9e' : '#333',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                fontSize: '1.1rem',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '35px',
+                                height: '35px',
+                                boxShadow: fullScreenMode === 'video' ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.transform = 'scale(1.1)';
+                                e.target.style.boxShadow = fullScreenMode === 'video' ? '0 4px 12px rgba(0, 90, 158, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.transform = 'scale(1)';
+                                e.target.style.boxShadow = fullScreenMode === 'video' ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
+                            }}
+                            title={fullScreenMode === 'video' ? "Exit Full Screen" : "Full Screen Video"}
+                        >
+                            {fullScreenMode === 'video' ? '⛶' : '⛶'}
+                        </button>
+                    )}
+
                     {/* Logo Overlay */}
                     {videoSrc && logoUrl && (
                         <img
@@ -390,38 +456,192 @@ function VideoWorkspace({
                 )}
             </div>
 
-            {/* Resizer Handle */}
-            <div
-                onMouseDown={startResizing}
-                style={{
-                    width: '12px',
-                    background: '#1a1a1a',
-                    cursor: 'col-resize',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 10,
-                    borderLeft: '1px solid #333',
-                    borderRight: '1px solid #333',
-                    transition: 'background 0.2s'
-                }}
-                onMouseEnter={(e) => e.target.style.background = '#333'}
-                onMouseLeave={(e) => e.target.style.background = '#1a1a1a'}
-                title="Drag to resize"
-            >
+            {/* Drawing Toolbar - Rendered OUTSIDE the video container to avoid scaling and z-index issues */}
+            {showAnnotationTool && (
                 <div style={{
+                    position: 'absolute',
+                    top: '60px', // Below the top buttons
+                    left: '10px',
+                    backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                    padding: '10px',
+                    borderRadius: '8px',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '3px'
+                    gap: '8px',
+                    zIndex: 1000, // Very high z-index
+                    border: '1px solid #444',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                    width: '40px', // Compact vertical toolbar
+                    alignItems: 'center'
                 }}>
-                    <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
-                    <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
-                    <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                    {/* Tools */}
+                    {tools.map(tool => (
+                        <button
+                            key={tool.id}
+                            onClick={() => setCurrentTool(tool.id)}
+                            style={{
+                                padding: '6px',
+                                backgroundColor: currentTool === tool.id ? '#005a9e' : 'transparent',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '1.2rem',
+                                width: '32px',
+                                height: '32px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s'
+                            }}
+                            title={tool.label}
+                        >
+                            {tool.icon}
+                        </button>
+                    ))}
+
+                    <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+
+                    {/* Colors - Compact Color Picker */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {colors.slice(0, 5).map(color => ( // Show first 5 colors
+                            <button
+                                key={color}
+                                onClick={() => setDrawColor(color)}
+                                style={{
+                                    width: '24px',
+                                    height: '24px',
+                                    backgroundColor: color,
+                                    border: drawColor === color ? '2px solid white' : '1px solid #666',
+                                    borderRadius: '50%',
+                                    cursor: 'pointer',
+                                    padding: 0
+                                }}
+                            />
+                        ))}
+                    </div>
+
+                    <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+
+                    {/* Line Width */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                        <span style={{ color: '#aaa', fontSize: '0.6rem' }}>Size</span>
+                        <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            value={lineWidth}
+                            onChange={(e) => setLineWidth(parseInt(e.target.value))}
+                            style={{ width: '60px', transform: 'rotate(-90deg)', margin: '20px 0' }}
+                        />
+                    </div>
+
+                    <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+
+                    {/* Clear Action */}
+                    <button
+                        onClick={() => setDrawingAnnotations([])}
+                        style={{
+                            padding: '6px',
+                            backgroundColor: 'transparent',
+                            color: '#c50f1f',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '1.2rem',
+                            width: '32px',
+                            height: '32px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                        title="Clear All Drawings"
+                    >
+                        🗑️
+                    </button>
                 </div>
-            </div>
+            )}
+
+            {/* Resizer Handle - Hidden in full screen mode */}
+            {fullScreenMode === 'none' && (
+                <div
+                    onMouseDown={startResizing}
+                    style={{
+                        width: '12px',
+                        background: '#1a1a1a',
+                        cursor: 'col-resize',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10,
+                        borderLeft: '1px solid #333',
+                        borderRight: '1px solid #333',
+                        transition: 'background 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.target.style.background = '#333'}
+                    onMouseLeave={(e) => e.target.style.background = '#1a1a1a'}
+                    title="Drag to resize"
+                >
+                    <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '3px'
+                    }}>
+                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                    </div>
+                </div>
+            )}
 
             {/* Right Panel: Element Editor + Timeline */}
-            <div style={{ flex: 1, minWidth: '0', display: 'flex', flexDirection: 'column', gap: '10px', paddingLeft: '10px' }}>
+            <div style={{
+                flex: 1,
+                minWidth: '0',
+                display: fullScreenMode === 'video' ? 'none' : 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                paddingLeft: fullScreenMode === 'editor' ? '0' : '10px',
+                width: fullScreenMode === 'editor' ? '100%' : 'auto',
+                position: 'relative'
+            }}>
+                {/* Full Screen Element Editor Button */}
+                <button
+                    onClick={() => setFullScreenMode(fullScreenMode === 'editor' ? 'none' : 'editor')}
+                    style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        zIndex: 100,
+                        backgroundColor: fullScreenMode === 'editor' ? '#005a9e' : '#333',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '6px',
+                        cursor: 'pointer',
+                        fontSize: '1.1rem',
+                        fontWeight: 'bold',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '35px',
+                        height: '35px',
+                        boxShadow: fullScreenMode === 'editor' ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
+                        transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                        e.target.style.transform = 'scale(1.1)';
+                        e.target.style.boxShadow = fullScreenMode === 'editor' ? '0 4px 12px rgba(0, 90, 158, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.target.style.transform = 'scale(1)';
+                        e.target.style.boxShadow = fullScreenMode === 'editor' ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
+                    }}
+                    title={fullScreenMode === 'editor' ? "Exit Full Screen" : "Full Screen Editor"}
+                >
+                    {fullScreenMode === 'editor' ? '⛶' : '⛶'}
+                </button>
+
                 <div style={{ flex: 1, minHeight: '300px' }}>
                     <ElementEditor
                         measurements={videoState.measurements}
