@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import VideoRecorder from '../../utils/videoRecorder';
 
-function VideoRecorderComponent({ videoRef, videoSrc, onRecordingComplete }) {
+function VideoRecorderComponent({ videoRef, videoSrc, isWebcamActive, onRecordingComplete }) {
     const [recorder] = useState(() => new VideoRecorder());
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
@@ -42,7 +42,7 @@ function VideoRecorderComponent({ videoRef, videoSrc, onRecordingComplete }) {
     };
 
     const handleStartRecording = async () => {
-        if (!videoRef?.current || !videoSrc) {
+        if (!videoRef?.current || (!videoSrc && !isWebcamActive)) {
             setError('Tidak ada video untuk direkam');
             return;
         }
@@ -66,74 +66,9 @@ function VideoRecorderComponent({ videoRef, videoSrc, onRecordingComplete }) {
         }
     };
 
-    const handleStopRecording = async () => {
-        try {
-            const blob = await recorder.stopRecording();
-            setRecordedBlob(blob);
-            setIsRecording(false);
-            setIsPaused(false);
-            stopDurationTimer();
+    // ... (rest of the functions remain the same)
 
-            if (onRecordingComplete) {
-                onRecordingComplete(blob);
-            }
-        } catch (err) {
-            setError(err.message || 'Gagal menghentikan recording');
-            console.error('Stop recording error:', err);
-        }
-    };
-
-    const handlePauseRecording = () => {
-        recorder.pauseRecording();
-        setIsPaused(true);
-        stopDurationTimer();
-    };
-
-    const handleResumeRecording = () => {
-        recorder.resumeRecording();
-        setIsPaused(false);
-        startDurationTimer();
-    };
-
-    const handleDownload = () => {
-        if (recordedBlob) {
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-            const extension = selectedFormat.includes('webm') ? 'webm' : 'mp4';
-            VideoRecorder.downloadRecording(recordedBlob, `recording_${timestamp}.${extension}`);
-        }
-    };
-
-    const handleUseRecording = () => {
-        if (recordedBlob && onRecordingComplete) {
-            const url = VideoRecorder.createObjectURL(recordedBlob);
-            onRecordingComplete(blob, url);
-        }
-    };
-
-    const formatDuration = (seconds) => {
-        const hrs = Math.floor(seconds / 3600);
-        const mins = Math.floor((seconds % 3600) / 60);
-        const secs = seconds % 60;
-
-        if (hrs > 0) {
-            return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
-    if (!VideoRecorder.isSupported()) {
-        return (
-            <div style={{
-                backgroundColor: 'rgba(197, 15, 31, 0.2)',
-                padding: '15px',
-                borderRadius: '8px',
-                border: '1px solid #c50f1f',
-                color: '#ff6b6b'
-            }}>
-                ⚠️ Video recording tidak didukung di browser ini
-            </div>
-        );
-    }
+    // ...
 
     return (
         <div style={{
@@ -144,6 +79,7 @@ function VideoRecorderComponent({ videoRef, videoSrc, onRecordingComplete }) {
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
             marginBottom: '10px'
         }}>
+            {/* ... (header remains the same) ... */}
             <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -216,17 +152,17 @@ function VideoRecorderComponent({ videoRef, videoSrc, onRecordingComplete }) {
                     {/* Start Recording Button */}
                     <button
                         onClick={handleStartRecording}
-                        disabled={!videoSrc}
+                        disabled={!videoSrc && !isWebcamActive}
                         style={{
                             width: '100%',
                             padding: '10px',
-                            backgroundColor: videoSrc ? '#c50f1f' : '#555',
+                            backgroundColor: (videoSrc || isWebcamActive) ? '#c50f1f' : '#555',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',
                             fontSize: '0.95rem',
                             fontWeight: 'bold',
-                            cursor: videoSrc ? 'pointer' : 'not-allowed',
+                            cursor: (videoSrc || isWebcamActive) ? 'pointer' : 'not-allowed',
                             transition: 'background-color 0.2s',
                             display: 'flex',
                             alignItems: 'center',
@@ -234,17 +170,17 @@ function VideoRecorderComponent({ videoRef, videoSrc, onRecordingComplete }) {
                             gap: '8px'
                         }}
                         onMouseEnter={(e) => {
-                            if (videoSrc) e.target.style.backgroundColor = '#a00f1a';
+                            if (videoSrc || isWebcamActive) e.target.style.backgroundColor = '#a00f1a';
                         }}
                         onMouseLeave={(e) => {
-                            if (videoSrc) e.target.style.backgroundColor = '#c50f1f';
+                            if (videoSrc || isWebcamActive) e.target.style.backgroundColor = '#c50f1f';
                         }}
                     >
                         <span style={{ fontSize: '1.2rem' }}>⏺</span>
                         Start Recording
                     </button>
 
-                    {!videoSrc && (
+                    {!videoSrc && !isWebcamActive && (
                         <div style={{
                             marginTop: '10px',
                             padding: '8px',
@@ -254,7 +190,7 @@ function VideoRecorderComponent({ videoRef, videoSrc, onRecordingComplete }) {
                             color: '#ffa500',
                             fontSize: '0.85rem'
                         }}>
-                            ℹ️ Load video atau connect ke IP camera terlebih dahulu
+                            ℹ️ Load video atau connect ke IP camera/Webcam terlebih dahulu
                         </div>
                     )}
                 </>

@@ -756,6 +756,7 @@ function VideoWorkspace({
                     <VideoRecorder
                         videoRef={videoRef}
                         videoSrc={videoSrc}
+                        isWebcamActive={isWebcamActive}
                         onRecordingComplete={(blob, url) => {
                             if (url) {
                                 onVideoChange(url);
