@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import VideoWorkspace from './components/VideoWorkspace';
-import FeatureMenu from './components/FeatureMenu';
 import AnalysisDashboard from './components/AnalysisDashboard';
 import ElementRearrangement from './components/ElementRearrangement';
 import CycleTimeAnalysis from './components/CycleTimeAnalysis';
@@ -23,9 +22,13 @@ import AllowanceCalculator from './components/AllowanceCalculator';
 import YamazumiChart from './components/YamazumiChart';
 import MultiAxialAnalysis from './components/MultiAxialAnalysis';
 import ManualCreation from './components/ManualCreation';
+import BroadcastManager from './components/features/BroadcastManager';
+import BroadcastViewer from './components/features/BroadcastViewer';
+import StreamHandler from './utils/streamHandler';
 import { saveProject, getProjectByName, updateProject } from './utils/database';
 import { importProject } from './utils/projectExport';
 import { LanguageProvider } from './i18n/LanguageContext';
+import CollaborationOverlay from './components/features/CollaborationOverlay';
 import './index.css';
 
 function App() {
@@ -36,6 +39,22 @@ function App() {
   const [videoSrc, setVideoSrc] = useState(null);
   const [videoName, setVideoName] = useState('');
   const [theme, setTheme] = useState(() => localStorage.getItem('app-theme') || 'dark');
+
+  // Broadcast state
+  const [watchRoomId, setWatchRoomId] = useState(null);
+  const videoRef = useRef(null); // Ref to pass to BroadcastManager
+  const [streamHandler] = useState(() => new StreamHandler());
+  const [remoteCursor, setRemoteCursor] = useState({ x: null, y: null, label: null });
+  const [lastDrawingAction, setLastDrawingAction] = useState(null);
+
+  useEffect(() => {
+    // Check for "watch" query param
+    const params = new URLSearchParams(window.location.search);
+    const watchId = params.get('watch');
+    if (watchId) {
+      setWatchRoomId(watchId);
+    }
+  }, []);
 
   // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -188,32 +207,46 @@ function App() {
     return () => clearTimeout(saveTimer);
   }, [measurements, currentProject]);
 
-  // Show login screen if not authenticated
+  const handleRemoteInteraction = (data) => {
+    if (data.type === 'cursor') {
+      setRemoteCursor({ x: data.x, y: data.y, label: 'Remote Viewer' });
+    } else if (data.type === 'draw' || data.type === 'start' || data.type === 'end') {
+      setLastDrawingAction(data);
+    } else if (data.type === 'click') {
+      console.log('Remote click at', data.x, data.y);
+    }
+  };
+
+  if (watchRoomId) {
+    return <BroadcastViewer roomId={watchRoomId} onClose={() => setWatchRoomId(null)} />;
+  }
+
   if (!isAuthenticated) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    return <Login onLogin={handleLoginSuccess} />;
   }
 
   return (
     <LanguageProvider>
-      <div style={{ height: '100vh', display: 'flex', flexDirection: 'row', backgroundColor: 'var(--bg-primary)', position: 'relative' }}>
-        {/* Toggle Button - Always Visible */}
+      <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+        <CollaborationOverlay cursor={remoteCursor} lastDrawingAction={lastDrawingAction} />
+
         <button
+          className="sidebar-toggle"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           style={{
-            position: 'fixed',
-            left: sidebarCollapsed ? '0px' : '60px',
-            top: '50%',
-            transform: 'translateY(-50%)',
+            position: 'absolute',
+            left: sidebarCollapsed ? '10px' : '70px',
+            top: '10px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)',
+            borderRadius: '50%',
             width: '30px',
-            height: '60px',
-            backgroundColor: 'var(--accent-blue)',
-            border: 'none',
-            borderRadius: '0 8px 8px 0',
-            cursor: 'pointer',
+            height: '30px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white',
+            cursor: 'pointer',
             fontSize: '1.2rem',
             zIndex: 1001,
             transition: 'left 0.3s ease',
@@ -225,26 +258,35 @@ function App() {
         </button>
 
         <div className="main-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {currentView === 'dashboard' ? (
-            <div className="workspace-area" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px' }}>
-              <VideoWorkspace
-                measurements={measurements}
-                onUpdateMeasurements={setMeasurements}
-                videoSrc={videoSrc}
-                onVideoChange={setVideoSrc}
-                videoName={videoName}
-                onVideoNameChange={setVideoName}
-                currentProject={currentProject}
-                onNewProject={() => setShowNewProjectDialog(true)}
-                onOpenProject={() => setShowOpenProjectDialog(true)}
-                onExportProject={handleExportProject}
-                onImportProject={handleImportProject}
-                onLogout={handleLogout}
-              />
-            </div>
-          ) : currentView === 'features' ? (
-            <FeatureMenu onFeatureSelect={handleFeatureSelect} />
-          ) : currentView === 'analysis' ? (
+          {/* VideoWorkspace - Always rendered but hidden when not in dashboard */}
+          <div
+            className="workspace-area"
+            style={{
+              flex: 1,
+              display: currentView === 'dashboard' ? 'flex' : 'none',
+              flexDirection: 'column',
+              padding: '10px',
+              gap: '10px'
+            }}
+          >
+            <VideoWorkspace
+              measurements={measurements}
+              onUpdateMeasurements={setMeasurements}
+              videoSrc={videoSrc}
+              onVideoChange={setVideoSrc}
+              videoName={videoName}
+              onVideoNameChange={setVideoName}
+              currentProject={currentProject}
+              onNewProject={() => setShowNewProjectDialog(true)}
+              onOpenProject={() => setShowOpenProjectDialog(true)}
+              onExportProject={handleExportProject}
+              onImportProject={handleImportProject}
+              onLogout={handleLogout}
+            />
+          </div>
+
+          {/* Other views */}
+          {currentView === 'analysis' ? (
             <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
               <AnalysisDashboard measurements={measurements} />
             </div>
@@ -312,29 +354,28 @@ function App() {
             <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
               <ManualCreation />
             </div>
-          ) : (
-            <div style={{ flex: 1, display: 'flex', gap: '10px', padding: '10px' }}>
-              <div style={{ flex: 1, maxWidth: '400px' }}>
-                <FeatureMenu onFeatureSelect={handleFeatureSelect} />
-              </div>
-              <div style={{ flex: 2, backgroundColor: 'var(--bg-secondary)', padding: '20px', overflowY: 'auto' }}>
-                {selectedFeature ? (
-                  <div>
-                    <h2 style={{ color: 'var(--accent-blue)', marginTop: 0 }}>{selectedFeature.category}</h2>
-                    <h3 style={{ color: 'var(--text-primary)' }}>{selectedFeature.feature}</h3>
-                    <p style={{ color: 'var(--text-secondary)' }}>
-                      Fitur ini akan diimplementasikan. Silakan pilih fitur lain dari menu.
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ color: 'var(--text-secondary)', textAlign: 'center', marginTop: '50px' }}>
-                    <h3>Selamat Datang di Menu Fitur</h3>
-                    <p>Pilih kategori dan fitur dari menu di sebelah kiri untuk melihat detail.</p>
-                  </div>
-                )}
+          ) : currentView === 'broadcast' ? (
+            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+              <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  Share your video stream with other devices in real-time.
+                </p>
+                <div style={{
+                  padding: '15px',
+                  backgroundColor: 'rgba(0, 120, 212, 0.1)',
+                  border: '1px solid #0078d4',
+                  borderRadius: '8px',
+                  marginBottom: '15px',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.9rem'
+                }}>
+                  💡 <strong>Tip:</strong> Make sure you have a video source active (file, webcam, or IP camera) before starting the broadcast.
+                </div>
+                <BroadcastManager onRemoteInteraction={handleRemoteInteraction} />
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         <Header
@@ -373,7 +414,7 @@ function App() {
           onOpenProject={handleOpenProject}
         />
       </div>
-    </LanguageProvider>
+    </LanguageProvider >
   );
 }
 

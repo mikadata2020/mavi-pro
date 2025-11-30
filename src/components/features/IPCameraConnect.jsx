@@ -55,6 +55,8 @@ function IPCameraConnect({ onStreamConnected, onStreamDisconnected, videoRef }) 
 
             if (streamType === 'hls' || streamUrl.includes('.m3u8')) {
                 success = await streamHandler.connectHLSStream(streamUrl, videoRef.current);
+            } else if (streamType === 'mjpeg') {
+                success = await streamHandler.connectMJPEGStream(streamUrl, videoRef.current);
             } else {
                 success = await streamHandler.connectHTTPStream(streamUrl, videoRef.current);
             }
@@ -66,7 +68,9 @@ function IPCameraConnect({ onStreamConnected, onStreamDisconnected, videoRef }) 
                 }
                 // Auto-play the stream
                 videoRef.current.play().catch(err => {
-                    console.warn('Auto-play prevented:', err);
+                    if (err.name !== 'AbortError') {
+                        console.warn('Auto-play prevented:', err);
+                    }
                 });
             }
         } catch (err) {
@@ -208,6 +212,7 @@ function IPCameraConnect({ onStreamConnected, onStreamDisconnected, videoRef }) 
                         >
                             <option value="http">HTTP/HTTPS</option>
                             <option value="hls">HLS (.m3u8)</option>
+                            <option value="mjpeg">MJPEG (IP Camera)</option>
                         </select>
                     </div>
 

@@ -3,6 +3,8 @@
  * Handles various video stream protocols (HTTP, HTTPS, HLS)
  */
 
+import Hls from 'hls.js';
+
 class StreamHandler {
     constructor() {
         this.currentStream = null;
@@ -32,14 +34,61 @@ class StreamHandler {
                     resolve(true);
                 };
 
-                videoElement.onerror = (error) => {
-                    console.error('HTTP Stream error:', error);
+                videoElement.onerror = (event) => {
+                    // Extract detailed error information from MediaError
+                    const mediaError = videoElement.error;
+                    let errorMessage = 'Failed to load video stream';
+
+                    if (mediaError) {
+                        // Include the browser's error message if available
+                        if (mediaError.message) {
+                            errorMessage = mediaError.message;
+                        }
+
+                        // Log detailed error info for debugging
+                        console.error('HTTP Stream error:', {
+                            code: mediaError.code,
+                            message: mediaError.message,
+                            url: url
+                        });
+                    } else {
+                        console.error('HTTP Stream error:', event);
+                    }
+
+                    const error = new Error(errorMessage);
+                    error.mediaError = mediaError;
+
                     this.handleStreamError(url, videoElement);
                     reject(error);
                 };
             });
         } catch (error) {
             console.error('Failed to connect HTTP stream:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Connect to MJPEG stream (IP Camera)
+     * @param {string} url - Stream URL
+     * @param {HTMLVideoElement} videoElement - Video element to attach stream
+     * @returns {Promise<boolean>} Success status
+     */
+    async connectMJPEGStream(url, videoElement) {
+        try {
+            this.streamType = 'mjpeg';
+            this.currentStream = url;
+
+            // For MJPEG, we don't wait for loadedmetadata as it might not fire consistently
+            // and we want to avoid the "Connecting..." hang.
+            videoElement.src = url;
+
+            // Reset reconnect attempts
+            this.reconnectAttempts = 0;
+
+            return Promise.resolve(true);
+        } catch (error) {
+            console.error('Failed to connect MJPEG stream:', error);
             throw error;
         }
     }
@@ -52,11 +101,6 @@ class StreamHandler {
      */
     async connectHLSStream(url, videoElement) {
         try {
-            // Check if HLS.js is available
-            if (typeof window.Hls === 'undefined') {
-                throw new Error('HLS.js library not loaded');
-            }
-
             this.streamType = 'hls';
             this.currentStream = url;
 
@@ -67,12 +111,12 @@ class StreamHandler {
                 return true;
             }
             // Use HLS.js for other browsers
-            else if (window.Hls.isSupported()) {
+            else if (Hls.isSupported()) {
                 if (this.hlsInstance) {
                     this.hlsInstance.destroy();
                 }
 
-                this.hlsInstance = new window.Hls({
+                this.hlsInstance = new Hls({
                     enableWorker: true,
                     lowLatencyMode: true,
                     backBufferLength: 90
@@ -82,12 +126,12 @@ class StreamHandler {
                 this.hlsInstance.attachMedia(videoElement);
 
                 return new Promise((resolve, reject) => {
-                    this.hlsInstance.on(window.Hls.Events.MANIFEST_PARSED, () => {
+                    this.hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
                         this.reconnectAttempts = 0;
                         resolve(true);
                     });
 
-                    this.hlsInstance.on(window.Hls.Events.ERROR, (event, data) => {
+                    this.hlsInstance.on(Hls.Events.ERROR, (event, data) => {
                         console.error('HLS error:', data);
                         if (data.fatal) {
                             this.handleHLSError(data, url, videoElement);
@@ -111,11 +155,11 @@ class StreamHandler {
         if (!this.hlsInstance) return;
 
         switch (data.type) {
-            case window.Hls.ErrorTypes.NETWORK_ERROR:
+            case Hls.ErrorTypes.NETWORK_ERROR:
                 console.log('Network error, attempting to recover...');
                 this.hlsInstance.startLoad();
                 break;
-            case window.Hls.ErrorTypes.MEDIA_ERROR:
+            case Hls.ErrorTypes.MEDIA_ERROR:
                 console.log('Media error, attempting to recover...');
                 this.hlsInstance.recoverMediaError();
                 break;

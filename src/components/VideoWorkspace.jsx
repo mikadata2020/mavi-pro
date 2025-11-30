@@ -46,6 +46,7 @@ function VideoWorkspace({
     const [showWebcamPanel, setShowWebcamPanel] = useState(false);
     const [isStreamConnected, setIsStreamConnected] = useState(false);
     const [isWebcamActive, setIsWebcamActive] = useState(false);
+    const [isMJPEG, setIsMJPEG] = useState(false);
 
     const containerRef = useRef(null);
     const videoContainerRef = useRef(null);
@@ -68,6 +69,29 @@ function VideoWorkspace({
         handleTimeUpdate,
         handleLoadedMetadata
     } = useVideoPlayer(measurements);
+
+    // Store video ref globally for broadcast feature
+    // Update continuously, not just on mount
+    useEffect(() => {
+        const updateGlobalRef = () => {
+            if (videoRef.current) {
+                window.__motionVideoElement = videoRef.current;
+                console.log('[VideoWorkspace] Updated global video reference');
+            }
+        };
+
+        // Update immediately
+        updateGlobalRef();
+
+        // Also update on an interval to catch late initialization
+        const interval = setInterval(updateGlobalRef, 1000);
+
+        return () => {
+            clearInterval(interval);
+            window.__motionVideoElement = null;
+            console.log('[VideoWorkspace] Cleared global video reference');
+        };
+    }, [videoRef, videoSrc, isWebcamActive, isStreamConnected]);
 
     const startResizing = useCallback(() => {
         isResizing.current = true;
@@ -233,16 +257,30 @@ function VideoWorkspace({
                     }}>
                         <video
                             ref={videoRef}
-                            src={videoSrc}
+                            src={isMJPEG ? '' : videoSrc}
                             onTimeUpdate={handleTimeUpdate}
                             onLoadedMetadata={handleLoadedMetadata}
-                            crossOrigin="anonymous"
+                            crossOrigin={videoSourceType === 'stream' ? null : "anonymous"}
                             style={{
                                 width: '100%',
                                 maxHeight: '100%',
-                                display: 'block'
+                                display: isMJPEG ? 'none' : 'block'
                             }}
                         />
+
+                        {/* MJPEG Stream Fallback */}
+                        {isMJPEG && (
+                            <img
+                                src={videoSrc}
+                                alt="MJPEG Stream"
+                                style={{
+                                    width: '100%',
+                                    maxHeight: '100%',
+                                    display: 'block',
+                                    objectFit: 'contain'
+                                }}
+                            />
+                        )}
 
                         {/* Video Annotation Overlay */}
                         {showAnnotationTool && (
@@ -740,12 +778,14 @@ function VideoWorkspace({
                         onStreamConnected={(url, type) => {
                             setVideoSourceType('stream');
                             setIsStreamConnected(true);
+                            setIsMJPEG(type === 'mjpeg');
                             onVideoChange(url);
                             onVideoNameChange(`Stream: ${url}`);
                         }}
                         onStreamDisconnected={() => {
                             setVideoSourceType('file');
                             setIsStreamConnected(false);
+                            setIsMJPEG(false);
                             onVideoChange(null);
                         }}
                     />
