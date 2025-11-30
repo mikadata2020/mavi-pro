@@ -37,10 +37,7 @@ function BroadcastControls({
             <div style={{
                 position: 'fixed',
                 top: '50%',
-                left: isVisible ? '20px' : '-50px', // Hide off-screen if not visible? No, isVisible controls chat.
-                // Actually isVisible controls chat visibility, not the bar itself.
-                // The bar is always visible if broadcasting.
-                left: '20px',
+                right: '120px',
                 transform: 'translateY(-50%)',
                 backgroundColor: '#1e1e1e',
                 border: '1px solid #444',
@@ -52,7 +49,7 @@ function BroadcastControls({
                 alignItems: 'center',
                 zIndex: 1001,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                transition: 'left 0.3s ease'
+                transition: 'right 0.3s ease'
             }}>
                 {/* Mute Button */}
                 <button
@@ -149,7 +146,7 @@ function BroadcastControls({
 
             {/* Chat Box */}
             {isVisible && (
-                <div style={{ position: 'fixed', bottom: '20px', left: '80px', zIndex: 1000 }}>
+                <div style={{ position: 'fixed', bottom: '20px', right: '180px', zIndex: 1000 }}>
                     <ChatBox
                         messages={chatMessages}
                         onSendMessage={onSendMessage}
