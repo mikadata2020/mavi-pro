@@ -292,25 +292,41 @@ function WebcamCapture({ onWebcamStarted, onWebcamStopped, videoRef, onStartReco
                                     }}>
                                         Camera:
                                     </label>
-                                    <select
-                                        value={selectedDevice}
-                                        onChange={(e) => handleDeviceChange(e.target.value)}
-                                        style={{
-                                            width: '100%',
-                                            padding: '8px',
-                                            backgroundColor: '#333',
-                                            color: 'white',
-                                            border: '1px solid #555',
-                                            borderRadius: '4px',
-                                            fontSize: '0.9rem'
-                                        }}
-                                    >
-                                        {devices.map(device => (
-                                            <option key={device.deviceId} value={device.deviceId}>
-                                                {device.label}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <div style={{ display: 'flex', gap: '5px' }}>
+                                        <select
+                                            value={selectedDevice}
+                                            onChange={(e) => handleDeviceChange(e.target.value)}
+                                            style={{
+                                                flex: 1,
+                                                padding: '8px',
+                                                backgroundColor: '#333',
+                                                color: 'white',
+                                                border: '1px solid #555',
+                                                borderRadius: '4px',
+                                                fontSize: '0.9rem'
+                                            }}
+                                        >
+                                            {devices.map(device => (
+                                                <option key={device.deviceId} value={device.deviceId}>
+                                                    {device.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                            onClick={loadDevices}
+                                            title="Refresh Camera List"
+                                            style={{
+                                                padding: '8px',
+                                                backgroundColor: '#444',
+                                                color: 'white',
+                                                border: '1px solid #555',
+                                                borderRadius: '4px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            🔄
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
