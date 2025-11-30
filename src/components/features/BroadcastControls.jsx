@@ -36,31 +36,41 @@ function BroadcastControls({
             {/* Floating Controls Bar */}
             <div style={{
                 position: 'fixed',
-                bottom: isVisible ? '420px' : '20px',
-                right: '20px',
+                top: '50%',
+                left: isVisible ? '20px' : '-50px', // Hide off-screen if not visible? No, isVisible controls chat.
+                // Actually isVisible controls chat visibility, not the bar itself.
+                // The bar is always visible if broadcasting.
+                left: '20px',
+                transform: 'translateY(-50%)',
                 backgroundColor: '#1e1e1e',
                 border: '1px solid #444',
                 borderRadius: '8px',
                 padding: '10px',
                 display: 'flex',
+                flexDirection: 'column', // Vertical layout
                 gap: '10px',
                 alignItems: 'center',
                 zIndex: 1001,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                transition: 'bottom 0.3s ease'
+                transition: 'left 0.3s ease'
             }}>
                 {/* Mute Button */}
                 <button
                     onClick={onToggleMute}
                     style={{
-                        padding: '8px 12px',
+                        padding: '12px',
                         backgroundColor: isMuted ? '#c50f1f' : '#107c10',
                         color: 'white',
                         border: 'none',
-                        borderRadius: '4px',
+                        borderRadius: '50%', // Round buttons
                         cursor: 'pointer',
                         fontWeight: 'bold',
-                        fontSize: '0.9rem'
+                        fontSize: '1.2rem',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                     }}
                     title={isMuted ? 'Unmute Microphone' : 'Mute Microphone'}
                 >
@@ -71,34 +81,40 @@ function BroadcastControls({
                 <button
                     onClick={() => setIsVisible(!isVisible)}
                     style={{
-                        padding: '8px 12px',
+                        padding: '12px',
                         backgroundColor: '#0078d4',
                         color: 'white',
                         border: 'none',
-                        borderRadius: '4px',
+                        borderRadius: '50%',
                         cursor: 'pointer',
                         fontWeight: 'bold',
-                        fontSize: '0.9rem',
+                        fontSize: '1.2rem',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         position: 'relative'
                     }}
                     title={isVisible ? 'Hide Chat' : 'Show Chat'}
                 >
-                    💬 {isVisible ? 'Hide' : 'Show'}
+                    💬
                     {hasUnreadMessages && (
                         <span style={{
                             position: 'absolute',
-                            top: '-5px',
-                            right: '-5px',
+                            top: '-2px',
+                            right: '-2px',
                             backgroundColor: '#c50f1f',
                             color: 'white',
                             borderRadius: '50%',
-                            width: '12px',
-                            height: '12px',
-                            fontSize: '0.6rem',
+                            width: '14px',
+                            height: '14px',
+                            fontSize: '0.7rem',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            animation: 'pulse 1s infinite'
+                            animation: 'pulse 1s infinite',
+                            border: '2px solid #1e1e1e'
                         }}>
                             !
                         </span>
@@ -110,29 +126,35 @@ function BroadcastControls({
                     <button
                         onClick={onStopBroadcast}
                         style={{
-                            padding: '8px 12px',
+                            padding: '12px',
                             backgroundColor: '#c50f1f',
                             color: 'white',
                             border: 'none',
-                            borderRadius: '4px',
+                            borderRadius: '50%',
                             cursor: 'pointer',
                             fontWeight: 'bold',
-                            fontSize: '0.9rem'
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
                         }}
                         title="Stop Broadcasting"
                     >
-                        ⏹ Stop
+                        ⏹
                     </button>
                 )}
             </div>
 
             {/* Chat Box */}
             {isVisible && (
-                <div style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 1000 }}>
+                <div style={{ position: 'fixed', bottom: '20px', left: '80px', zIndex: 1000 }}>
                     <ChatBox
                         messages={chatMessages}
                         onSendMessage={onSendMessage}
                         userName={userName}
+                        style={{ bottom: 'auto', right: 'auto' }} // Reset default styles
                     />
                 </div>
             )}

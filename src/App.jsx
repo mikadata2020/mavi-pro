@@ -52,8 +52,7 @@ function App() {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
-  const peerRef = useRef(null);
-  const viewerAudioRefs = useRef({});
+  const broadcastManagerRef = useRef(null);
 
   useEffect(() => {
     // Check for "watch" query param
@@ -225,6 +224,24 @@ function App() {
     }
   };
 
+  const handleToggleMute = () => {
+    if (broadcastManagerRef.current) {
+      broadcastManagerRef.current.toggleMute();
+    }
+  };
+
+  const handleSendMessage = (message) => {
+    if (broadcastManagerRef.current) {
+      broadcastManagerRef.current.sendChatMessage(message);
+    }
+  };
+
+  const handleStopBroadcast = () => {
+    if (broadcastManagerRef.current) {
+      broadcastManagerRef.current.stopBroadcast();
+    }
+  };
+
   if (watchRoomId) {
     return <BroadcastViewer roomId={watchRoomId} onClose={() => setWatchRoomId(null)} />;
   }
@@ -238,13 +255,25 @@ function App() {
       <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
         <CollaborationOverlay cursor={remoteCursor} lastDrawingAction={lastDrawingAction} />
 
+        {/* Global Broadcast Controls */}
+        <BroadcastControls
+          isBroadcasting={isBroadcasting}
+          isMuted={isMuted}
+          onToggleMute={handleToggleMute}
+          chatMessages={chatMessages}
+          onSendMessage={handleSendMessage}
+          onStopBroadcast={handleStopBroadcast}
+          userName="Host"
+        />
+
         <button
           className="sidebar-toggle"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           style={{
             position: 'absolute',
-            left: sidebarCollapsed ? '10px' : '70px',
-            top: '10px',
+            right: sidebarCollapsed ? '10px' : '70px',
+            top: '50%',
+            transform: 'translateY(-50%)',
             background: 'var(--bg-secondary)',
             border: '1px solid var(--border-color)',
             color: 'var(--text-primary)',
@@ -257,12 +286,12 @@ function App() {
             cursor: 'pointer',
             fontSize: '1.2rem',
             zIndex: 1001,
-            transition: 'left 0.3s ease',
-            boxShadow: '2px 0 8px rgba(0,0,0,0.3)'
+            transition: 'right 0.3s ease',
+            boxShadow: '-2px 0 8px rgba(0,0,0,0.3)'
           }}
           title={sidebarCollapsed ? 'Show Menu' : 'Hide Menu'}
         >
-          {sidebarCollapsed ? '▶' : '◀'}
+          {sidebarCollapsed ? '◀' : '▶'}
         </button>
 
         <div className="main-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -291,6 +320,37 @@ function App() {
               onImportProject={handleImportProject}
               onLogout={handleLogout}
             />
+          </div>
+
+          {/* Persistent BroadcastManager (Hidden when not in broadcast view) */}
+          <div style={{ display: currentView === 'broadcast' ? 'block' : 'none', flex: 1, padding: '10px', overflowY: 'auto' }}>
+            <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+              <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
+              <p style={{ color: 'var(--text-secondary)' }}>
+                Share your video stream with other devices in real-time.
+              </p>
+              <div style={{
+                padding: '15px',
+                backgroundColor: 'rgba(0, 120, 212, 0.1)',
+                border: '1px solid #0078d4',
+                borderRadius: '8px',
+                marginBottom: '15px',
+                color: 'var(--text-secondary)',
+                fontSize: '0.9rem'
+              }}>
+                💡 <strong>Tip:</strong> Make sure you have a video source active (file, webcam, or IP camera) before starting the broadcast.
+              </div>
+              <BroadcastManager
+                ref={broadcastManagerRef}
+                onRemoteInteraction={handleRemoteInteraction}
+                isBroadcasting={isBroadcasting}
+                setIsBroadcasting={setIsBroadcasting}
+                isMuted={isMuted}
+                setIsMuted={setIsMuted}
+                chatMessages={chatMessages}
+                setChatMessages={setChatMessages}
+              />
+            </div>
           </div>
 
           {/* Other views */}
@@ -361,27 +421,6 @@ function App() {
           ) : currentView === 'manual-creation' ? (
             <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
               <ManualCreation />
-            </div>
-          ) : currentView === 'broadcast' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-                <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
-                <p style={{ color: 'var(--text-secondary)' }}>
-                  Share your video stream with other devices in real-time.
-                </p>
-                <div style={{
-                  padding: '15px',
-                  backgroundColor: 'rgba(0, 120, 212, 0.1)',
-                  border: '1px solid #0078d4',
-                  borderRadius: '8px',
-                  marginBottom: '15px',
-                  color: 'var(--text-secondary)',
-                  fontSize: '0.9rem'
-                }}>
-                  💡 <strong>Tip:</strong> Make sure you have a video source active (file, webcam, or IP camera) before starting the broadcast.
-                </div>
-                <BroadcastManager onRemoteInteraction={handleRemoteInteraction} />
-              </div>
             </div>
           ) : null}
         </div>

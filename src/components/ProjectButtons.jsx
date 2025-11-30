@@ -51,13 +51,14 @@ function ProjectButtons({
                 style={{
                     ...buttonStyle,
                     backgroundColor: 'var(--accent-blue)',
-                    color: 'white'
+                    color: 'white',
+                    fontSize: '0.8rem' // Adjust font size for the emoji
                 }}
                 title="Proyek Baru"
                 onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
                 onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
             >
-                ➕
+                🆕
             </button>
 
             {/* Open Project */}

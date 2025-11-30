@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-function ChatBox({ messages, onSendMessage, userName = 'You' }) {
+function ChatBox({ messages, onSendMessage, userName = 'You', style = {} }) {
     const [inputMessage, setInputMessage] = useState('');
     const [isCollapsed, setIsCollapsed] = useState(false);
     const messagesEndRef = useRef(null);
@@ -45,7 +45,8 @@ function ChatBox({ messages, onSendMessage, userName = 'You' }) {
             display: 'flex',
             flexDirection: 'column',
             maxHeight: isCollapsed ? '50px' : '400px',
-            transition: 'max-height 0.3s ease'
+            transition: 'max-height 0.3s ease',
+            ...style
         }}>
             {/* Header */}
             <div

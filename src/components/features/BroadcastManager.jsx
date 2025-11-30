@@ -1,16 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import Peer from 'peerjs';
 import ChatBox from './ChatBox';
 
-function BroadcastManager({ onRemoteInteraction }) {
+const BroadcastManager = forwardRef(({
+    onRemoteInteraction,
+    isBroadcasting,
+    setIsBroadcasting,
+    isMuted,
+    setIsMuted,
+    chatMessages,
+    setChatMessages
+}, ref) => {
     const [peerId, setPeerId] = useState('');
-    const [isBroadcasting, setIsBroadcasting] = useState(false);
     const [connectedPeers, setConnectedPeers] = useState([]);
     const [error, setError] = useState(null);
-    const [isMuted, setIsMuted] = useState(false);
-    const [chatMessages, setChatMessages] = useState([]);
     const peerRef = useRef(null);
     const viewerAudioRefs = useRef({});
+
+    useImperativeHandle(ref, () => ({
+        toggleMute,
+        sendChatMessage,
+        stopBroadcast
+    }));
 
     useEffect(() => {
         return () => {
@@ -341,16 +352,9 @@ function BroadcastManager({ onRemoteInteraction }) {
                 </div>
             )}
 
-            {/* Chat Box */}
-            {isBroadcasting && (
-                <ChatBox
-                    messages={chatMessages}
-                    onSendMessage={sendChatMessage}
-                    userName="Host"
-                />
-            )}
+            {/* Chat Box removed - using global BroadcastControls */}
         </div>
     );
-}
+});
 
 export default BroadcastManager;
