@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getAllProjects } from '../utils/database';
 import jsPDF from 'jspdf';
+import { generateManualContent } from '../utils/aiGenerator';
 
 function ManualCreation() {
     const [projects, setProjects] = useState([]);
@@ -8,6 +9,11 @@ function ManualCreation() {
     const [selectedProject, setSelectedProject] = useState(null);
     const [videoSrc, setVideoSrc] = useState(null);
     const videoRef = useRef(null);
+
+    // AI State
+    const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+    const [showSettings, setShowSettings] = useState(false);
+    const [generatingItems, setGeneratingItems] = useState({}); // { index: boolean }
 
     // Manual Data State
     const [manualData, setManualData] = useState([]);
@@ -86,6 +92,46 @@ function ManualCreation() {
             newData[index][field] = value;
             return newData;
         });
+    };
+
+    const saveApiKey = (key) => {
+        setApiKey(key);
+        localStorage.setItem('gemini_api_key', key);
+        setShowSettings(false);
+    };
+
+    const handleAiGenerate = async (index) => {
+        const item = manualData[index];
+        const taskName = item.description;
+
+        if (!taskName) {
+            alert("Please ensure the description (task name) is filled before generating AI content.");
+            return;
+        }
+        if (!apiKey) {
+            setShowSettings(true);
+            return;
+        }
+
+        setGeneratingItems(prev => ({ ...prev, [index]: true }));
+
+        try {
+            const content = await generateManualContent(taskName, apiKey);
+            setManualData(prev => {
+                const newData = [...prev];
+                newData[index] = {
+                    ...newData[index],
+                    description: content.description || newData[index].description,
+                    keyPoints: content.keyPoints || '',
+                    safety: content.safety || ''
+                };
+                return newData;
+            });
+        } catch (error) {
+            alert("AI Generation failed: " + error.message);
+        } finally {
+            setGeneratingItems(prev => ({ ...prev, [index]: false }));
+        }
     };
 
     const seekTo = (time) => {
@@ -211,6 +257,20 @@ function ManualCreation() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>📘 Manual Creation</h2>
                 <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                        onClick={() => setShowSettings(!showSettings)}
+                        style={{
+                            padding: '8px',
+                            backgroundColor: '#333',
+                            color: 'white',
+                            border: '1px solid #555',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                        }}
+                        title="AI Settings"
+                    >
+                        ⚙️
+                    </button>
                     <select
                         value={selectedProjectId}
                         onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -237,6 +297,31 @@ function ManualCreation() {
                     </button>
                 </div>
             </div>
+
+            {/* Settings Modal */}
+            {showSettings && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1000,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                    <div style={{ backgroundColor: '#252526', padding: '20px', borderRadius: '8px', width: '400px', border: '1px solid #444' }}>
+                        <h3 style={{ marginTop: 0, color: 'white' }}>AI Settings</h3>
+                        <p style={{ color: '#ccc', fontSize: '0.9rem' }}>Enter your Google Gemini API Key to enable AI features.</p>
+                        <input
+                            type="password"
+                            placeholder="Enter API Key"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            style={{ width: '100%', padding: '8px', marginBottom: '15px', backgroundColor: '#333', border: '1px solid #555', color: 'white' }}
+                        />
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                            <button onClick={() => setShowSettings(false)} style={{ padding: '8px 16px', backgroundColor: '#444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={() => saveApiKey(apiKey)} style={{ padding: '8px 16px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Save</button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {selectedProject ? (
                 <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'hidden' }}>
@@ -310,8 +395,26 @@ function ManualCreation() {
 
                                 {/* Text Inputs */}
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ fontWeight: 'bold', color: '#fff' }}>Step {index + 1}</span>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <span style={{ fontWeight: 'bold', color: '#fff' }}>Step {index + 1}</span>
+                                            <button
+                                                onClick={() => handleAiGenerate(index)}
+                                                disabled={generatingItems[index]}
+                                                style={{
+                                                    padding: '2px 8px',
+                                                    backgroundColor: generatingItems[index] ? '#444' : 'transparent',
+                                                    color: '#4caf50',
+                                                    border: '1px solid #4caf50',
+                                                    borderRadius: '4px',
+                                                    cursor: generatingItems[index] ? 'wait' : 'pointer',
+                                                    fontSize: '0.75rem',
+                                                    display: 'flex', alignItems: 'center', gap: '4px'
+                                                }}
+                                            >
+                                                {generatingItems[index] ? '✨ Generating...' : '✨ AI Assist'}
+                                            </button>
+                                        </div>
                                         <span style={{ color: '#888' }}>{item.duration.toFixed(1)}s</span>
                                     </div>
 
