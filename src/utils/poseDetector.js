@@ -3,6 +3,7 @@
  * Uses TensorFlow.js MoveNet for real-time pose detection
  */
 
+import * as tf from '@tensorflow/tfjs';
 import * as poseDetection from '@tensorflow-models/pose-detection';
 import '@tensorflow/tfjs-backend-webgl';
 
@@ -19,11 +20,30 @@ class PoseDetector {
      */
     async initialize() {
         try {
+            console.log('Initializing PoseDetector...');
+
+            // Force WebGL backend
+            try {
+                await tf.setBackend('webgl');
+                await tf.ready();
+                console.log('TensorFlow.js backend set to:', tf.getBackend());
+            } catch (backendError) {
+                console.warn('Failed to set WebGL backend, trying CPU fallback:', backendError);
+                try {
+                    await tf.setBackend('cpu');
+                    await tf.ready();
+                    console.log('TensorFlow.js backend set to: cpu');
+                } catch (cpuError) {
+                    console.error('Failed to set any backend:', cpuError);
+                    throw new Error('No TensorFlow backend available');
+                }
+            }
+
             console.log('Loading MoveNet model...');
 
             const detectorConfig = {
                 modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
-                // modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER, // More accurate
+                enableSmoothing: true
             };
 
             this.detector = await poseDetection.createDetector(
@@ -36,6 +56,11 @@ class PoseDetector {
             return true;
         } catch (error) {
             console.error('Failed to load MoveNet model:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                backend: tf.getBackend()
+            });
             return false;
         }
     }
