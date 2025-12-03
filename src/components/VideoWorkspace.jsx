@@ -8,6 +8,9 @@ import IPCameraConnect from './features/IPCameraConnect';
 import VideoRecorder from './features/VideoRecorder';
 import WebcamCapture from './features/WebcamCapture';
 import ProjectButtons from './ProjectButtons';
+import CycleDetectionPanel from './features/CycleDetectionPanel';
+import VoiceCommandPanel from './features/VoiceCommandPanel';
+import ErgonomicAnalysis from './ErgonomicAnalysis';
 import { useVideoPlayer } from '../hooks/useVideoPlayer';
 import { captureScreenshot, exportAnalysisData } from '../utils/screenshotCapture';
 
@@ -47,6 +50,9 @@ function VideoWorkspace({
     const [isStreamConnected, setIsStreamConnected] = useState(false);
     const [isWebcamActive, setIsWebcamActive] = useState(false);
     const [isMJPEG, setIsMJPEG] = useState(false);
+    const [showCycleDetection, setShowCycleDetection] = useState(false);
+    const [showVoiceCommand, setShowVoiceCommand] = useState(false);
+    const [showErgonomicAnalysis, setShowErgonomicAnalysis] = useState(false);
 
     const containerRef = useRef(null);
     const videoContainerRef = useRef(null);
@@ -539,6 +545,123 @@ function VideoWorkspace({
                         📷
                     </button>
 
+                    {/* Auto-Cycle Detection Button */}
+                    {videoSrc && (
+                        <button
+                            onClick={() => setShowCycleDetection(true)}
+                            style={{
+                                position: 'absolute',
+                                top: '10px',
+                                left: onLogout ? '235px' : '190px',
+                                zIndex: 100,
+                                backgroundColor: '#0a5',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                fontSize: '1.1rem',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '35px',
+                                height: '35px',
+                                boxShadow: '0 2px 8px rgba(0, 170, 85, 0.5)',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.transform = 'scale(1.1)';
+                                e.target.style.boxShadow = '0 4px 12px rgba(0, 170, 85, 0.6)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.transform = 'scale(1)';
+                                e.target.style.boxShadow = '0 2px 8px rgba(0, 170, 85, 0.5)';
+                            }}
+                            title="Auto-Cycle Detection"
+                        >
+                            ⏱️
+                        </button>
+                    )}
+
+                    {/* Voice Command Button */}
+                    {videoSrc && (
+                        <button
+                            onClick={() => setShowVoiceCommand(true)}
+                            style={{
+                                position: 'absolute',
+                                top: '10px',
+                                left: onLogout ? '280px' : '235px',
+                                zIndex: 100,
+                                backgroundColor: '#8B00FF',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                fontSize: '1.1rem',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '35px',
+                                height: '35px',
+                                boxShadow: '0 2px 8px rgba(139, 0, 255, 0.5)',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.transform = 'scale(1.1)';
+                                e.target.style.boxShadow = '0 4px 12px rgba(139, 0, 255, 0.6)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.transform = 'scale(1)';
+                                e.target.style.boxShadow = '0 2px 8px rgba(139, 0, 255, 0.5)';
+                            }}
+                            title="Voice Command"
+                        >
+                            🎤
+                        </button>
+                    )}
+
+                    {/* Ergonomic Analysis Button */}
+                    {videoSrc && (
+                        <button
+                            onClick={() => setShowErgonomicAnalysis(true)}
+                            style={{
+                                position: 'absolute',
+                                top: '10px',
+                                left: onLogout ? '325px' : '280px',
+                                zIndex: 100,
+                                backgroundColor: '#0078d4',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                fontSize: '1.1rem',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '35px',
+                                height: '35px',
+                                boxShadow: '0 2px 8px rgba(0, 120, 212, 0.5)',
+                                transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.target.style.transform = 'scale(1.1)';
+                                e.target.style.boxShadow = '0 4px 12px rgba(0, 120, 212, 0.6)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.target.style.transform = 'scale(1)';
+                                e.target.style.boxShadow = '0 2px 8px rgba(0, 120, 212, 0.5)';
+                            }}
+                            title="Ergonomic Analysis (RULA/REBA)"
+                        >
+                            🧘‍♂️
+                        </button>
+                    )}
+
                     {/* Full Screen Video Button */}
                     {videoSrc && (
                         <button
@@ -877,6 +1000,84 @@ function VideoWorkspace({
                     />
                 )}
             </div>
+
+            {/* Cycle Detection Panel */}
+            {showCycleDetection && (
+                <CycleDetectionPanel
+                    videoRef={videoRef}
+                    onApplyCycles={(cycles) => {
+                        updateMeasurements([...videoState.measurements, ...cycles]);
+                    }}
+                    onClose={() => setShowCycleDetection(false)}
+                />
+            )}
+
+            {/* Voice Command Panel - Floating Window */}
+            {showVoiceCommand && (
+                <VoiceCommandPanel
+                    onCommand={(action) => {
+                        console.log('Voice command:', action);
+
+                        switch (action) {
+                            case 'play':
+                                if (videoRef.current && videoRef.current.paused) {
+                                    togglePlay();
+                                }
+                                break;
+                            case 'pause':
+                                if (videoRef.current && !videoRef.current.paused) {
+                                    togglePlay();
+                                }
+                                break;
+                            case 'startMeasurement':
+                                window.dispatchEvent(new CustomEvent('start-measurement'));
+                                break;
+                            case 'endMeasurement':
+                                window.dispatchEvent(new CustomEvent('end-measurement'));
+                                break;
+                            case 'nextFrame':
+                                nextFrame();
+                                break;
+                            case 'previousFrame':
+                                previousFrame();
+                                break;
+                            case 'speedUp':
+                                const currentSpeed = videoState.playbackSpeed;
+                                if (currentSpeed < 2) {
+                                    setPlaybackSpeed(Math.min(2, currentSpeed + 0.25));
+                                }
+                                break;
+                            case 'slowDown':
+                                const speed = videoState.playbackSpeed;
+                                if (speed > 0.25) {
+                                    setPlaybackSpeed(Math.max(0.25, speed - 0.25));
+                                }
+                                break;
+                            case 'zoomIn':
+                                if (videoState.zoom < 3) {
+                                    setZoom(Math.min(3, videoState.zoom + 0.25));
+                                }
+                                break;
+                            case 'zoomOut':
+                                if (videoState.zoom > 0.5) {
+                                    setZoom(Math.max(0.5, videoState.zoom - 0.25));
+                                }
+                                break;
+                            default:
+                                console.warn('Unknown voice command:', action);
+                        }
+                    }}
+                    onClose={() => setShowVoiceCommand(false)}
+                />
+            )}
+
+            {/* Ergonomic Analysis Panel */}
+            {showErgonomicAnalysis && (
+                <ErgonomicAnalysis
+                    videoRef={videoRef}
+                    onClose={() => setShowErgonomicAnalysis(false)}
+                />
+            )}
         </div>
     );
 }

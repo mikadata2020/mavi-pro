@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getAllProjects } from '../utils/database';
 import VideoPanel from './VideoPanel';
+import AIChatOverlay from './features/AIChatOverlay';
 
 function VideoComparison() {
     const [sessions, setSessions] = useState([]);
@@ -8,6 +9,7 @@ function VideoComparison() {
     const [rightSessionId, setRightSessionId] = useState(null);
     const [loading, setLoading] = useState(true);
     const [syncEnabled, setSyncEnabled] = useState(true);
+    const [showChat, setShowChat] = useState(false);
 
     // Independent states
     const [leftPlaying, setLeftPlaying] = useState(false);
@@ -121,6 +123,25 @@ function VideoComparison() {
                     />
                     🔗 Synchronized Controls
                 </label>
+
+                <button
+                    onClick={() => setShowChat(!showChat)}
+                    style={{
+                        padding: '6px 12px',
+                        backgroundColor: showChat ? 'var(--accent-blue)' : '#333',
+                        color: 'white',
+                        border: '1px solid #555',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        marginLeft: '10px'
+                    }}
+                    title="AI Assistant"
+                >
+                    🤖 AI
+                </button>
             </div>
 
             {/* Selection Area */}
@@ -172,7 +193,20 @@ function VideoComparison() {
                     />
                 </div>
             </div>
-        </div>
+
+
+            <AIChatOverlay
+                visible={showChat}
+                onClose={() => setShowChat(false)}
+                contextData={{
+                    leftSession: leftSession,
+                    rightSession: rightSession,
+                    syncEnabled: syncEnabled
+                }}
+                title="Mavi Engineer (Comparison)"
+                subtitle="Comparing Videos"
+            />
+        </div >
     );
 }
 

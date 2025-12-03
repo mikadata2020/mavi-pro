@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { THERBLIGS } from '../constants/therbligs.jsx';
 import { getAllProjects } from '../utils/database';
+import { WORKSTATION_OBJECTS, checkCollision, calculatePath, calculateTotalDistance, analyzeReachZones, calculateEfficiencyScore, snapToGrid } from '../utils/workstationSimulator';
 
 function TherbligAnalysis({ measurements = [] }) {
     const [icons, setIcons] = useState([]);
@@ -11,6 +12,15 @@ function TherbligAnalysis({ measurements = [] }) {
     const canvasRef = useRef(null);
     const containerRef = useRef(null);
     const [draggingId, setDraggingId] = useState(null);
+
+    // Digital Twin State
+    const [workstationObjects, setWorkstationObjects] = useState([]);
+    const [selectedObject, setSelectedObject] = useState(null);
+    const [isAnimating, setIsAnimating] = useState(false);
+    const [animationProgress, setAnimationProgress] = useState(0);
+    const [showGrid, setShowGrid] = useState(true);
+    const [snapEnabled, setSnapEnabled] = useState(true);
+    const [efficiencyMetrics, setEfficiencyMetrics] = useState(null);
 
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
@@ -48,12 +58,31 @@ function TherbligAnalysis({ measurements = [] }) {
     const handleCanvasMouseMove = (e) => {
         if (draggingId) {
             const rect = containerRef.current.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            let x = e.clientX - rect.left;
+            let y = e.clientY - rect.top;
 
-            setIcons(icons.map(icon =>
-                icon.id === draggingId ? { ...icon, x, y } : icon
-            ));
+            // Apply snap to grid if enabled
+            if (snapEnabled) {
+                x = snapToGrid(x);
+                y = snapToGrid(y);
+            }
+
+            // Check if dragging a Therblig icon
+            const iconIndex = icons.findIndex(icon => icon.id === draggingId);
+            if (iconIndex !== -1) {
+                setIcons(icons.map(icon =>
+                    icon.id === draggingId ? { ...icon, x, y } : icon
+                ));
+            }
+
+            // Check if dragging a workstation object
+            const objIndex = workstationObjects.findIndex(obj => obj.id === draggingId);
+            if (objIndex !== -1) {
+                const updatedObj = { ...workstationObjects[objIndex], x, y };
+                setWorkstationObjects(workstationObjects.map(obj =>
+                    obj.id === draggingId ? updatedObj : obj
+                ));
+            }
         }
     };
 
@@ -153,10 +182,29 @@ function TherbligAnalysis({ measurements = [] }) {
         }
     };
 
+    // Animation effect
+    useEffect(() => {
+        if (!isAnimating || icons.length === 0) {
+            setAnimationProgress(0);
+            return;
+        }
+
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 0.01;
+            if (progress >= 1) {
+                progress = 0; // Loop animation
+            }
+            setAnimationProgress(progress);
+        }, 50); // Update every 50ms
+
+        return () => clearInterval(interval);
+    }, [isAnimating, icons.length]);
+
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px', backgroundColor: 'var(--bg-primary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-secondary)', padding: '10px', borderRadius: '8px' }}>
-                <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>Therblig Analysis</h2>
+                <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>🏗️ Digital Twin Workstation</h2>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <input
                         type="file"
@@ -187,13 +235,45 @@ function TherbligAnalysis({ measurements = [] }) {
                     >
                         Clear All
                     </button>
+                    <button
+                        className="btn"
+                        onClick={() => setIsAnimating(!isAnimating)}
+                        disabled={icons.length === 0}
+                        style={{
+                            backgroundColor: isAnimating ? '#c50f1f' : '#0a5',
+                            color: 'white',
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            cursor: icons.length === 0 ? 'not-allowed' : 'pointer',
+                            opacity: icons.length === 0 ? 0.5 : 1
+                        }}
+                    >
+                        {isAnimating ? '⏸️ Stop' : '▶️ Animate'}
+                    </button>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)' }}>
+                        <input
+                            type="checkbox"
+                            checked={showGrid}
+                            onChange={(e) => setShowGrid(e.target.checked)}
+                        />
+                        Grid
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)' }}>
+                        <input
+                            type="checkbox"
+                            checked={snapEnabled}
+                            onChange={(e) => setSnapEnabled(e.target.checked)}
+                        />
+                        Snap
+                    </label>
                 </div>
             </div>
 
             <div style={{ display: 'flex', flex: 1, gap: '10px', overflow: 'hidden' }}>
-                {/* Sidebar for Therblig Selection */}
+                {/* Left Sidebar - Therbligs */}
                 <div style={{ width: '200px', backgroundColor: 'var(--bg-secondary)', padding: '10px', borderRadius: '8px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1rem', color: 'var(--text-secondary)' }}>Select Therblig</h3>
+                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1rem', color: 'var(--text-secondary)' }}>Therbligs</h3>
                     {Object.entries(THERBLIGS).map(([code, { name, color, icon }]) => (
                         <div
                             key={code}
@@ -227,6 +307,37 @@ function TherbligAnalysis({ measurements = [] }) {
                             </div>
                         </div>
                     ))}
+
+                    <div style={{ height: '1px', backgroundColor: '#444', margin: '10px 0' }}></div>
+
+                    <h3 style={{ margin: '0 0 10px 0', fontSize: '1rem', color: 'var(--text-secondary)' }}>Workstation Objects</h3>
+                    {Object.entries(WORKSTATION_OBJECTS).map(([key, obj]) => (
+                        <div
+                            key={key}
+                            onClick={() => {
+                                const newObj = {
+                                    id: Date.now(),
+                                    ...obj,
+                                    x: 100,
+                                    y: 100
+                                };
+                                setWorkstationObjects([...workstationObjects, newObj]);
+                            }}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '8px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                backgroundColor: 'transparent',
+                                border: '1px solid transparent'
+                            }}
+                        >
+                            <div style={{ fontSize: '1.2rem' }}>{obj.icon}</div>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{obj.label}</span>
+                        </div>
+                    ))}
                 </div>
 
                 {/* Canvas Area */}
@@ -246,7 +357,12 @@ function TherbligAnalysis({ measurements = [] }) {
                         backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
                         backgroundSize: 'contain',
                         backgroundRepeat: 'no-repeat',
-                        backgroundPosition: 'center'
+                        backgroundPosition: 'center',
+                        backgroundImage: showGrid ? `
+                            linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)
+                        ` : 'none',
+                        backgroundSize: showGrid ? '20px 20px' : 'auto'
                     }}
                 >
                     {!backgroundImage && icons.length === 0 && (
@@ -344,7 +460,114 @@ function TherbligAnalysis({ measurements = [] }) {
                             </div>
                         );
                     })}
+
+                    {/* Workstation Objects */}
+                    {workstationObjects.map((obj) => (
+                        <div
+                            key={obj.id}
+                            style={{
+                                position: 'absolute',
+                                left: obj.x,
+                                top: obj.y,
+                                width: obj.width,
+                                height: obj.height,
+                                backgroundColor: obj.color,
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '2rem',
+                                cursor: 'move',
+                                border: selectedObject === obj.id ? '2px solid #fff' : '1px solid rgba(255,255,255,0.3)',
+                                boxShadow: '0 2px 5px rgba(0,0,0,0.5)',
+                                zIndex: 2
+                            }}
+                            onMouseDown={(e) => {
+                                e.stopPropagation();
+                                setSelectedObject(obj.id);
+                                setDraggingId(obj.id);
+                            }}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (e.shiftKey) {
+                                    setWorkstationObjects(workstationObjects.filter(o => o.id !== obj.id));
+                                }
+                            }}
+                            title={`${obj.label} (Shift+Click to remove)`}
+                        >
+                            {obj.icon}
+                        </div>
+                    ))}
+
+                    {/* Animated Worker Position (during flow animation) */}
+                    {isAnimating && icons.length > 1 && (() => {
+                        const currentIndex = Math.floor(animationProgress * icons.length);
+                        const nextIndex = (currentIndex + 1) % icons.length;
+                        const localProgress = (animationProgress * icons.length) % 1;
+
+                        const current = icons[currentIndex];
+                        const next = icons[nextIndex];
+
+                        const x = current.x + (next.x - current.x) * localProgress;
+                        const y = current.y + (next.y - current.y) * localProgress;
+
+                        return (
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    left: x,
+                                    top: y,
+                                    transform: 'translate(-50%, -50%)',
+                                    width: '40px',
+                                    height: '40px',
+                                    backgroundColor: 'rgba(50, 205, 50, 0.8)',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '1.5rem',
+                                    zIndex: 10,
+                                    boxShadow: '0 0 20px rgba(50, 205, 50, 0.6)',
+                                    pointerEvents: 'none',
+                                    animation: 'pulse 1s infinite'
+                                }}
+                            >
+                                🚶
+                            </div>
+                        );
+                    })()}
                 </div>
+
+                {/* Right Sidebar - Metrics */}
+                {(icons.length > 0 || workstationObjects.length > 0) && (
+                    <div style={{ width: '250px', backgroundColor: 'var(--bg-secondary)', padding: '15px', borderRadius: '8px', overflowY: 'auto' }}>
+                        <h3 style={{ margin: '0 0 15px 0', fontSize: '1rem', color: 'var(--text-primary)' }}>📊 Metrics</h3>
+
+                        {icons.length > 0 && (
+                            <div style={{ marginBottom: '20px' }}>
+                                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Therblig Flow</h4>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>
+                                    <div>Total Steps: {icons.length}</div>
+                                    {animationProgress > 0 && (
+                                        <div>Progress: {Math.round(animationProgress * 100)}%</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {workstationObjects.length > 0 && (
+                            <div>
+                                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Layout</h4>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                    <div>Objects: {workstationObjects.length}</div>
+                                    {workstationObjects.find(o => o.type === 'worker') && (
+                                        <div style={{ color: '#0a5' }}>✓ Worker Positioned</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Session Selection Modal */}

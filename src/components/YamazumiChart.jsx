@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 import { getAllProjects, getProjectByName, updateProject } from '../utils/database';
 import LineBalancingBoard from './LineBalancingBoard';
+import AIChatOverlay from './features/AIChatOverlay';
 
 function YamazumiChart({ measurements: propMeasurements = [] }) {
     const [measurements, setMeasurements] = useState(propMeasurements);
@@ -10,7 +11,9 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
     const [taktTime, setTaktTime] = useState(30); // Default takt time in seconds
     const [showTaktLine, setShowTaktLine] = useState(true);
     const [isBalancingMode, setIsBalancingMode] = useState(false);
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+
+    const [showChat, setShowChat] = useState(false);
     const dropdownRef = useRef(null);
 
     // Close dropdown when clicking outside
@@ -454,51 +457,73 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                         />
                         Show Takt Line
                     </label>
+
+                    <button
+                        onClick={() => setShowChat(!showChat)}
+                        style={{
+                            padding: '6px 12px',
+                            backgroundColor: showChat ? 'var(--accent-blue)' : 'var(--bg-tertiary)',
+                            color: 'white',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                        }}
+                        title="AI Assistant"
+                    >
+                        🤖 AI
+                    </button>
                 </div>
             </div>
 
             {/* Line Balancing Board */}
-            {isBalancingMode && (
-                <div style={{ marginBottom: '20px' }}>
-                    <LineBalancingBoard
-                        measurements={balancingMeasurements}
-                        onUpdateMeasurements={handleLineBalancingUpdate}
-                        taktTime={taktTime}
-                    />
-                </div>
-            )}
+            {
+                isBalancingMode && (
+                    <div style={{ marginBottom: '20px' }}>
+                        <LineBalancingBoard
+                            measurements={balancingMeasurements}
+                            onUpdateMeasurements={handleLineBalancingUpdate}
+                            taktTime={taktTime}
+                        />
+                    </div>
+                )
+            }
 
             {/* Statistics Cards */}
-            {stats && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '20px' }}>
-                    <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Max Cycle Time</div>
-                        <div style={{ fontSize: '1.5rem', color: '#c50f1f', fontWeight: 'bold' }}>{stats.maxTime}s</div>
-                    </div>
-                    <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Min Cycle Time</div>
-                        <div style={{ fontSize: '1.5rem', color: '#005a9e', fontWeight: 'bold' }}>{stats.minTime}s</div>
-                    </div>
-                    <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Avg Cycle Time</div>
-                        <div style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 'bold' }}>{stats.avgTime}s</div>
-                    </div>
-                    <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Line Balance</div>
-                        <div style={{ fontSize: '1.5rem', color: '#00ff00', fontWeight: 'bold' }}>{stats.balance}%</div>
-                    </div>
-                    <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Bottlenecks</div>
-                        <div style={{ fontSize: '1.5rem', color: stats.bottlenecks > 0 ? '#c50f1f' : '#00ff00', fontWeight: 'bold' }}>
-                            {stats.bottlenecks}
+            {
+                stats && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '20px' }}>
+                        <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Max Cycle Time</div>
+                            <div style={{ fontSize: '1.5rem', color: '#c50f1f', fontWeight: 'bold' }}>{stats.maxTime}s</div>
+                        </div>
+                        <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Min Cycle Time</div>
+                            <div style={{ fontSize: '1.5rem', color: '#005a9e', fontWeight: 'bold' }}>{stats.minTime}s</div>
+                        </div>
+                        <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Avg Cycle Time</div>
+                            <div style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 'bold' }}>{stats.avgTime}s</div>
+                        </div>
+                        <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Line Balance</div>
+                            <div style={{ fontSize: '1.5rem', color: '#00ff00', fontWeight: 'bold' }}>{stats.balance}%</div>
+                        </div>
+                        <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Bottlenecks</div>
+                            <div style={{ fontSize: '1.5rem', color: stats.bottlenecks > 0 ? '#c50f1f' : '#00ff00', fontWeight: 'bold' }}>
+                                {stats.bottlenecks}
+                            </div>
+                        </div>
+                        <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Stations</div>
+                            <div style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 'bold' }}>{chartData.length}</div>
                         </div>
                     </div>
-                    <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-                        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Stations</div>
-                        <div style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 'bold' }}>{chartData.length}</div>
-                    </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Yamazumi Chart */}
             <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333', marginBottom: '20px' }}>
@@ -596,8 +621,21 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                     </table>
                 </div>
             </div>
-        </div>
+            <AIChatOverlay
+                visible={showChat}
+                onClose={() => setShowChat(false)}
+                contextData={{
+                    projects: selectedProjects,
+                    measurements: measurements,
+                    stats: stats,
+                    chartData: chartData
+                }}
+                title="Mavi Engineer (Yamazumi)"
+                subtitle="Analyzing Line Balance"
+            />
+        </div >
     );
 }
+
 
 export default YamazumiChart;
