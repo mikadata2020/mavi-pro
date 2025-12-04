@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getAllProjects } from '../utils/database';
 import jsPDF from 'jspdf';
 import { generateManualContent, improveManualContent, validateApiKey } from '../utils/aiGenerator';
+import HelpButton from './HelpButton';
+import { helpContent } from '../utils/helpContent.jsx';
 
 function ManualCreation() {
     const [projects, setProjects] = useState([]);
@@ -269,6 +271,10 @@ function ManualCreation() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>📘 Manual Creation</h2>
                 <div style={{ display: 'flex', gap: '10px' }}>
+                    <HelpButton
+                        title={helpContent['manual-creation'].title}
+                        content={helpContent['manual-creation'].content}
+                    />
                     <button
                         onClick={() => setShowSettings(!showSettings)}
                         style={{

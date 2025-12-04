@@ -9,6 +9,8 @@ import {
     detectOutliers
 } from '../utils/statistics';
 import { generatePDFReport, savePDFReport } from '../utils/pdfExport';
+import HelpButton from './HelpButton';
+import { helpContent } from '../utils/helpContent.jsx';
 
 function StatisticalAnalysis({ measurements = [] }) {
     const [confidenceLevel, setConfidenceLevel] = useState(0.95);
@@ -97,20 +99,26 @@ function StatisticalAnalysis({ measurements = [] }) {
         <div style={{ padding: '20px', backgroundColor: '#1e1e1e', minHeight: '100vh', color: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2 style={{ margin: 0, color: '#00a6ff' }}>Statistical Analysis</h2>
-                <button
-                    onClick={handleExportPDF}
-                    style={{
-                        padding: '10px 20px',
-                        backgroundColor: '#005a9e',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem'
-                    }}
-                >
-                    📄 Export PDF Report
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <HelpButton
+                        title={helpContent['statistical-analysis'].title}
+                        content={helpContent['statistical-analysis'].content}
+                    />
+                    <button
+                        onClick={handleExportPDF}
+                        style={{
+                            padding: '10px 20px',
+                            backgroundColor: '#005a9e',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem'
+                        }}
+                    >
+                        📄 Export PDF Report
+                    </button>
+                </div>
             </div>
 
             {/* Summary Statistics */}

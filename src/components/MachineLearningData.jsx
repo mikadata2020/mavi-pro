@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Play, Pause, RefreshCw, CheckCircle, AlertTriangle, Save, Upload, Camera, HelpCircle } from 'lucide-react';
+import HelpButton from './HelpButton';
+import { helpContent } from '../utils/helpContent.jsx';
 
 const MachineLearningData = ({ videoSrc }) => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -8,6 +10,7 @@ const MachineLearningData = ({ videoSrc }) => {
     const [goldenCycle, setGoldenCycle] = useState(null);
     const [dataPoints, setDataPoints] = useState([]);
     const [anomalies, setAnomalies] = useState(0);
+    const [showHelp, setShowHelp] = useState(false);
     const canvasRef = useRef(null);
     const requestRef = useRef();
     const fileInputRef = useRef(null);
@@ -139,6 +142,24 @@ const MachineLearningData = ({ videoSrc }) => {
                     <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>Real-time Operator Motion Analysis</p>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                        onClick={() => setShowHelp(true)}
+                        style={{
+                            padding: '10px',
+                            borderRadius: '8px',
+                            border: '1px solid #666',
+                            background: 'rgba(255,255,255,0.1)',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontSize: '0.9rem'
+                        }}
+                        title="Help - Panduan Machine Learning Data"
+                    >
+                        <HelpCircle size={18} /> Help
+                    </button>
                     <button
                         onClick={() => setIsAnalyzing(!isAnalyzing)}
                         style={{
@@ -428,6 +449,82 @@ const MachineLearningData = ({ videoSrc }) => {
                     )}
                 </div>
             </div>
+
+            {/* Help Modal */}
+            {showHelp && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 9999
+                }} onClick={() => setShowHelp(false)}>
+                    <div style={{
+                        backgroundColor: '#1a1a1a',
+                        border: '1px solid #333',
+                        borderRadius: '12px',
+                        padding: '30px',
+                        maxWidth: '600px',
+                        maxHeight: '80vh',
+                        overflowY: 'auto',
+                        color: '#fff'
+                    }} onClick={(e) => e.stopPropagation()}>
+                        <h2 style={{ margin: '0 0 20px 0', color: '#00d2ff' }}>🧠 Machine Learning Data - Help</h2>
+
+                        <h3 style={{ color: '#ffd700', marginTop: '20px' }}>📌 Fungsi</h3>
+                        <p style={{ lineHeight: '1.6', color: '#ccc' }}>
+                            Analisis konsistensi gerakan operator menggunakan konsep Machine Learning dengan Golden Cycle sebagai referensi standar.
+                        </p>
+
+                        <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🚀 Cara Pakai</h3>
+                        <ol style={{ lineHeight: '1.8', color: '#ccc' }}>
+                            <li><strong>Set Golden Cycle</strong> (Gerakan Referensi):
+                                <ul>
+                                    <li>📹 <strong>Capture Current</strong>: Ambil dari video saat ini</li>
+                                    <li>📤 <strong>Upload Video</strong>: Upload video gerakan standar</li>
+                                </ul>
+                            </li>
+                            <li>Klik <strong>Start Analysis</strong> untuk mulai deteksi</li>
+                            <li>Monitor real-time:
+                                <ul>
+                                    <li><strong>Consistency Score</strong>: % kecocokan dengan Golden Cycle</li>
+                                    <li><strong>Anomaly Graph</strong>: Tren deviasi dari waktu ke waktu</li>
+                                    <li><strong>Live Skeleton Feed</strong>: Visualisasi pose detection</li>
+                                </ul>
+                            </li>
+                        </ol>
+
+                        <h3 style={{ color: '#ffd700', marginTop: '20px' }}>💡 Tips</h3>
+                        <ul style={{ lineHeight: '1.8', color: '#ccc' }}>
+                            <li>Upload video gerakan terbaik sebagai Golden Cycle</li>
+                            <li>Threshold 80% = batas minimum konsistensi</li>
+                            <li>Anomaly tinggi = perlu retraining operator</li>
+                        </ul>
+
+                        <button
+                            onClick={() => setShowHelp(false)}
+                            style={{
+                                marginTop: '20px',
+                                padding: '10px 20px',
+                                background: '#00d2ff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                color: '#fff',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Tutup
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

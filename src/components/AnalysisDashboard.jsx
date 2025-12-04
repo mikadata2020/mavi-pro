@@ -2,6 +2,8 @@ import React from 'react';
 import { PieChart, Pie, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ProjectGanttChart from './ProjectGanttChart';
 import { calculateAllProductivityMetrics } from '../utils/productivityMetrics';
+import HelpButton from './HelpButton';
+import { helpContent } from '../utils/helpContent.jsx';
 
 function AnalysisDashboard({ measurements = [] }) {
     if (measurements.length === 0) {
@@ -63,9 +65,15 @@ function AnalysisDashboard({ measurements = [] }) {
 
     return (
         <div style={{ padding: '15px', backgroundColor: 'var(--bg-secondary)', height: '100%', overflowY: 'auto' }}>
-            <h2 style={{ margin: '0 0 15px 0', color: 'var(--text-primary)', fontSize: '1.2rem' }}>
-                📊 Analysis Summary
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem' }}>
+                    📊 Analysis Summary
+                </h2>
+                <HelpButton
+                    title={helpContent['analysis'].title}
+                    content={helpContent['analysis'].content}
+                />
+            </div>
 
             {/* Statistics Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginBottom: '20px' }}>

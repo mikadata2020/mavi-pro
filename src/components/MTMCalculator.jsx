@@ -12,6 +12,8 @@ import {
     tmuToSeconds,
     tmuToMinutes
 } from '../utils/mtmTables';
+import HelpButton from './HelpButton';
+import { helpContent } from '../utils/helpContent.jsx';
 
 function MTMCalculator() {
     const [motions, setMotions] = useState([]);
@@ -84,10 +86,18 @@ function MTMCalculator() {
 
     return (
         <div style={{ padding: '20px', backgroundColor: '#1e1e1e', minHeight: '100vh', color: '#fff' }}>
-            <h2 style={{ margin: '0 0 20px 0', color: '#00a6ff' }}>MTM-1 Calculator</h2>
-            <p style={{ color: '#aaa', marginBottom: '20px', fontSize: '0.9rem' }}>
-                Methods-Time Measurement (MTM) - Predetermined time system for work measurement
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <div>
+                    <h2 style={{ margin: '0 0 5px 0', color: '#00a6ff' }}>MTM-1 Calculator</h2>
+                    <p style={{ color: '#aaa', margin: 0, fontSize: '0.9rem' }}>
+                        Methods-Time Measurement (MTM) - Predetermined time system for work measurement
+                    </p>
+                </div>
+                <HelpButton
+                    title={helpContent['mtm-calculator'].title}
+                    content={helpContent['mtm-calculator'].content}
+                />
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 {/* Input Panel */}

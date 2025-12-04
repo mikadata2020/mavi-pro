@@ -1,177 +1,180 @@
-/**
- * Pose Detector
- * Uses TensorFlow.js MoveNet for real-time pose detection
- */
-
-import * as tf from '@tensorflow/tfjs';
 import * as poseDetection from '@tensorflow-models/pose-detection';
 import '@tensorflow/tfjs-backend-webgl';
 
-class PoseDetector {
-    constructor() {
-        this.detector = null;
-        this.isReady = false;
-        this.modelType = 'MoveNet.SinglePose.Lightning'; // Fast but less accurate
-        // Alternative: 'MoveNet.SinglePose.Thunder' for better accuracy
-    }
-
-    /**
-     * Initialize the pose detector
-     */
-    async initialize() {
-        try {
-            console.log('Initializing PoseDetector...');
-
-            // Force WebGL backend
-            try {
-                await tf.setBackend('webgl');
-                await tf.ready();
-                console.log('TensorFlow.js backend set to:', tf.getBackend());
-            } catch (backendError) {
-                console.warn('Failed to set WebGL backend, trying CPU fallback:', backendError);
-                try {
-                    await tf.setBackend('cpu');
-                    await tf.ready();
-                    console.log('TensorFlow.js backend set to: cpu');
-                } catch (cpuError) {
-                    console.error('Failed to set any backend:', cpuError);
-                    throw new Error('No TensorFlow backend available');
-                }
-            }
-
-            console.log('Loading MoveNet model...');
-
-            const detectorConfig = {
-                modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
-                enableSmoothing: true
-            };
-
-            this.detector = await poseDetection.createDetector(
-                poseDetection.SupportedModels.MoveNet,
-                detectorConfig
-            );
-
-            this.isReady = true;
-            console.log('✓ MoveNet model loaded successfully');
-            return true;
-        } catch (error) {
-            console.error('Failed to load MoveNet model:', error);
-            console.error('Error details:', {
-                message: error.message,
-                stack: error.stack,
-                backend: tf.getBackend()
-            });
-            return false;
-        }
-    }
-
-    /**
-     * Detect poses in a video frame
-     * @param {HTMLVideoElement|HTMLImageElement|HTMLCanvasElement} input - Input element
-     * @returns {Promise<Array>} Array of detected poses with keypoints
-     */
-    async detectPose(input) {
-        if (!this.isReady || !this.detector) {
-            console.warn('Pose detector not ready');
-            return null;
-        }
-
-        try {
-            const poses = await this.detector.estimatePoses(input);
-            return poses.length > 0 ? poses[0] : null;
-        } catch (error) {
-            console.error('Pose detection error:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Get keypoint by name
-     * @param {Object} pose - Detected pose
-     * @param {string} name - Keypoint name (e.g., 'left_shoulder', 'right_elbow')
-     * @returns {Object|null} Keypoint with x, y, score
-     */
-    getKeypoint(pose, name) {
-        if (!pose || !pose.keypoints) return null;
-
-        const keypoint = pose.keypoints.find(kp => kp.name === name);
-        return keypoint && keypoint.score > 0.3 ? keypoint : null;
-    }
-
-    /**
-     * Get all keypoints with minimum confidence
-     * @param {Object} pose - Detected pose
-     * @param {number} minConfidence - Minimum confidence score (0-1)
-     * @returns {Object} Object with keypoint names as keys
-     */
-    getKeypoints(pose, minConfidence = 0.3) {
-        if (!pose || !pose.keypoints) return {};
-
-        const keypoints = {};
-        pose.keypoints.forEach(kp => {
-            if (kp.score >= minConfidence) {
-                keypoints[kp.name] = {
-                    x: kp.x,
-                    y: kp.y,
-                    score: kp.score
-                };
-            }
-        });
-
-        return keypoints;
-    }
-
-    /**
-     * Check if pose has required keypoints for ergonomic analysis
-     * @param {Object} pose - Detected pose
-     * @returns {boolean} True if all required keypoints are present
-     */
-    hasRequiredKeypoints(pose) {
-        const required = [
-            'left_shoulder', 'right_shoulder',
-            'left_elbow', 'right_elbow',
-            'left_wrist', 'right_wrist',
-            'left_hip', 'right_hip',
-            'nose'
-        ];
-
-        const keypoints = this.getKeypoints(pose, 0.3);
-        return required.every(name => keypoints[name]);
-    }
-
-    /**
-     * Dispose of the detector
-     */
-    dispose() {
-        if (this.detector) {
-            this.detector.dispose();
-            this.detector = null;
-            this.isReady = false;
-        }
-    }
-}
+let detector = null;
 
 /**
- * MoveNet Keypoint Names (17 keypoints)
+ * Initialize pose detector with MoveNet
+ * @returns {Promise<poseDetection.PoseDetector>}
  */
-export const KEYPOINT_NAMES = {
-    NOSE: 'nose',
-    LEFT_EYE: 'left_eye',
-    RIGHT_EYE: 'right_eye',
-    LEFT_EAR: 'left_ear',
-    RIGHT_EAR: 'right_ear',
-    LEFT_SHOULDER: 'left_shoulder',
-    RIGHT_SHOULDER: 'right_shoulder',
-    LEFT_ELBOW: 'left_elbow',
-    RIGHT_ELBOW: 'right_elbow',
-    LEFT_WRIST: 'left_wrist',
-    RIGHT_WRIST: 'right_wrist',
-    LEFT_HIP: 'left_hip',
-    RIGHT_HIP: 'right_hip',
-    LEFT_KNEE: 'left_knee',
-    RIGHT_KNEE: 'right_knee',
-    LEFT_ANKLE: 'left_ankle',
-    RIGHT_ANKLE: 'right_ankle'
+export const initializePoseDetector = async () => {
+    if (detector) return detector;
+
+    try {
+        const model = poseDetection.SupportedModels.MoveNet;
+        const detectorConfig = {
+            modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+            enableSmoothing: true,
+            minPoseScore: 0.25
+        };
+
+        detector = await poseDetection.createDetector(model, detectorConfig);
+        console.log('✅ Pose detector initialized');
+        return detector;
+    } catch (error) {
+        console.error('❌ Failed to initialize pose detector:', error);
+        throw error;
+    }
 };
 
-export default PoseDetector;
+/**
+ * Detect poses from video element
+ * @param {HTMLVideoElement} video 
+ * @returns {Promise<Array>}
+ */
+export const detectPose = async (video) => {
+    if (!detector) {
+        await initializePoseDetector();
+    }
+
+    try {
+        const poses = await detector.estimatePoses(video);
+        return poses;
+    } catch (error) {
+        console.error('Error detecting pose:', error);
+        return [];
+    }
+};
+
+/**
+ * Draw pose skeleton on canvas
+ * @param {CanvasRenderingContext2D} ctx 
+ * @param {Array} poses 
+ */
+export const drawPoseSkeleton = (ctx, poses) => {
+    if (!poses || poses.length === 0) return;
+
+    const pose = poses[0];
+    if (!pose || !pose.keypoints) return;
+
+    const keypoints = pose.keypoints;
+
+    // Draw connections
+    const connections = [
+        // Face
+        [0, 1], [0, 2], [1, 3], [2, 4],
+        // Torso
+        [5, 6], [5, 11], [6, 12], [11, 12],
+        // Left arm
+        [5, 7], [7, 9],
+        // Right arm
+        [6, 8], [8, 10],
+        // Left leg
+        [11, 13], [13, 15],
+        // Right leg
+        [12, 14], [14, 16]
+    ];
+
+    // Draw lines
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 2;
+    connections.forEach(([i, j]) => {
+        const kp1 = keypoints[i];
+        const kp2 = keypoints[j];
+        if (kp1.score > 0.3 && kp2.score > 0.3) {
+            ctx.beginPath();
+            ctx.moveTo(kp1.x, kp1.y);
+            ctx.lineTo(kp2.x, kp2.y);
+            ctx.stroke();
+        }
+    });
+
+    // Draw keypoints
+    keypoints.forEach((kp) => {
+        if (kp.score > 0.3) {
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath();
+            ctx.arc(kp.x, kp.y, 4, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+    });
+};
+
+/**
+ * Get specific keypoint by name
+ * @param {Array} keypoints 
+ * @param {string} name 
+ * @returns {Object|null}
+ */
+export const getKeypoint = (keypoints, name) => {
+    const keypointMap = {
+        'nose': 0,
+        'left_eye': 1,
+        'right_eye': 2,
+        'left_ear': 3,
+        'right_ear': 4,
+        'left_shoulder': 5,
+        'right_shoulder': 6,
+        'left_elbow': 7,
+        'right_elbow': 8,
+        'left_wrist': 9,
+        'right_wrist': 10,
+        'left_hip': 11,
+        'right_hip': 12,
+        'left_knee': 13,
+        'right_knee': 14,
+        'left_ankle': 15,
+        'right_ankle': 16
+    };
+
+    const index = keypointMap[name];
+    if (index !== undefined && keypoints[index]) {
+        return keypoints[index];
+    }
+    return null;
+};
+
+/**
+ * Calculate distance between two keypoints
+ * @param {Object} kp1 
+ * @param {Object} kp2 
+ * @returns {number}
+ */
+export const calculateDistance = (kp1, kp2) => {
+    if (!kp1 || !kp2) return 0;
+    const dx = kp2.x - kp1.x;
+    const dy = kp2.y - kp1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+};
+
+/**
+ * Calculate angle between three keypoints
+ * @param {Object} kp1 
+ * @param {Object} kp2 (vertex)
+ * @param {Object} kp3 
+ * @returns {number} angle in degrees
+ */
+export const calculateAngle = (kp1, kp2, kp3) => {
+    if (!kp1 || !kp2 || !kp3) return 0;
+
+    const radians = Math.atan2(kp3.y - kp2.y, kp3.x - kp2.x) -
+        Math.atan2(kp1.y - kp2.y, kp1.x - kp2.x);
+    let angle = Math.abs(radians * 180.0 / Math.PI);
+
+    if (angle > 180.0) {
+        angle = 360 - angle;
+    }
+
+    return angle;
+};
+
+/**
+ * Cleanup detector
+ */
+export const disposeDetector = () => {
+    if (detector) {
+        detector.dispose();
+        detector = null;
+        console.log('✅ Pose detector disposed');
+    }
+};
