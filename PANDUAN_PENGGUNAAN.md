@@ -59,6 +59,7 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
 | 🎥 | Compare | Video side-by-side comparison |
 | 📑 | Multi-Axial | Analisis multi-project (Man-Machine/Two-Hand) |
 | 📘 | Manual | Pembuatan manual kerja (Work Instruction) |
+| 🧠 | ML Data | Machine Learning Consistency Check |
 | ❓ | Help | Panduan penggunaan |
 
 ---
@@ -351,6 +352,36 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
 
 ---
 
+### 19. 🧠 Machine Learning Data (BARU!)
+
+**🎯 Tujuan:** Menganalisis konsistensi gerakan operator menggunakan konsep Machine Learning dengan "Golden Cycle" sebagai referensi standar.
+
+**Fitur:**
+- **Golden Cycle Management**: Set gerakan referensi dari video saat ini atau upload video terpisah.
+- **Real-time Consistency Score**: Gauge yang menampilkan % kecocokan dengan Golden Cycle.
+- **Anomaly Detection**: Deteksi otomatis penyimpangan dari standar.
+- **Trend Visualization**: Grafik real-time yang menunjukkan konsistensi dari waktu ke waktu.
+- **Live Skeleton Feed**: Canvas overlay untuk visualisasi pose detection.
+
+**Cara Pakai:**
+1. Klik icon 🧠 di header.
+2. **Set Golden Cycle** (pilih salah satu):
+   - **📹 Capture Current**: Ambil dari video yang sedang diputar
+   - **📤 Upload Video**: Upload video gerakan standar terpisah
+3. Klik **Start Analysis** untuk mulai deteksi konsistensi.
+4. Monitor metrics:
+   - **Consistency Score**: % kecocokan (target >80%)
+   - **Anomalies**: Jumlah penyimpangan terdeteksi
+   - **Trend Graph**: Grafik konsistensi real-time
+
+**Use Case:**
+- Validasi konsistensi gerakan operator dengan SOP
+- Training operator baru menggunakan Golden Cycle
+- Quality control untuk standardized work
+- Identifikasi operator yang perlu retraining
+
+---
+
 ## 📝 Panduan Step-by-Step
 
 ### Workflow 1: Analisis Video Baru
@@ -382,6 +413,7 @@ Aplikasi terdiri dari **Header Navigation** dengan icon-icon fitur:
 ## 📈 Update Log
 
 ### Version 2.2 (Current)
+- ✅ **New**: Machine Learning Data (Consistency Check with Golden Cycle)
 - ✅ **New**: Multi-Axial Analysis (Man-Machine / Two-Hand Chart)
 - ✅ **New**: Standard Work Combination Sheet (SWCS) PDF Export
 - ✅ **New**: Manual Creation (Work Instruction Generator) with Video Capture

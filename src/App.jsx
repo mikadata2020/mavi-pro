@@ -25,6 +25,7 @@ import ManualCreation from './components/ManualCreation';
 import BroadcastManager from './components/features/BroadcastManager';
 import BroadcastViewer from './components/features/BroadcastViewer';
 import StreamHandler from './utils/streamHandler';
+import MachineLearningData from './components/MachineLearningData';
 import { saveProject, getProjectByName, updateProject } from './utils/database';
 import { importProject } from './utils/projectExport';
 import { LanguageProvider } from './i18n/LanguageContext';
@@ -422,8 +423,10 @@ function App() {
             <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
               <ManualCreation />
             </div>
-
-
+          ) : currentView === 'ml-data' ? (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <MachineLearningData videoSrc={videoSrc} />
+            </div>
           ) : null}
         </div>
 

@@ -55,6 +55,7 @@ function Help() {
 🎥 **Compare** - Video side-by-side comparison
 📑 **Multi-Axial** - Analisis multi-project (Man-Machine/Two-Hand)
 📘 **Manual** - Pembuatan manual kerja (Work Instruction)
+🧠 **ML Data** - Machine Learning Consistency Check
 ❓ **Help** - Panduan penggunaan aplikasi
 
 **Element Editor Tools:**
@@ -503,6 +504,43 @@ Membuat dokumen Instruksi Kerja (Work Instruction/SOP) visual dengan mengambil g
 • Auto-capture frame video resolusi tinggi
 • Format tabel standar industri
 • Export PDF siap cetak
+            `
+        },
+        mldata: {
+            title: '🧠 Machine Learning Data',
+            content: `
+**Fungsi:**
+Analisis konsistensi gerakan operator menggunakan konsep Machine Learning dengan Golden Cycle sebagai referensi standar.
+
+**Cara Pakai:**
+
+1. Klik icon 🧠 di header
+2. **Set Golden Cycle** (Gerakan Referensi):
+   • **Capture Current**: Ambil dari video saat ini
+   • **Upload Video**: Upload video gerakan standar
+3. Klik **Start Analysis** untuk mulai deteksi
+4. Monitor real-time:
+   • Consistency Score (% kecocokan)
+   • Anomaly Graph (tren deviasi)
+   • Live Skeleton Feed (visualisasi)
+
+**Fitur:**
+• **Golden Cycle**: Gerakan referensi "sempurna" sebagai standar
+• **Consistency Gauge**: Indikator % kecocokan real-time
+• **Anomaly Detection**: Deteksi penyimpangan otomatis
+• **Trend Graph**: Grafik konsistensi dari waktu ke waktu
+• **Live Visualization**: Canvas overlay untuk pose detection
+
+**Use Case:**
+• Validasi konsistensi gerakan operator
+• Training operator baru dengan standar
+• Quality control gerakan kerja
+• Identifikasi variasi yang tidak sesuai SOP
+
+**Tips:**
+• Upload video gerakan terbaik sebagai Golden Cycle
+• Threshold 80% = batas minimum konsistensi
+• Anomaly tinggi = perlu retraining operator
             `
         }
     };

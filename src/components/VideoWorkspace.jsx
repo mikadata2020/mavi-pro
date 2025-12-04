@@ -245,6 +245,207 @@ function VideoWorkspace({
                 backgroundColor: '#000',
                 position: 'relative'
             }}>
+                {/* Main Toolbar Container */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px',
+                    backgroundColor: '#1e1e1e',
+                    borderBottom: '1px solid #333',
+                    marginBottom: '10px',
+                    flexWrap: 'wrap'
+                }}>
+                    {/* Logout Button */}
+                    {onLogout && (
+                        <button
+                            onClick={onLogout}
+                            style={{
+                                backgroundColor: '#c50f1f',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '8px',
+                                cursor: 'pointer',
+                                fontSize: '1.2rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '40px',
+                                height: '40px'
+                            }}
+                            title="Logout dari aplikasi"
+                        >
+                            🔒
+                        </button>
+                    )}
+
+                    {/* Divider */}
+                    <div style={{ width: '1px', height: '24px', backgroundColor: '#444' }} />
+
+                    {/* Annotation Toggle */}
+                    {videoSrc && (
+                        <button
+                            onClick={() => setShowAnnotationTool(!showAnnotationTool)}
+                            style={{
+                                backgroundColor: showAnnotationTool ? '#005a9e' : '#333',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '8px',
+                                cursor: 'pointer',
+                                fontSize: '1.2rem',
+                                width: '40px',
+                                height: '40px'
+                            }}
+                            title={showAnnotationTool ? "Hide Drawing Tools" : "Show Drawing Tools"}
+                        >
+                            🎨
+                        </button>
+                    )}
+
+                    {/* Camera Panel Toggle */}
+                    <button
+                        onClick={() => setShowCameraPanel(!showCameraPanel)}
+                        style={{
+                            backgroundColor: showCameraPanel ? '#c50f1f' : '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '8px',
+                            cursor: 'pointer',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px'
+                        }}
+                        title={showCameraPanel ? "Hide Camera Panel" : "Show Camera Panel"}
+                    >
+                        📹
+                    </button>
+
+                    {/* Recording Toggle */}
+                    <button
+                        onClick={() => setShowRecorderPanel(!showRecorderPanel)}
+                        style={{
+                            backgroundColor: showRecorderPanel ? '#c50f1f' : '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '8px',
+                            cursor: 'pointer',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px'
+                        }}
+                        title={showRecorderPanel ? "Hide Recorder Panel" : "Show Recorder Panel"}
+                    >
+                        🎥
+                    </button>
+
+                    {/* Webcam Toggle */}
+                    <button
+                        onClick={() => setShowWebcamPanel(!showWebcamPanel)}
+                        style={{
+                            backgroundColor: showWebcamPanel ? '#0078d4' : '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '8px',
+                            cursor: 'pointer',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px'
+                        }}
+                        title={showWebcamPanel ? "Hide Webcam Panel" : "Show Webcam Panel"}
+                    >
+                        📷
+                    </button>
+
+                    {/* Video Specific Tools */}
+                    {videoSrc && (
+                        <>
+                            {/* Divider */}
+                            <div style={{ width: '1px', height: '24px', backgroundColor: '#444' }} />
+
+                            {/* Auto-Cycle Detection */}
+                            <button
+                                onClick={() => setShowCycleDetection(true)}
+                                style={{
+                                    backgroundColor: '#0a5',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '1.2rem',
+                                    width: '40px',
+                                    height: '40px'
+                                }}
+                                title="Auto-Cycle Detection"
+                            >
+                                ⏱️
+                            </button>
+
+                            {/* Voice Command */}
+                            <button
+                                onClick={() => setShowVoiceCommand(true)}
+                                style={{
+                                    backgroundColor: '#8B00FF',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '1.2rem',
+                                    width: '40px',
+                                    height: '40px'
+                                }}
+                                title="Voice Command"
+                            >
+                                🎤
+                            </button>
+
+                            {/* Ergonomic Analysis */}
+                            <button
+                                onClick={() => setShowErgonomicAnalysis(true)}
+                                style={{
+                                    backgroundColor: '#0078d4',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '1.2rem',
+                                    width: '40px',
+                                    height: '40px'
+                                }}
+                                title="Ergonomic Analysis (RULA/REBA)"
+                            >
+                                🧘‍♂️
+                            </button>
+
+                            {/* Full Screen */}
+                            <button
+                                onClick={() => setFullScreenMode(fullScreenMode === 'video' ? 'none' : 'video')}
+                                style={{
+                                    backgroundColor: fullScreenMode === 'video' ? '#005a9e' : '#333',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '1.2rem',
+                                    marginLeft: 'auto',
+                                    width: '40px',
+                                    height: '40px'
+                                }}
+                                title={fullScreenMode === 'video' ? "Exit Full Screen" : "Full Screen Video"}
+                            >
+                                ⛶
+                            </button>
+                        </>
+                    )}
+                </div>
                 <div ref={videoContainerRef} style={{
                     flex: 1,
                     display: 'flex',
@@ -354,352 +555,7 @@ function VideoWorkspace({
                         </div>
                     )}
 
-                    {/* Logout Button - Top Left */}
-                    {onLogout && (
-                        <button
-                            onClick={onLogout}
-                            style={{
-                                position: 'absolute',
-                                top: '10px',
-                                left: '10px',
-                                zIndex: 100,
-                                backgroundColor: '#c50f1f',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px',
-                                cursor: 'pointer',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '35px',
-                                height: '35px',
-                                boxShadow: '0 2px 8px rgba(197, 15, 31, 0.3)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.backgroundColor = '#a00f1a';
-                                e.target.style.transform = 'scale(1.1)';
-                                e.target.style.boxShadow = '0 4px 12px rgba(197, 15, 31, 0.4)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.backgroundColor = '#c50f1f';
-                                e.target.style.transform = 'scale(1)';
-                                e.target.style.boxShadow = '0 2px 8px rgba(197, 15, 31, 0.3)';
-                            }}
-                            title="Logout dari aplikasi"
-                        >
-                            🔒
-                        </button>
-                    )}
 
-                    {/* Annotation Toggle Button */}
-                    {videoSrc && (
-                        <button
-                            onClick={() => setShowAnnotationTool(!showAnnotationTool)}
-                            style={{
-                                position: 'absolute',
-                                top: '10px',
-                                left: onLogout ? '55px' : '10px',
-                                zIndex: 100,
-                                backgroundColor: showAnnotationTool ? '#005a9e' : '#333',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px',
-                                cursor: 'pointer',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '35px',
-                                height: '35px',
-                                boxShadow: showAnnotationTool ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.transform = 'scale(1.1)';
-                                e.target.style.boxShadow = showAnnotationTool ? '0 4px 12px rgba(0, 90, 158, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.transform = 'scale(1)';
-                                e.target.style.boxShadow = showAnnotationTool ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
-                            }}
-                            title={showAnnotationTool ? "Hide Drawing Tools" : "Show Drawing Tools"}
-                        >
-                            🎨
-                        </button>
-                    )}
-
-                    {/* IP Camera Toggle Button */}
-                    <button
-                        onClick={() => setShowCameraPanel(!showCameraPanel)}
-                        style={{
-                            position: 'absolute',
-                            top: '10px',
-                            left: videoSrc ? (onLogout ? '100px' : '55px') : (onLogout ? '55px' : '10px'),
-                            zIndex: 100,
-                            backgroundColor: showCameraPanel ? '#c50f1f' : '#333',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '6px',
-                            cursor: 'pointer',
-                            fontSize: '1.1rem',
-                            fontWeight: 'bold',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '35px',
-                            height: '35px',
-                            boxShadow: showCameraPanel ? '0 2px 8px rgba(197, 15, 31, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
-                            transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.target.style.transform = 'scale(1.1)';
-                            e.target.style.boxShadow = showCameraPanel ? '0 4px 12px rgba(197, 15, 31, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.target.style.transform = 'scale(1)';
-                            e.target.style.boxShadow = showCameraPanel ? '0 2px 8px rgba(197, 15, 31, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
-                        }}
-                        title={showCameraPanel ? "Hide Camera Panel" : "Show Camera Panel"}
-                    >
-                        📹
-                    </button>
-
-                    {/* Recording Toggle Button */}
-                    <button
-                        onClick={() => setShowRecorderPanel(!showRecorderPanel)}
-                        style={{
-                            position: 'absolute',
-                            top: '10px',
-                            left: videoSrc ? (onLogout ? '145px' : '100px') : (onLogout ? '100px' : '55px'),
-                            zIndex: 100,
-                            backgroundColor: showRecorderPanel ? '#c50f1f' : '#333',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '6px',
-                            cursor: 'pointer',
-                            fontSize: '1.1rem',
-                            fontWeight: 'bold',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '35px',
-                            height: '35px',
-                            boxShadow: showRecorderPanel ? '0 2px 8px rgba(197, 15, 31, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
-                            transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.target.style.transform = 'scale(1.1)';
-                            e.target.style.boxShadow = showRecorderPanel ? '0 4px 12px rgba(197, 15, 31, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.target.style.transform = 'scale(1)';
-                            e.target.style.boxShadow = showRecorderPanel ? '0 2px 8px rgba(197, 15, 31, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
-                        }}
-                        title={showRecorderPanel ? "Hide Recorder Panel" : "Show Recorder Panel"}
-                    >
-                        🎥
-                    </button>
-
-                    {/* Webcam Toggle Button */}
-                    <button
-                        onClick={() => setShowWebcamPanel(!showWebcamPanel)}
-                        style={{
-                            position: 'absolute',
-                            top: '10px',
-                            left: videoSrc ? (onLogout ? '190px' : '145px') : (onLogout ? '145px' : '100px'),
-                            zIndex: 100,
-                            backgroundColor: showWebcamPanel ? '#0078d4' : '#333',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '6px',
-                            cursor: 'pointer',
-                            fontSize: '1.1rem',
-                            fontWeight: 'bold',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '35px',
-                            height: '35px',
-                            boxShadow: showWebcamPanel ? '0 2px 8px rgba(0, 120, 212, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
-                            transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.target.style.transform = 'scale(1.1)';
-                            e.target.style.boxShadow = showWebcamPanel ? '0 4px 12px rgba(0, 120, 212, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.target.style.transform = 'scale(1)';
-                            e.target.style.boxShadow = showWebcamPanel ? '0 2px 8px rgba(0, 120, 212, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
-                        }}
-                        title={showWebcamPanel ? "Hide Webcam Panel" : "Show Webcam Panel"}
-                    >
-                        📷
-                    </button>
-
-                    {/* Auto-Cycle Detection Button */}
-                    {videoSrc && (
-                        <button
-                            onClick={() => setShowCycleDetection(true)}
-                            style={{
-                                position: 'absolute',
-                                top: '10px',
-                                left: onLogout ? '235px' : '190px',
-                                zIndex: 100,
-                                backgroundColor: '#0a5',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px',
-                                cursor: 'pointer',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '35px',
-                                height: '35px',
-                                boxShadow: '0 2px 8px rgba(0, 170, 85, 0.5)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.transform = 'scale(1.1)';
-                                e.target.style.boxShadow = '0 4px 12px rgba(0, 170, 85, 0.6)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.transform = 'scale(1)';
-                                e.target.style.boxShadow = '0 2px 8px rgba(0, 170, 85, 0.5)';
-                            }}
-                            title="Auto-Cycle Detection"
-                        >
-                            ⏱️
-                        </button>
-                    )}
-
-                    {/* Voice Command Button */}
-                    {videoSrc && (
-                        <button
-                            onClick={() => setShowVoiceCommand(true)}
-                            style={{
-                                position: 'absolute',
-                                top: '10px',
-                                left: onLogout ? '280px' : '235px',
-                                zIndex: 100,
-                                backgroundColor: '#8B00FF',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px',
-                                cursor: 'pointer',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '35px',
-                                height: '35px',
-                                boxShadow: '0 2px 8px rgba(139, 0, 255, 0.5)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.transform = 'scale(1.1)';
-                                e.target.style.boxShadow = '0 4px 12px rgba(139, 0, 255, 0.6)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.transform = 'scale(1)';
-                                e.target.style.boxShadow = '0 2px 8px rgba(139, 0, 255, 0.5)';
-                            }}
-                            title="Voice Command"
-                        >
-                            🎤
-                        </button>
-                    )}
-
-                    {/* Ergonomic Analysis Button */}
-                    {videoSrc && (
-                        <button
-                            onClick={() => setShowErgonomicAnalysis(true)}
-                            style={{
-                                position: 'absolute',
-                                top: '10px',
-                                left: onLogout ? '325px' : '280px',
-                                zIndex: 100,
-                                backgroundColor: '#0078d4',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px',
-                                cursor: 'pointer',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '35px',
-                                height: '35px',
-                                boxShadow: '0 2px 8px rgba(0, 120, 212, 0.5)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.transform = 'scale(1.1)';
-                                e.target.style.boxShadow = '0 4px 12px rgba(0, 120, 212, 0.6)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.transform = 'scale(1)';
-                                e.target.style.boxShadow = '0 2px 8px rgba(0, 120, 212, 0.5)';
-                            }}
-                            title="Ergonomic Analysis (RULA/REBA)"
-                        >
-                            🧘‍♂️
-                        </button>
-                    )}
-
-                    {/* Full Screen Video Button */}
-                    {videoSrc && (
-                        <button
-                            onClick={() => setFullScreenMode(fullScreenMode === 'video' ? 'none' : 'video')}
-                            style={{
-                                position: 'absolute',
-                                top: '10px',
-                                right: '10px',
-                                zIndex: 100,
-                                backgroundColor: fullScreenMode === 'video' ? '#005a9e' : '#333',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px',
-                                cursor: 'pointer',
-                                fontSize: '1.1rem',
-                                fontWeight: 'bold',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '35px',
-                                height: '35px',
-                                boxShadow: fullScreenMode === 'video' ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)',
-                                transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                                e.target.style.transform = 'scale(1.1)';
-                                e.target.style.boxShadow = fullScreenMode === 'video' ? '0 4px 12px rgba(0, 90, 158, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.4)';
-                            }}
-                            onMouseLeave={(e) => {
-                                e.target.style.transform = 'scale(1)';
-                                e.target.style.boxShadow = fullScreenMode === 'video' ? '0 2px 8px rgba(0, 90, 158, 0.5)' : '0 2px 8px rgba(0, 0, 0, 0.3)';
-                            }}
-                            title={fullScreenMode === 'video' ? "Exit Full Screen" : "Full Screen Video"}
-                        >
-                            {fullScreenMode === 'video' ? '⛶' : '⛶'}
-                        </button>
-                    )}
 
                     {/* Logo Overlay */}
                     {videoSrc && logoUrl && (

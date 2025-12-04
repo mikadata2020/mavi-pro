@@ -300,6 +300,23 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                     >
                         📘
                     </button>
+                    <button
+                        className="btn"
+                        style={{
+                            backgroundColor: currentView === 'ml-data' ? 'var(--accent-blue)' : '',
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}
+                        onClick={() => setCurrentView('ml-data')}
+                        title="Machine Learning Data"
+                    >
+                        🧠
+                    </button>
 
                     <button
                         className="btn"
