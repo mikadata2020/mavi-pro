@@ -463,6 +463,10 @@ function App() {
             <div style={{ flex: 1, overflow: 'hidden' }}>
               <KnowledgeBase onLoadVideo={handleLoadVideoFromKB} />
             </div>
+          ) : currentView === 'action-recognition' ? (
+            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+              <ActionRecognition videoSrc={videoSrc} onActionsDetected={setMeasurements} />
+            </div>
           ) : null}
         </div>
 
