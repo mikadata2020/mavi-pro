@@ -391,6 +391,23 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                     <button
                         className="btn"
                         style={{
+                            backgroundColor: currentView === 'knowledge-base' ? 'var(--accent-blue)' : '',
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}
+                        onClick={() => setCurrentView('knowledge-base')}
+                        title="Knowledge Base & Best Practices"
+                    >
+                        📚
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
                             backgroundColor: currentView === 'broadcast' ? 'var(--accent-blue)' : '',
                             padding: '8px',
                             fontSize: '1.2rem',

@@ -35,6 +35,7 @@ import CollaborationOverlay from './components/features/CollaborationOverlay';
 import BroadcastControls from './components/features/BroadcastControls';
 import MultiCameraFusion from './components/MultiCameraFusion';
 import VRTrainingMode from './components/VRTrainingMode';
+import KnowledgeBase from './components/KnowledgeBase';
 import './index.css';
 
 function App() {
@@ -450,6 +451,10 @@ function App() {
                 videoName={videoName}
                 currentProject={currentProject}
               />
+            </div>
+          ) : currentView === 'knowledge-base' ? (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <KnowledgeBase />
             </div>
           ) : null}
         </div>
