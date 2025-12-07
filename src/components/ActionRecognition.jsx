@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { initializePoseDetector, detectPose, drawPoseSkeleton, disposeDetector } from '../utils/poseDetector';
 import { classifyAction, smoothActionSequence, actionsToMeasurements, THERBLIG_ACTIONS } from '../utils/actionClassifier';
+import { loadModelFromURL, loadModelFromFiles, predict } from '../utils/teachableMachine';
 import HelpButton from './HelpButton';
 
 function ActionRecognition({ videoSrc, onActionsDetected }) {
@@ -11,6 +12,17 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
     const [currentAction, setCurrentAction] = useState(null);
     const [showPoseSkeleton, setShowPoseSkeleton] = useState(true);
     const [error, setError] = useState(null);
+
+    // Teachable Machine State
+    const [useTeachableMachine, setUseTeachableMachine] = useState(false);
+    const [tmModel, setTmModel] = useState(null);
+    const [tmModelURL, setTmModelURL] = useState('');
+    const [tmLoading, setTmLoading] = useState(false);
+    const [tmModelType, setTmModelType] = useState('online');
+
+    const modelFileRef = useRef(null);
+    const weightsFileRef = useRef(null);
+    const metadataFileRef = useRef(null);
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
@@ -35,12 +47,24 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
         actionSequenceRef.current = [];
 
         try {
-            // Initialize detector
-            await initializePoseDetector();
+            if (useTeachableMachine && !tmModel) {
+                throw new Error("Teachable Machine Model not loaded!");
+            }
+
+            // Initialize detector (only if not using TM, TM has its own internal stuff but we might want skeleton)
+            // Actually TM Pose uses MoveNet/PoseNet internally. logic in teachableMachine.js handles it.
+            // But if we want to draw skeleton, we might need our own detector if TM doesn't return one easily usable by our draw function.
+            // However, our `predict` util returns `pose` object which is compatible?
+            // Let's assume we still use our detector for skeleton if not using TM, or rely on TM's return.
+            // For simplicity, if using TM, we rely on TM's prediction loop.
+
+            if (!useTeachableMachine) {
+                await initializePoseDetector();
+            }
 
             const video = videoRef.current;
             const duration = video.duration;
-            const fps = 30;
+            const fps = 30; // Assumption or read from file
             const totalFrames = Math.floor(duration * fps);
 
             let previousPose = null;
@@ -50,7 +74,6 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
             // Process video frame by frame
             const processFrame = async () => {
                 if (frameCount >= totalFrames) {
-                    // Processing complete
                     finishProcessing();
                     return;
                 }
@@ -63,15 +86,31 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
                     video.onseeked = resolve;
                 });
 
-                // Detect pose
-                const poses = await detectPose(video);
+                let actionResult = null;
+                let pose = null;
 
-                if (poses && poses.length > 0) {
-                    const pose = poses[0];
+                if (useTeachableMachine && tmModel) {
+                    const result = await predict(tmModel, video);
+                    if (result) {
+                        pose = result.pose;
+                        // Map TM class to Action Result format
+                        actionResult = {
+                            action: result.bestClass,
+                            therblig: 'TM', // Placeholder or map if possible
+                            confidence: result.accuracy,
+                            color: '#00d2ff' // Default color for TM
+                        };
+                    }
+                } else {
+                    // Standard Logic
+                    const poses = await detectPose(video);
+                    if (poses && poses.length > 0) {
+                        pose = poses[0];
+                        actionResult = classifyAction(pose, previousPose, previousAction);
+                    }
+                }
 
-                    // Classify action
-                    const actionResult = classifyAction(pose, previousPose, previousAction);
-
+                if (actionResult && pose) {
                     actionSequenceRef.current.push({
                         frame: frameCount,
                         time: currentTime,
@@ -83,11 +122,12 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
                     previousPose = pose;
                     previousAction = actionResult.action;
 
-                    // Draw skeleton if enabled
+                    // Draw skeleton
                     if (showPoseSkeleton && canvasRef.current) {
                         const ctx = canvasRef.current.getContext('2d');
                         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                        drawPoseSkeleton(ctx, poses);
+                        // TM pose might need array wrapper
+                        drawPoseSkeleton(ctx, [pose]);
                     }
                 }
 
@@ -128,6 +168,47 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
         alert(`✅ ${measurements.length} actions exported to measurements!`);
     };
 
+    const handleLoadTmModel = async () => {
+        setTmLoading(true);
+        try {
+            let model;
+            if (tmModelType === 'online') {
+                if (!tmModelURL) {
+                    alert("Please enter a Model URL");
+                    setTmLoading(false);
+                    return;
+                }
+                model = await loadModelFromURL(tmModelURL);
+            } else {
+                if (!modelFileRef.current || !weightsFileRef.current || !metadataFileRef.current) {
+                    alert("Please upload all 3 files: model.json, metadata.json, weights.bin");
+                    setTmLoading(false);
+                    return;
+                }
+                model = await loadModelFromFiles(
+                    modelFileRef.current,
+                    weightsFileRef.current,
+                    metadataFileRef.current
+                );
+            }
+
+            setTmModel(model);
+            alert("Teachable Machine Model Loaded Successfully!");
+        } catch (error) {
+            console.error(error);
+            alert("Failed to load model: " + error.message);
+        } finally {
+            setTmLoading(false);
+        }
+    };
+
+    const handleFileChange = (e, type) => {
+        const file = e.target.files[0];
+        if (type === 'model') modelFileRef.current = file;
+        if (type === 'weights') weightsFileRef.current = file;
+        if (type === 'metadata') metadataFileRef.current = file;
+    };
+
     const resetDetection = () => {
         setDetectedActions([]);
         setCurrentAction(null);
@@ -161,6 +242,14 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
                 <li><strong>Position (P)</strong>: Memposisikan objek</li>
                 <li><strong>Release (RL)</strong>: Melepas objek</li>
             </ul>
+            <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🤖 Teachable Machine</h3>
+            <p>Gunakan model kustom Anda sendiri untuk klasifikasi aksi.</p>
+            <ul>
+                <li>Klik tombol <strong>Use Teachable Machine</strong></li>
+                <li>Pilih <strong>Online</strong> (URL) atau <strong>Offline</strong> (File Upload)</li>
+                <li>Klik <strong>Load Model</strong> sebelum memulai deteksi</li>
+                <li>Sistem akan menggunakan kelas dari model Anda sebagai nama aksi.</li>
+            </ul>
         </>
     );
 
@@ -182,24 +271,39 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <HelpButton title="🤖 Action Recognition - Help" content={helpContent} />
                     {!isProcessing && detectedActions.length === 0 && (
-                        <button
-                            onClick={processVideo}
-                            disabled={!videoSrc}
-                            style={{
-                                padding: '10px 20px',
-                                backgroundColor: videoSrc ? '#00d2ff' : '#555',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '8px',
-                                cursor: videoSrc ? 'pointer' : 'not-allowed',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                fontWeight: 'bold'
-                            }}
-                        >
-                            <Play size={18} /> Start Detection
-                        </button>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button
+                                onClick={() => setUseTeachableMachine(!useTeachableMachine)}
+                                style={{
+                                    padding: '10px',
+                                    backgroundColor: '#333',
+                                    color: '#fff',
+                                    border: '1px solid #555',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                {useTeachableMachine ? 'Use Standard' : 'Use Teachable Machine'}
+                            </button>
+                            <button
+                                onClick={processVideo}
+                                disabled={!videoSrc || (useTeachableMachine && !tmModel)}
+                                style={{
+                                    padding: '10px 20px',
+                                    backgroundColor: (videoSrc && (!useTeachableMachine || tmModel)) ? '#00d2ff' : '#555',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: (videoSrc && (!useTeachableMachine || tmModel)) ? 'pointer' : 'not-allowed',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    fontWeight: 'bold'
+                                }}
+                            >
+                                <Play size={18} /> Start Detection
+                            </button>
+                        </div>
                     )}
                     {detectedActions.length > 0 && (
                         <>
@@ -240,6 +344,45 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
                     )}
                 </div>
             </div>
+
+            {useTeachableMachine && !isProcessing && detectedActions.length === 0 && (
+                <div style={{ padding: '15px', backgroundColor: '#2a2a2a', borderRadius: '8px', marginBottom: '20px', display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#00d2ff' }}>Teachable Machine Configuration</h4>
+                        <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
+                            <label><input type="radio" checked={tmModelType === 'online'} onChange={() => setTmModelType('online')} /> Online (URL)</label>
+                            <label><input type="radio" checked={tmModelType === 'offline'} onChange={() => setTmModelType('offline')} /> Offline (Files)</label>
+                        </div>
+
+                        {tmModelType === 'online' ? (
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <input
+                                    placeholder="Paste Teachable Machine model URL..."
+                                    style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #555', backgroundColor: '#1a1a1a', color: 'white' }}
+                                    value={tmModelURL}
+                                    onChange={(e) => setTmModelURL(e.target.value)}
+                                />
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', fontSize: '0.8rem' }}>
+                                <div>Model (.json)<br /><input type="file" accept=".json" onChange={(e) => handleFileChange(e, 'model')} /></div>
+                                <div>Weights (.bin)<br /><input type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'weights')} /></div>
+                                <div>Metadata (.json)<br /><input type="file" accept=".json" onChange={(e) => handleFileChange(e, 'metadata')} /></div>
+                            </div>
+                        )}
+
+                        <div style={{ marginTop: '10px' }}>
+                            <button
+                                onClick={handleLoadTmModel}
+                                disabled={tmLoading}
+                                style={{ padding: '8px 16px', backgroundColor: tmModel ? '#4caf50' : '#2196f3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                                {tmLoading ? 'Loading...' : (tmModel ? '✅ Model Loaded' : 'Load Model')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {error && (
                 <div style={{

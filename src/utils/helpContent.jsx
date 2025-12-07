@@ -68,11 +68,20 @@ export const helpContent = {
                     </li>
                 </ol>
 
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🤖 Teachable Machine</h3>
+                <p>Fitur baru untuk menggunakan model custom dari Google Teachable Machine.</p>
+                <ul>
+                    <li><strong>Online Model</strong>: Paste URL model TM (contoh: <code>https://teachablemachine.withgoogle.com/models/.../</code>)</li>
+                    <li><strong>Offline Model</strong>: Upload 3 file model (<code>model.json</code>, <code>metadata.json</code>, <code>weights.bin</code>)</li>
+                    <li>Prediksi akan menggantikan logika Golden Cycle standar.</li>
+                </ul>
+
                 <h3 style={{ color: '#ffd700', marginTop: '20px' }}>💡 Tips</h3>
                 <ul>
                     <li>Upload video gerakan terbaik sebagai Golden Cycle</li>
                     <li>Threshold 80% = batas minimum konsistensi</li>
                     <li>Anomaly tinggi = perlu retraining operator</li>
+                    <li>Gunakan TM untuk deteksi gerakan spesifik yang sulit dideteksi algoritma standar</li>
                 </ul>
             </>
         )

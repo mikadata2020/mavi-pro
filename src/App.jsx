@@ -22,6 +22,7 @@ import AllowanceCalculator from './components/AllowanceCalculator';
 import YamazumiChart from './components/YamazumiChart';
 import MultiAxialAnalysis from './components/MultiAxialAnalysis';
 import MultiCameraFusion from './components/MultiCameraFusion';
+import ManualCreation from './components/ManualCreation';
 import VRTrainingMode from './components/VRTrainingMode';
 import KnowledgeBase from './components/KnowledgeBase';
 import ObjectTracking from './components/ObjectTracking';

@@ -10,6 +10,7 @@ import {
     compareWithGoldenCycle,
     detectAnomalies
 } from '../utils/motionComparator';
+import { loadModelFromURL, loadModelFromFiles, predict } from '../utils/teachableMachine';
 
 const MachineLearningData = ({ videoSrc }) => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -27,6 +28,19 @@ const MachineLearningData = ({ videoSrc }) => {
     const [currentPose, setCurrentPose] = useState(null);
     const [currentSequence, setCurrentSequence] = useState([]);
     const [allScores, setAllScores] = useState([]);
+
+    // Teachable Machine State
+    const [useTeachableMachine, setUseTeachableMachine] = useState(false);
+    const [tmModel, setTmModel] = useState(null);
+    const [tmModelURL, setTmModelURL] = useState('');
+    const [tmPrediction, setTmPrediction] = useState(null);
+    const [tmLoading, setTmLoading] = useState(false);
+    const [tmModelType, setTmModelType] = useState('online'); // 'online' or 'offline'
+
+    // File refs for offline upload
+    const modelFileRef = useRef(null);
+    const weightsFileRef = useRef(null);
+    const metadataFileRef = useRef(null);
 
     const canvasRef = useRef(null);
     const videoRef = useRef(null);
@@ -52,40 +66,19 @@ const MachineLearningData = ({ videoSrc }) => {
 
     // Real-time analysis loop
     const analyzeFrame = useCallback(async () => {
-        if (!isAnalyzing || !detector || !videoRef.current) return;
+        if (!isAnalyzing || !videoRef.current) return;
 
-        try {
-            // Detect pose from video
-            const poses = await detectPose(videoRef.current);
+        if (useTeachableMachine && tmModel) {
+            // Teachable Machine Logic
+            try {
+                const result = await predict(tmModel, videoRef.current);
+                if (result) {
+                    setTmPrediction(result);
 
-            if (poses && poses.length > 0) {
-                const pose = poses[0];
-                setCurrentPose(pose);
-
-                // Extract features
-                const features = extractPoseFeatures(pose.keypoints);
-
-                if (features && goldenCycle && goldenCycle.sequence) {
-                    // Add to current sequence (keep last 30 frames for comparison)
-                    setCurrentSequence(prev => {
-                        const newSeq = [...prev, features];
-                        if (newSeq.length > 30) newSeq.shift();
-                        return newSeq;
-                    });
-
-                    // Compare with golden cycle
-                    const currentSeqArray = [...currentSequence, features];
-                    const comparison = compareWithGoldenCycle(
-                        currentSeqArray,
-                        goldenCycle.sequence
-                    );
-
-                    // Update score and data points
-                    setConsistencyScore(comparison.score);
-
+                    // Update graph with accuracy of best class
                     const newPoint = {
                         time: new Date().toLocaleTimeString(),
-                        score: comparison.score,
+                        score: (result.accuracy * 100).toFixed(1),
                         threshold: 80
                     };
 
@@ -94,37 +87,104 @@ const MachineLearningData = ({ videoSrc }) => {
                         if (newData.length > 20) newData.shift();
                         return newData;
                     });
+                    setConsistencyScore((result.accuracy * 100).toFixed(0));
 
-                    setAllScores(prev => [...prev, comparison.score]);
+                    // Draw TM pose
+                    const canvas = canvasRef.current;
+                    if (canvas && result.pose) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        const video = videoRef.current;
+                        const scaleX = canvas.width / video.videoWidth;
+                        const scaleY = canvas.height / video.videoHeight;
 
-                    if (comparison.isAnomaly) {
-                        setAnomalies(prev => prev + 1);
+                        ctx.save();
+                        ctx.scale(scaleX, scaleY);
+                        // TM Pose usually returns keypoints, standard draw function might work if structure matches
+                        // Or use TM's own drawing, but let's try our util first since it expects {keypoints}
+                        if (result.pose.keypoints) {
+                            drawPoseSkeleton(ctx, [result.pose]);
+                        }
+                        ctx.restore();
                     }
                 }
-
-                // Draw pose on canvas
-                const canvas = canvasRef.current;
-                if (canvas) {
-                    const ctx = canvas.getContext('2d');
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                    // Scale coordinates to canvas size
-                    const video = videoRef.current;
-                    const scaleX = canvas.width / video.videoWidth;
-                    const scaleY = canvas.height / video.videoHeight;
-
-                    ctx.save();
-                    ctx.scale(scaleX, scaleY);
-                    drawPoseSkeleton(ctx, poses);
-                    ctx.restore();
-                }
+            } catch (error) {
+                console.error("TM Prediction Error:", error);
             }
-        } catch (error) {
-            console.error('Error in analysis loop:', error);
+        } else if (!useTeachableMachine && detector) {
+            // Original Golden Cycle Logic
+            try {
+                // Detect pose from video
+                const poses = await detectPose(videoRef.current);
+
+                if (poses && poses.length > 0) {
+                    const pose = poses[0];
+                    setCurrentPose(pose);
+
+                    // Extract features
+                    const features = extractPoseFeatures(pose.keypoints);
+
+                    if (features && goldenCycle && goldenCycle.sequence) {
+                        // Add to current sequence (keep last 30 frames for comparison)
+                        setCurrentSequence(prev => {
+                            const newSeq = [...prev, features];
+                            if (newSeq.length > 30) newSeq.shift();
+                            return newSeq;
+                        });
+
+                        // Compare with golden cycle
+                        const currentSeqArray = [...currentSequence, features];
+                        const comparison = compareWithGoldenCycle(
+                            currentSeqArray,
+                            goldenCycle.sequence
+                        );
+
+                        // Update score and data points
+                        setConsistencyScore(comparison.score);
+
+                        const newPoint = {
+                            time: new Date().toLocaleTimeString(),
+                            score: comparison.score,
+                            threshold: 80
+                        };
+
+                        setDataPoints(prev => {
+                            const newData = [...prev, newPoint];
+                            if (newData.length > 20) newData.shift();
+                            return newData;
+                        });
+
+                        setAllScores(prev => [...prev, comparison.score]);
+
+                        if (comparison.isAnomaly) {
+                            setAnomalies(prev => prev + 1);
+                        }
+                    }
+
+                    // Draw pose on canvas
+                    const canvas = canvasRef.current;
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                        // Scale coordinates to canvas size
+                        const video = videoRef.current;
+                        const scaleX = canvas.width / video.videoWidth;
+                        const scaleY = canvas.height / video.videoHeight;
+
+                        ctx.save();
+                        ctx.scale(scaleX, scaleY);
+                        drawPoseSkeleton(ctx, poses);
+                        ctx.restore();
+                    }
+                }
+            } catch (error) {
+                console.error('Error in analysis loop:', error);
+            }
         }
 
         requestRef.current = requestAnimationFrame(analyzeFrame);
-    }, [isAnalyzing, detector, goldenCycle, currentSequence]);
+    }, [isAnalyzing, detector, goldenCycle, currentSequence, useTeachableMachine, tmModel]);
 
     useEffect(() => {
         if (isAnalyzing && detector) {
@@ -277,6 +337,52 @@ const MachineLearningData = ({ videoSrc }) => {
         }
     }, [videoSrc]);
 
+    const handleLoadTmModel = async () => {
+        setTmLoading(true);
+        setStatus("Loading TM Model...");
+        try {
+            let model;
+            if (tmModelType === 'online') {
+                if (!tmModelURL) {
+                    alert("Please enter a Model URL");
+                    setTmLoading(false);
+                    setStatus("Ready"); // Revert status
+                    return;
+                }
+                model = await loadModelFromURL(tmModelURL);
+            } else {
+                if (!modelFileRef.current || !weightsFileRef.current || !metadataFileRef.current) {
+                    alert("Please upload all 3 files: model.json, metadata.json, weights.bin");
+                    setTmLoading(false);
+                    setStatus("Ready");
+                    return;
+                }
+                model = await loadModelFromFiles(
+                    modelFileRef.current,
+                    weightsFileRef.current,
+                    metadataFileRef.current
+                );
+            }
+
+            setTmModel(model);
+            setStatus("TM Model Ready");
+            alert("Teachable Machine Model Loaded Successfully!");
+        } catch (error) {
+            console.error(error);
+            alert("Failed to load model: " + error.message);
+            setStatus("AI Failed");
+        } finally {
+            setTmLoading(false);
+        }
+    };
+
+    const handleFileChange = (e, type) => {
+        const file = e.target.files[0];
+        if (type === 'model') modelFileRef.current = file;
+        if (type === 'weights') weightsFileRef.current = file;
+        if (type === 'metadata') metadataFileRef.current = file;
+    };
+
     return (
         <div style={{
             display: 'grid',
@@ -362,99 +468,227 @@ const MachineLearningData = ({ videoSrc }) => {
                 gap: '20px',
                 border: '1px solid rgba(255,255,255,0.1)'
             }}>
-                {/* Golden Cycle Card */}
+                {/* Model Source Selection */}
                 <div style={{
-                    padding: '15px',
-                    background: 'rgba(0,0,0,0.3)',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,215,0,0.3)'
+                    padding: '10px',
+                    backgroundColor: '#333',
+                    borderRadius: '8px',
+                    marginBottom: '10px'
                 }}>
-                    <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <RefreshCw size={16} /> Golden Cycle
-                    </h3>
-                    {goldenCycle ? (
-                        <div style={{ fontSize: '0.9rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                <span style={{ color: '#aaa' }}>Source:</span>
-                                <span style={{ fontSize: '0.8rem' }}>
-                                    📹 Captured
-                                </span>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                        <button
+                            onClick={() => setUseTeachableMachine(false)}
+                            style={{
+                                flex: 1,
+                                padding: '8px',
+                                background: !useTeachableMachine ? '#00d2ff' : '#444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Use Golden Cycle
+                        </button>
+                        <button
+                            onClick={() => setUseTeachableMachine(true)}
+                            style={{
+                                flex: 1,
+                                padding: '8px',
+                                background: useTeachableMachine ? '#00d2ff' : '#444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            Use Teachable Machine
+                        </button>
+                    </div>
+
+                    {useTeachableMachine && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '5px' }}>
+                                <label>
+                                    <input
+                                        type="radio"
+                                        name="tmType"
+                                        checked={tmModelType === 'online'}
+                                        onChange={() => setTmModelType('online')}
+                                    /> Online
+                                </label>
+                                <label>
+                                    <input
+                                        type="radio"
+                                        name="tmType"
+                                        checked={tmModelType === 'offline'}
+                                        onChange={() => setTmModelType('offline')}
+                                    /> Offline
+                                </label>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                <span style={{ color: '#aaa' }}>Frames:</span>
-                                <span>{goldenCycle.frameCount}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                                <span style={{ color: '#aaa' }}>Duration:</span>
-                                <span>{goldenCycle.duration}</span>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                <span style={{ color: '#aaa' }}>Baseline Score:</span>
-                                <span style={{ color: '#00ff00' }}>{goldenCycle.score}</span>
-                            </div>
-                            <button
-                                onClick={() => setGoldenCycle(null)}
-                                style={{
-                                    width: '100%',
-                                    padding: '6px',
-                                    background: 'rgba(255,0,0,0.1)',
-                                    border: '1px solid #ff4b4b',
-                                    color: '#ff4b4b',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    fontSize: '0.8rem'
-                                }}
-                            >
-                                Clear Golden Cycle
-                            </button>
-                        </div>
-                    ) : (
-                        <div style={{ textAlign: 'center', padding: '10px 0' }}>
-                            <p style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '10px' }}>
-                                {isRecording ? `Recording... ${recordingProgress.toFixed(0)}%` : 'No reference cycle set.'}
-                            </p>
-                            {isRecording && (
-                                <div style={{
-                                    width: '100%',
-                                    height: '4px',
-                                    background: '#333',
-                                    borderRadius: '2px',
-                                    overflow: 'hidden',
-                                    marginBottom: '10px'
-                                }}>
-                                    <div style={{
-                                        width: `${recordingProgress}%`,
-                                        height: '100%',
-                                        background: '#ffd700',
-                                        transition: 'width 0.1s'
-                                    }} />
+
+                            {tmModelType === 'online' ? (
+                                <input
+                                    placeholder="Paste Teachable Machine URL..."
+                                    value={tmModelURL}
+                                    onChange={(e) => setTmModelURL(e.target.value)}
+                                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #555', background: '#222', color: 'white' }}
+                                />
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.8rem' }}>
+                                    <div>Model (model.json): <input type="file" accept=".json" onChange={(e) => handleFileChange(e, 'model')} /></div>
+                                    <div>Weights (weights.bin): <input type="file" accept=".bin" onChange={(e) => handleFileChange(e, 'weights')} /></div>
+                                    <div>Meta (metadata.json): <input type="file" accept=".json" onChange={(e) => handleFileChange(e, 'metadata')} /></div>
                                 </div>
                             )}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <button
-                                    onClick={handleCaptureGoldenCycle}
-                                    disabled={isRecording || status !== 'Ready'}
-                                    style={{
-                                        width: '100%',
-                                        padding: '8px',
-                                        background: 'rgba(255,215,0,0.1)',
-                                        border: '1px solid #ffd700',
-                                        color: '#ffd700',
-                                        borderRadius: '6px',
-                                        cursor: (isRecording || status !== 'Ready') ? 'not-allowed' : 'pointer',
-                                        display: 'flex',
-                                        justifyContent: 'center',
-                                        alignItems: 'center',
-                                        gap: '5px',
-                                        opacity: (isRecording || status !== 'Ready') ? 0.5 : 1
-                                    }}
-                                >
-                                    <Camera size={14} /> {isRecording ? 'Recording...' : 'Capture Current'}
-                                </button>
-                            </div>
+
+                            <button
+                                onClick={handleLoadTmModel}
+                                disabled={tmLoading}
+                                style={{
+                                    padding: '8px',
+                                    background: tmModel ? '#4caf50' : '#2196f3',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: tmLoading ? 'wait' : 'pointer'
+                                }}
+                            >
+                                {tmLoading ? 'Loading...' : (tmModel ? 'Model Loaded (Reload?)' : 'Load Model')}
+                            </button>
                         </div>
                     )}
                 </div>
+
+                {!useTeachableMachine && (
+                    <div style={{
+                        padding: '15px',
+                        background: 'rgba(0,0,0,0.3)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,215,0,0.3)'
+                    }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: '#ffd700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <RefreshCw size={16} /> Golden Cycle
+                        </h3>
+                        {goldenCycle ? (
+                            <div style={{ fontSize: '0.9rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                    <span style={{ color: '#aaa' }}>Source:</span>
+                                    <span style={{ fontSize: '0.8rem' }}>
+                                        📹 Captured
+                                    </span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                    <span style={{ color: '#aaa' }}>Frames:</span>
+                                    <span>{goldenCycle.frameCount}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                    <span style={{ color: '#aaa' }}>Duration:</span>
+                                    <span>{goldenCycle.duration}</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                    <span style={{ color: '#aaa' }}>Baseline Score:</span>
+                                    <span style={{ color: '#00ff00' }}>{goldenCycle.score}</span>
+                                </div>
+                                <button
+                                    onClick={() => setGoldenCycle(null)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '6px',
+                                        background: 'rgba(255,0,0,0.1)',
+                                        border: '1px solid #ff4b4b',
+                                        color: '#ff4b4b',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem'
+                                    }}
+                                >
+                                    Clear Golden Cycle
+                                </button>
+                            </div>
+                        ) : (
+                            <div style={{ textAlign: 'center', padding: '10px 0' }}>
+                                <p style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '10px' }}>
+                                    {isRecording ? `Recording... ${recordingProgress.toFixed(0)}%` : 'No reference cycle set.'}
+                                </p>
+                                {isRecording && (
+                                    <div style={{
+                                        width: '100%',
+                                        height: '4px',
+                                        background: '#333',
+                                        borderRadius: '2px',
+                                        overflow: 'hidden',
+                                        marginBottom: '10px'
+                                    }}>
+                                        <div style={{
+                                            width: `${recordingProgress}%`,
+                                            height: '100%',
+                                            background: '#ffd700',
+                                            transition: 'width 0.1s'
+                                        }} />
+                                    </div>
+                                )}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <button
+                                        onClick={handleCaptureGoldenCycle}
+                                        disabled={isRecording || status !== 'Ready'}
+                                        style={{
+                                            width: '100%',
+                                            padding: '8px',
+                                            background: 'rgba(255,215,0,0.1)',
+                                            border: '1px solid #ffd700',
+                                            color: '#ffd700',
+                                            borderRadius: '6px',
+                                            cursor: (isRecording || status !== 'Ready') ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            gap: '5px',
+                                            opacity: (isRecording || status !== 'Ready') ? 0.5 : 1
+                                        }}
+                                    >
+                                        <Camera size={14} /> {isRecording ? 'Recording...' : 'Capture Current'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                )}
+
+                {useTeachableMachine && (
+                    <div style={{
+                        padding: '15px',
+                        background: 'rgba(0,0,255,0.1)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(0,210,255,0.3)'
+                    }}>
+                        <h3 style={{ margin: '0 0 10px 0', color: '#00d2ff' }}>🤖 AI Prediction</h3>
+                        {tmPrediction ? (
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#fff' }}>
+                                    {tmPrediction.bestClass}
+                                </div>
+                                <div style={{ fontSize: '1rem', color: '#ccc' }}>
+                                    Confidence: {(tmPrediction.accuracy * 100).toFixed(1)}%
+                                </div>
+                                <div style={{ marginTop: '10px', height: '10px', background: '#333', borderRadius: '5px' }}>
+                                    <div style={{
+                                        width: `${tmPrediction.accuracy * 100}%`,
+                                        height: '100%',
+                                        background: tmPrediction.accuracy > 0.8 ? '#00ff00' : '#ffa500',
+                                        borderRadius: '5px',
+                                        transition: 'width 0.2s'
+                                    }} />
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ color: '#aaa', textAlign: 'center' }}>
+                                {isAnalyzing ? 'Waiting for detection...' : 'Start Analysis to see results'}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Consistency Gauge */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
