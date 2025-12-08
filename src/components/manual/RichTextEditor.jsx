@@ -1,0 +1,159 @@
+import React, { useRef, useEffect } from 'react';
+
+const RichTextEditor = ({ value, onChange, placeholder }) => {
+    const editorRef = useRef(null);
+
+    useEffect(() => {
+        if (editorRef.current && editorRef.current.innerHTML !== value) {
+            editorRef.current.innerHTML = value || '';
+        }
+    }, [value]);
+
+    const handleInput = () => {
+        if (onChange && editorRef.current) {
+            onChange(editorRef.current.innerHTML);
+        }
+    };
+
+    const execCommand = (command, value = null) => {
+        document.execCommand(command, false, value);
+        editorRef.current?.focus();
+        handleInput();
+    };
+
+    return (
+        <div style={{ backgroundColor: '#252526', border: '1px solid #333', borderRadius: '4px', overflow: 'hidden' }}>
+            {/* Toolbar */}
+            <div style={{
+                display: 'flex',
+                gap: '5px',
+                padding: '8px',
+                borderBottom: '1px solid #333',
+                backgroundColor: '#1e1e1e',
+                flexWrap: 'wrap',
+                alignItems: 'center'
+            }}>
+                {/* Font Family */}
+                <select
+                    onChange={(e) => execCommand('fontName', e.target.value)}
+                    style={selectStyle}
+                    title="Font"
+                >
+                    <option value="Arial">Arial</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Courier New">Courier New</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                </select>
+
+                {/* Font Size */}
+                <select
+                    onChange={(e) => execCommand('fontSize', e.target.value)}
+                    style={selectStyle}
+                    title="Size"
+                >
+                    <option value="1">8pt</option>
+                    <option value="2">10pt</option>
+                    <option value="3" selected>12pt</option>
+                    <option value="4">14pt</option>
+                    <option value="5">18pt</option>
+                    <option value="6">24pt</option>
+                    <option value="7">36pt</option>
+                </select>
+
+                <div style={dividerStyle}></div>
+
+                {/* Bold, Italic, Underline */}
+                <button onClick={() => execCommand('bold')} style={buttonStyle} title="Bold (Ctrl+B)">
+                    <strong>B</strong>
+                </button>
+                <button onClick={() => execCommand('italic')} style={buttonStyle} title="Italic (Ctrl+I)">
+                    <em>I</em>
+                </button>
+                <button onClick={() => execCommand('underline')} style={buttonStyle} title="Underline (Ctrl+U)">
+                    <u>U</u>
+                </button>
+
+                <div style={dividerStyle}></div>
+
+                {/* Alignment */}
+                <button onClick={() => execCommand('justifyLeft')} style={buttonStyle} title="Align Left">
+                    ≡
+                </button>
+                <button onClick={() => execCommand('justifyCenter')} style={buttonStyle} title="Align Center">
+                    ≣
+                </button>
+                <button onClick={() => execCommand('justifyRight')} style={buttonStyle} title="Align Right">
+                    ≡
+                </button>
+
+                <div style={dividerStyle}></div>
+
+                {/* Lists */}
+                <button onClick={() => execCommand('insertUnorderedList')} style={buttonStyle} title="Bullet List">
+                    • List
+                </button>
+                <button onClick={() => execCommand('insertOrderedList')} style={buttonStyle} title="Numbered List">
+                    1. List
+                </button>
+
+                <div style={dividerStyle}></div>
+
+                {/* Text Color */}
+                <input
+                    type="color"
+                    onChange={(e) => execCommand('foreColor', e.target.value)}
+                    style={{ width: '30px', height: '24px', border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
+                    title="Text Color"
+                />
+            </div>
+
+            {/* Editor Area */}
+            <div
+                ref={editorRef}
+                contentEditable
+                onInput={handleInput}
+                style={{
+                    minHeight: '100px',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    padding: '10px',
+                    color: '#fff',
+                    outline: 'none',
+                    fontSize: '14px',
+                    lineHeight: '1.6'
+                }}
+                data-placeholder={placeholder}
+            />
+        </div>
+    );
+};
+
+const buttonStyle = {
+    padding: '4px 8px',
+    backgroundColor: '#333',
+    color: '#fff',
+    border: '1px solid #444',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    fontSize: '12px',
+    minWidth: '28px'
+};
+
+const selectStyle = {
+    padding: '4px 6px',
+    backgroundColor: '#333',
+    color: '#fff',
+    border: '1px solid #444',
+    borderRadius: '3px',
+    cursor: 'pointer',
+    fontSize: '12px'
+};
+
+const dividerStyle = {
+    width: '1px',
+    height: '20px',
+    backgroundColor: '#444'
+};
+
+export default RichTextEditor;
