@@ -34,6 +34,7 @@ import BroadcastControls from './components/features/BroadcastControls';
 import MachineLearningData from './components/MachineLearningData';
 import ActionRecognition from './components/ActionRecognition';
 import SpaghettiChart from './components/SpaghettiChart';
+import WorkflowGuide from './components/WorkflowGuide';
 import { saveProject, getProjectByName, updateProject } from './utils/database';
 import { importProject } from './utils/projectExport';
 import StreamHandler from './utils/streamHandler';
@@ -41,7 +42,7 @@ import { LanguageProvider } from './i18n/LanguageContext';
 import './index.css';
 
 function App() {
-  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentView, setCurrentView] = useState('workflow-guide');
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [measurements, setMeasurements] = useState([]);
@@ -482,6 +483,10 @@ function App() {
               <PredictiveMaintenance
                 measurements={measurements}
               />
+            </div>
+          ) : currentView === 'workflow-guide' ? (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <WorkflowGuide onNavigate={(view) => setCurrentView(view)} />
             </div>
           ) : null}
         </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import ImageMarkupDialog from './ImageMarkupDialog';
 import RichTextEditor from './RichTextEditor';
 
-const StepEditor = ({ step, onChange, onCaptureImage, videoTime }) => {
+const StepEditor = ({ step, onChange, onCaptureImage, onAiImprove, onAiGenerate, isAiLoading, onVoiceDictate, isVoiceListening, videoTime }) => {
     const [showMarkup, setShowMarkup] = useState(false);
 
     if (!step) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Select a step to edit</div>;
@@ -37,12 +37,35 @@ const StepEditor = ({ step, onChange, onCaptureImage, videoTime }) => {
             {/* Step Header */}
             <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', color: '#888', fontSize: '0.8rem', marginBottom: '5px' }}>Step Title</label>
-                <input
-                    value={step.title}
-                    onChange={(e) => handleChange('title', e.target.value)}
-                    style={{ width: '100%', padding: '10px', fontSize: '1.2rem', backgroundColor: '#252526', border: '1px solid #333', color: '#fff', borderRadius: '4px' }}
-                    placeholder="Enter step title..."
-                />
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <input
+                        value={step.title}
+                        onChange={(e) => handleChange('title', e.target.value)}
+                        style={{ flex: 1, padding: '10px', fontSize: '1.2rem', backgroundColor: '#252526', border: '1px solid #333', color: '#fff', borderRadius: '4px' }}
+                        placeholder="Enter step title..."
+                    />
+                    {onAiGenerate && (
+                        <button
+                            onClick={() => onAiGenerate(step.id, step.title)}
+                            disabled={isAiLoading || !step.title}
+                            style={{
+                                padding: '0 15px',
+                                backgroundColor: '#0078d4',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: (isAiLoading || !step.title) ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                opacity: (isAiLoading || !step.title) ? 0.6 : 1
+                            }}
+                            title="Generate instructions from title"
+                        >
+                            {isAiLoading ? '...' : '⚡ Generate'}
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Media Area */}
@@ -87,9 +110,56 @@ const StepEditor = ({ step, onChange, onCaptureImage, videoTime }) => {
                 onSave={handleMarkupSave}
             />
 
-            {/* Instructions - Now with Rich Text Editor */}
             <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', color: '#888', fontSize: '0.8rem', marginBottom: '5px' }}>Instructions</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                    <label style={{ display: 'block', color: '#888', fontSize: '0.8rem' }}>Instructions</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        {onVoiceDictate && (
+                            <button
+                                onClick={() => onVoiceDictate(step.id)}
+                                disabled={isAiLoading}
+                                style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: isVoiceListening ? '#ff4444' : 'transparent',
+                                    color: isVoiceListening ? 'white' : '#888',
+                                    border: `1px solid ${isVoiceListening ? '#ff4444' : '#888'}`,
+                                    borderRadius: '4px',
+                                    cursor: isAiLoading ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.8rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    opacity: isAiLoading ? 0.6 : 1,
+                                    animation: isVoiceListening ? 'pulse 1.5s infinite' : 'none'
+                                }}
+                                title="Voice dictation"
+                            >
+                                🎤 {isVoiceListening ? 'Listening...' : 'Dictate'}
+                            </button>
+                        )}
+                        {onAiImprove && step.instructions && (
+                            <button
+                                onClick={() => onAiImprove(step.id, step)}
+                                disabled={isAiLoading}
+                                style={{
+                                    padding: '4px 8px',
+                                    backgroundColor: 'transparent',
+                                    color: '#00d2ff',
+                                    border: '1px solid #00d2ff',
+                                    borderRadius: '4px',
+                                    cursor: isAiLoading ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.8rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    opacity: isAiLoading ? 0.6 : 1
+                                }}
+                            >
+                                {isAiLoading ? 'Improving...' : '✨ AI Improve'}
+                            </button>
+                        )}
+                    </div>
+                </div>
                 <RichTextEditor
                     value={step.instructions}
                     onChange={(html) => handleChange('instructions', html)}

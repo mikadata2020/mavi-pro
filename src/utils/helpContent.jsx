@@ -177,20 +177,73 @@ export const helpContent = {
         content: (
             <>
                 <h3 style={{ color: '#ffd700', marginTop: '20px' }}>📌 Fungsi</h3>
-                <p>Membuat dokumen Instruksi Kerja (Work Instruction/SOP) visual dengan mengambil gambar langsung dari video.</p>
+                <p>Membuat dokumen Instruksi Kerja (Work Instruction/SOP) visual dengan AI, voice dictation, dan multiple export formats.</p>
 
                 <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🚀 Cara Pakai</h3>
                 <ol>
-                    <li>Pilih proyek dengan video</li>
-                    <li>Untuk setiap langkah kerja:
+                    <li>Pilih proyek dengan video dari dropdown</li>
+                    <li>Klik <strong>+ Add Step</strong> untuk menambah langkah</li>
+                    <li>Untuk setiap langkah:
                         <ul>
-                            <li>Play/Seek video ke posisi yang tepat</li>
-                            <li>Klik tombol <strong>📸 Capture</strong></li>
-                            <li>Isi Deskripsi, Key Points, dan Safety Notes</li>
+                            <li>Isi <strong>Step Title</strong></li>
+                            <li>Klik <strong>⚡ Generate</strong> untuk AI auto-generate instructions</li>
+                            <li>Atau tulis manual, lalu klik <strong>✨ AI Improve</strong> untuk perbaikan grammar</li>
+                            <li>Atau gunakan <strong>🎤 Dictate</strong> untuk voice input</li>
+                            <li>Klik <strong>Capture from Video</strong> untuk ambil screenshot</li>
+                            <li>Klik <strong>✏️ Markup</strong> pada gambar untuk annotasi (arrow, box, circle)</li>
+                            <li>Tambahkan Notes/Warnings/Cautions jika perlu</li>
                         </ul>
                     </li>
-                    <li>Klik <strong>Export PDF</strong> untuk mengunduh dokumen</li>
+                    <li>Pilih <strong>Layout Template</strong>:
+                        <ul>
+                            <li><strong>📐 Standard</strong>: Side-by-side (gambar kiri, text kanan)</li>
+                            <li><strong>📋 Compact Table</strong>: Semua steps dalam tabel</li>
+                            <li><strong>📄 One Per Page</strong>: 1 step per halaman</li>
+                        </ul>
+                    </li>
+                    <li>Klik <strong>👁️ Preview Mode</strong> untuk melihat hasil</li>
+                    <li>Export via <strong>📥 Export As...</strong>:
+                        <ul>
+                            <li><strong>📄 PDF</strong>: Dokumen siap print</li>
+                            <li><strong>📝 Word (.docx)</strong>: Editable document</li>
+                            <li><strong>📊 PowerPoint (.pptx)</strong>: Presentation slides</li>
+                        </ul>
+                    </li>
                 </ol>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🤖 AI Features</h3>
+                <ul>
+                    <li><strong>⚡ Generate</strong>: Auto-generate instructions dari step title</li>
+                    <li><strong>✨ AI Improve</strong>: Perbaiki grammar & clarity tanpa ubah meaning</li>
+                    <li>Butuh API Key di Settings (Gemini/OpenAI/Custom)</li>
+                </ul>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🎤 Voice Dictation</h3>
+                <ul>
+                    <li>Klik <strong>🎤 Dictate</strong> untuk mulai voice input</li>
+                    <li>Berbicara dalam Bahasa Indonesia atau English</li>
+                    <li>Text otomatis ditambahkan ke instructions</li>
+                    <li>Browser akan minta izin microphone (allow)</li>
+                </ul>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>✏️ Image Markup</h3>
+                <ul>
+                    <li><strong>↗ Arrow</strong>: Tunjuk area penting</li>
+                    <li><strong>⬜ Box</strong>: Highlight area</li>
+                    <li><strong>⭕ Circle</strong>: Tandai objek</li>
+                    <li>3 warna: Merah, Hijau, Kuning</li>
+                    <li><strong>↩ Undo</strong> untuk batalkan markup terakhir</li>
+                </ul>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>💡 Tips</h3>
+                <ul>
+                    <li>Gunakan <strong>AI Generate</strong> untuk draft cepat, lalu edit manual</li>
+                    <li>Voice dictation cocok untuk instruksi panjang</li>
+                    <li>Compact Table layout cocok untuk quick reference</li>
+                    <li>One Per Page layout cocok untuk training slides</li>
+                    <li>PowerPoint export otomatis 1 slide per step</li>
+                    <li>Simpan metadata (Doc Number, Version, Author) untuk tracking</li>
+                </ul>
             </>
         )
     }

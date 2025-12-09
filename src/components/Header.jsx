@@ -475,6 +475,23 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                     <button
                         className="btn"
                         style={{
+                            backgroundColor: currentView === 'workflow-guide' ? 'var(--accent-blue)' : '',
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}
+                        onClick={() => setCurrentView('workflow-guide')}
+                        title="Project Workflow Guide"
+                    >
+                        🚀
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
                             backgroundColor: currentView === 'help' ? 'var(--accent-blue)' : '',
                             padding: '8px',
                             fontSize: '1.2rem',

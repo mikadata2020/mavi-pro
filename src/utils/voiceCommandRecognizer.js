@@ -87,7 +87,9 @@ class VoiceCommandRecognizer {
         this.language = 'id-ID'; // Default to Indonesian
         this.onCommandCallback = null;
         this.onStatusCallback = null;
+        this.onDictationCallback = null; // New: for dictation mode
         this.continuousMode = false;
+        this.dictationMode = false; // New: dictation mode flag
 
         this.initRecognition();
     }
@@ -123,7 +125,16 @@ class VoiceCommandRecognizer {
 
             console.log(`Voice input: "${transcript}" (confidence: ${confidence})`);
 
-            // Match command
+            // Dictation mode: return raw transcript without command matching
+            if (this.dictationMode) {
+                this.updateStatus('success', 'Dictated');
+                if (this.onDictationCallback) {
+                    this.onDictationCallback(transcript, confidence);
+                }
+                return;
+            }
+
+            // Command mode: Match command
             const command = this.matchCommand(transcript);
 
             if (command && confidence > 0.6) {
@@ -328,6 +339,27 @@ class VoiceCommandRecognizer {
         if (this.onStatusCallback) {
             this.onStatusCallback(status, message);
         }
+    }
+
+    /**
+     * Set dictation mode
+     * @param {boolean} enabled - Enable dictation mode (bypasses command matching)
+     */
+    setDictationMode(enabled) {
+        this.dictationMode = enabled;
+        if (enabled) {
+            this.updateStatus('idle', 'Dictation mode');
+        } else {
+            this.updateStatus('idle', 'Command mode');
+        }
+    }
+
+    /**
+     * Set dictation callback
+     * @param {Function} callback - Callback function (transcript, confidence)
+     */
+    onDictation(callback) {
+        this.onDictationCallback = callback;
     }
 
     /**
