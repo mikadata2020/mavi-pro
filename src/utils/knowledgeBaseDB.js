@@ -1,5 +1,9 @@
 // Knowledge Base Database Utilities
-// Uses IndexedDB for storing knowledge base items, templates, and ratings
+// Uses IndexedDB for local storage + Supabase for cloud sync
+
+import { getSupabase, isSupabaseConfigured } from './supabaseClient';
+
+const SUPABASE_TABLE = 'manuals';
 
 const DB_NAME = 'MAViKnowledgeBase';
 const DB_VERSION = 1;
@@ -49,22 +53,93 @@ export const addKnowledgeBaseItem = async (item) => {
     const transaction = db.transaction(['knowledgeBase'], 'readwrite');
     const store = transaction.objectStore('knowledgeBase');
 
+    // Generate a unique UUID for cloud sync
+    const cloudId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     const kbItem = {
         ...item,
+        cloudId, // Store cloud ID for reference
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         viewCount: 0,
         usageCount: 0,
         averageRating: 0,
-        ratingCount: 0
+        ratingCount: 0,
+        syncStatus: 'pending' // pending, synced, error
     };
 
     const request = store.add(kbItem);
 
     return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = async () => {
+            const localId = request.result;
+
+            // Sync to Supabase (non-blocking)
+            if (isSupabaseConfigured()) {
+                syncItemToCloud(cloudId, kbItem).then(() => {
+                    // Update sync status to 'synced'
+                    updateSyncStatus(localId, 'synced');
+                }).catch(err => {
+                    console.error('Supabase sync error:', err);
+                    updateSyncStatus(localId, 'error');
+                });
+            }
+
+            resolve(localId);
+        };
         request.onerror = () => reject(request.error);
     });
+};
+
+// Helper function to sync item to Supabase
+const syncItemToCloud = async (cloudId, item) => {
+    const supabase = getSupabase();
+
+    // Prepare data for Supabase (exclude local-only fields)
+    const cloudData = {
+        id: cloudId,
+        title: item.title || '',
+        document_number: item.documentNumber || '',
+        version: item.version || '1.0',
+        status: item.status || 'Draft',
+        author: item.author || '',
+        summary: item.description || item.summary || '',
+        difficulty: item.difficulty || 'Moderate',
+        time_required: item.timeRequired || '',
+        category: item.category || '',
+        industry: item.industry || '',
+        type: item.type || 'manual',
+        steps: item.steps || item.content || null,
+        created_at: item.createdAt,
+        updated_at: item.updatedAt
+    };
+
+    const { data, error } = await supabase
+        .from(SUPABASE_TABLE)
+        .upsert(cloudData, { onConflict: 'id' });
+
+    if (error) throw error;
+    return data;
+};
+
+// Helper to update local sync status
+const updateSyncStatus = async (localId, status) => {
+    try {
+        const db = await initKnowledgeBaseDB();
+        const transaction = db.transaction(['knowledgeBase'], 'readwrite');
+        const store = transaction.objectStore('knowledgeBase');
+        const getRequest = store.get(localId);
+
+        getRequest.onsuccess = () => {
+            const item = getRequest.result;
+            if (item) {
+                item.syncStatus = status;
+                store.put(item);
+            }
+        };
+    } catch (err) {
+        console.error('Failed to update sync status:', err);
+    }
 };
 
 export const getAllKnowledgeBaseItems = async () => {
@@ -77,6 +152,58 @@ export const getAllKnowledgeBaseItems = async () => {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
+};
+
+// Get item from Supabase cloud by cloudId (for QR code access)
+export const getItemFromCloud = async (cloudId) => {
+    if (!isSupabaseConfigured()) {
+        console.warn('Supabase not configured');
+        return null;
+    }
+
+    try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase
+            .from(SUPABASE_TABLE)
+            .select('*')
+            .eq('id', cloudId)
+            .single();
+
+        if (error) {
+            console.error('Cloud fetch error:', error);
+            return null;
+        }
+
+        // Convert cloud format to local format
+        return {
+            cloudId: data.id,
+            title: data.title,
+            documentNumber: data.document_number,
+            version: data.version,
+            status: data.status,
+            author: data.author,
+            summary: data.summary,
+            description: data.summary,
+            difficulty: data.difficulty,
+            timeRequired: data.time_required,
+            category: data.category,
+            industry: data.industry,
+            type: data.type,
+            steps: data.steps,
+            content: data.steps,
+            createdAt: data.created_at,
+            updatedAt: data.updated_at
+        };
+    } catch (err) {
+        console.error('Failed to fetch from cloud:', err);
+        return null;
+    }
+};
+
+// Get local item by cloudId
+export const getItemByCloudId = async (cloudId) => {
+    const items = await getAllKnowledgeBaseItems();
+    return items.find(item => item.cloudId === cloudId) || null;
 };
 
 export const getKnowledgeBaseItem = async (id) => {

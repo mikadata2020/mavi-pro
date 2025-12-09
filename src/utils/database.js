@@ -1,8 +1,16 @@
 // IndexedDB wrapper for Motion Analysis data
+// With Supabase cloud sync for cross-device access
+
+import { getSupabase, isSupabaseConfigured } from './supabaseClient';
+
 const DB_NAME = 'MotionAnalysisDB';
 const DB_VERSION = 2; // Updated version for projects
 const STORE_NAME = 'measurements';
 const PROJECTS_STORE = 'projects';
+
+// Supabase table names
+const SUPABASE_PROJECTS_TABLE = 'projects';
+const SUPABASE_MEASUREMENTS_TABLE = 'measurements';
 
 // Initialize database
 export const initDB = () => {
@@ -122,10 +130,63 @@ export const updateSession = async (id, videoName, measurements, narration = nul
 
 // ===== PROJECT MANAGEMENT FUNCTIONS =====
 
-// Save new project
+// Helper function to sync project to Supabase cloud
+const syncProjectToCloud = async (cloudId, projectData) => {
+    if (!isSupabaseConfigured()) return null;
+
+    try {
+        const supabase = getSupabase();
+
+        // Prepare cloud data (exclude large binary videoBlob)
+        const cloudData = {
+            id: cloudId,
+            project_name: projectData.projectName,
+            video_name: projectData.videoName,
+            measurements: projectData.measurements || [],
+            narration: projectData.narration,
+            created_at: projectData.createdAt,
+            last_modified: projectData.lastModified
+        };
+
+        const { data, error } = await supabase
+            .from(SUPABASE_PROJECTS_TABLE)
+            .upsert(cloudData, { onConflict: 'id' });
+
+        if (error) throw error;
+        return data;
+    } catch (err) {
+        console.error('Project cloud sync error:', err);
+        throw err;
+    }
+};
+
+// Helper to update project sync status locally
+const updateProjectSyncStatus = async (localId, status) => {
+    try {
+        const db = await initDB();
+        const transaction = db.transaction([PROJECTS_STORE], 'readwrite');
+        const store = transaction.objectStore(PROJECTS_STORE);
+        const getRequest = store.get(localId);
+
+        getRequest.onsuccess = () => {
+            const item = getRequest.result;
+            if (item) {
+                item.syncStatus = status;
+                store.put(item);
+            }
+        };
+    } catch (err) {
+        console.error('Failed to update project sync status:', err);
+    }
+};
+
+// Save new project (with cloud sync)
 export const saveProject = async (projectName, videoBlob, videoName, measurements = [], narration = null) => {
     const db = await initDB();
     const PROJECTS_STORE = 'projects';
+
+    // Generate cloud ID
+    const cloudId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([PROJECTS_STORE], 'readwrite');
@@ -137,13 +198,30 @@ export const saveProject = async (projectName, videoBlob, videoName, measurement
             videoName,
             measurements,
             narration,
+            cloudId,
             createdAt: new Date().toISOString(),
-            lastModified: new Date().toISOString()
+            lastModified: new Date().toISOString(),
+            syncStatus: 'pending'
         };
 
         const request = store.add(data);
 
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => {
+            const localId = request.result;
+
+            // Sync to Supabase (non-blocking)
+            if (isSupabaseConfigured()) {
+                syncProjectToCloud(cloudId, data).then(() => {
+                    updateProjectSyncStatus(localId, 'synced');
+                    console.log('Project synced to cloud:', projectName);
+                }).catch(err => {
+                    console.error('Project cloud sync failed:', err);
+                    updateProjectSyncStatus(localId, 'error');
+                });
+            }
+
+            resolve(localId);
+        };
         request.onerror = () => reject(request.error);
     });
 };
@@ -179,7 +257,7 @@ export const getProjectByName = async (projectName) => {
     });
 };
 
-// Update project
+// Update project (with cloud sync)
 export const updateProject = async (projectName, updates) => {
     const db = await initDB();
     const PROJECTS_STORE = 'projects';
@@ -199,17 +277,61 @@ export const updateProject = async (projectName, updates) => {
             const updatedData = {
                 ...project,
                 ...updates,
-                lastModified: new Date().toISOString()
+                lastModified: new Date().toISOString(),
+                syncStatus: 'pending'
             };
 
             const request = store.put(updatedData);
 
-            request.onsuccess = () => resolve(request.result);
+            request.onsuccess = () => {
+                // Sync to Supabase (non-blocking)
+                if (isSupabaseConfigured() && project.cloudId) {
+                    syncProjectToCloud(project.cloudId, updatedData).then(() => {
+                        updateProjectSyncStatus(project.id, 'synced');
+                    }).catch(err => {
+                        console.error('Project update sync failed:', err);
+                        updateProjectSyncStatus(project.id, 'error');
+                    });
+                }
+                resolve(request.result);
+            };
             request.onerror = () => reject(request.error);
         } catch (error) {
             reject(error);
         }
     });
+};
+
+// Get project from cloud by cloudId
+export const getProjectFromCloud = async (cloudId) => {
+    if (!isSupabaseConfigured()) return null;
+
+    try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase
+            .from(SUPABASE_PROJECTS_TABLE)
+            .select('*')
+            .eq('id', cloudId)
+            .single();
+
+        if (error) {
+            console.error('Cloud project fetch error:', error);
+            return null;
+        }
+
+        return {
+            cloudId: data.id,
+            projectName: data.project_name,
+            videoName: data.video_name,
+            measurements: data.measurements || [],
+            narration: data.narration,
+            createdAt: data.created_at,
+            lastModified: data.last_modified
+        };
+    } catch (err) {
+        console.error('Failed to fetch project from cloud:', err);
+        return null;
+    }
 };
 
 // Delete project

@@ -11,6 +11,8 @@ import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ImageRun } from 'docx';
 import { saveAs } from 'file-saver';
 import PptxGenJS from 'pptxgenjs';
+import { QRCodeSVG } from 'qrcode.react';
+import QRCode from 'qrcode';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -279,7 +281,7 @@ function ManualCreation() {
         }
     };
 
-    const exportToPDF = () => {
+    const exportToPDF = async () => {
         try {
             if (!guide.steps || guide.steps.length === 0) {
                 alert('No steps to export.');
@@ -296,8 +298,27 @@ function ManualCreation() {
             doc.setFontSize(18);
             doc.setFont(undefined, 'bold');
             doc.setTextColor(0, 0, 0);
-            doc.text(guide.title || 'Work Instructions', pageWidth / 2, yPos, { align: 'center' });
-            yPos += 8;
+            doc.text(guide.title || 'Work Instructions', margin, yPos + 5);
+
+            // QR Code - Top Right Corner (web-accessible URL)
+            const baseUrl = window.location.origin;
+            const manualId = guide.id || generateId();
+            const qrUrl = `${baseUrl}/#/manual/${manualId}?doc=${encodeURIComponent(guide.documentNumber || '')}&title=${encodeURIComponent(guide.title || '')}`;
+            try {
+                const qrDataUrl = await QRCode.toDataURL(qrUrl, {
+                    width: 40,
+                    margin: 1,
+                    color: { dark: '#0078d4', light: '#ffffff' }
+                });
+                doc.addImage(qrDataUrl, 'PNG', pageWidth - margin - 11, margin, 11, 11);
+                doc.setFontSize(5);
+                doc.setTextColor(100, 100, 100);
+                doc.text('Scan', pageWidth - margin - 5.5, margin + 12, { align: 'center' });
+            } catch (qrError) {
+                console.log('QR code error:', qrError);
+            }
+
+            yPos += 12;
 
             // Black line under title
             doc.setLineWidth(0.5);
@@ -719,9 +740,32 @@ function ManualCreation() {
                     {/* Center: Main Editor or Preview */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #333', overflowY: 'auto' }}>
                         {isPreviewMode ? (
-                            <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto', backgroundColor: '#fff', color: '#000', minHeight: '100%' }}>
+                            <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto', backgroundColor: '#fff', color: '#000', minHeight: '100%', position: 'relative' }}>
+                                {/* QR Code - Top Right Corner (50% smaller) */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '20px',
+                                    right: '20px',
+                                    backgroundColor: '#f8f9fa',
+                                    padding: '8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #e0e0e0',
+                                    textAlign: 'center'
+                                }}>
+                                    <QRCodeSVG
+                                        value={`${window.location.origin}/#/manual/${guide.id}?doc=${encodeURIComponent(guide.documentNumber || '')}&title=${encodeURIComponent(guide.title || '')}`}
+                                        size={35}
+                                        level="M"
+                                        bgColor="#ffffff"
+                                        fgColor="#0078d4"
+                                    />
+                                    <p style={{ margin: '4px 0 0 0', fontSize: '0.55rem', fontWeight: 'bold', color: '#333' }}>
+                                        Scan
+                                    </p>
+                                </div>
+
                                 {/* Document Header */}
-                                <div style={{ marginBottom: '30px', borderBottom: '3px solid #0078d4', paddingBottom: '10px' }}>
+                                <div style={{ marginBottom: '30px', borderBottom: '3px solid #0078d4', paddingBottom: '10px', paddingRight: '70px' }}>
                                     <h1 style={{ margin: 0, fontSize: '2rem', color: '#0078d4' }}>{guide.title || 'Work Instructions'}</h1>
                                 </div>
 

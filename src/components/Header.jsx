@@ -492,6 +492,23 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                     <button
                         className="btn"
                         style={{
+                            backgroundColor: currentView === 'file-explorer' ? 'var(--accent-blue)' : '',
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
+                        }}
+                        onClick={() => setCurrentView('file-explorer')}
+                        title="File Explorer - Local Storage"
+                    >
+                        📂
+                    </button>
+                    <button
+                        className="btn"
+                        style={{
                             backgroundColor: currentView === 'help' ? 'var(--accent-blue)' : '',
                             padding: '8px',
                             fontSize: '1.2rem',

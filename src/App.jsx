@@ -35,6 +35,7 @@ import MachineLearningData from './components/MachineLearningData';
 import ActionRecognition from './components/ActionRecognition';
 import SpaghettiChart from './components/SpaghettiChart';
 import WorkflowGuide from './components/WorkflowGuide';
+import FileExplorer from './components/FileExplorer';
 import { saveProject, getProjectByName, updateProject } from './utils/database';
 import { importProject } from './utils/projectExport';
 import StreamHandler from './utils/streamHandler';
@@ -63,12 +64,28 @@ function App() {
   const [chatMessages, setChatMessages] = useState([]);
   const broadcastManagerRef = useRef(null);
 
+  // State for QR code manual viewing
+  const [qrManualId, setQrManualId] = useState(null);
+
   useEffect(() => {
     // Check for "watch" query param
     const params = new URLSearchParams(window.location.search);
     const watchId = params.get('watch');
     if (watchId) {
       setWatchRoomId(watchId);
+    }
+
+    // Check for manual route from QR code scan (e.g., /#/manual/abc123?doc=...&title=...)
+    const hash = window.location.hash;
+    if (hash.startsWith('#/manual/')) {
+      const manualPath = hash.substring(9); // Remove "#/manual/"
+      const [manualId, queryString] = manualPath.split('?');
+      if (manualId) {
+        setQrManualId(manualId);
+        setCurrentView('knowledge-base');
+        // Clear hash after processing
+        window.history.replaceState(null, '', window.location.pathname);
+      }
     }
   }, []);
 
@@ -487,6 +504,10 @@ function App() {
           ) : currentView === 'workflow-guide' ? (
             <div style={{ flex: 1, overflow: 'hidden' }}>
               <WorkflowGuide onNavigate={(view) => setCurrentView(view)} />
+            </div>
+          ) : currentView === 'file-explorer' ? (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <FileExplorer onNavigate={(view) => setCurrentView(view)} />
             </div>
           ) : null}
         </div>
