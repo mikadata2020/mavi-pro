@@ -26,8 +26,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     const [chatHistory, setChatHistory] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [isAiThinking, setIsAiThinking] = useState(false);
-    const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
-    const [selectedModel, setSelectedModel] = useState(localStorage.getItem('gemini_model') || 'gemini-1.5-flash');
+
     const [isChatFullscreen, setIsChatFullscreen] = useState(false);
 
     const categories = ['Value-added', 'Non value-added', 'Waste'];
@@ -246,10 +245,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
 
-        if (!apiKey) {
-            alert('Silakan masukkan API Key di Manual Creation > Settings terlebih dahulu!');
-            return;
-        }
+
 
         const userMessage = chatInput.trim();
         setChatInput('');
@@ -272,7 +268,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                 }))
             };
 
-            const aiResponse = await chatWithAI(userMessage, context, newHistory, apiKey, selectedModel);
+            const aiResponse = await chatWithAI(userMessage, context, newHistory);
 
             // Add AI response to history
             setChatHistory([...newHistory, { role: 'ai', content: aiResponse }]);

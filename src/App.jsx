@@ -279,6 +279,22 @@ function App() {
     return <BroadcastViewer roomId={watchRoomId} onClose={() => setWatchRoomId(null)} />;
   }
 
+  // Public Manual Viewer - accessible without login via QR code
+  if (qrManualId) {
+    const PublicManualViewer = React.lazy(() => import('./components/PublicManualViewer'));
+    return (
+      <React.Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f5f5f5' }}><p>Loading...</p></div>}>
+        <PublicManualViewer
+          manualId={qrManualId}
+          onClose={() => {
+            setQrManualId(null);
+            // Don't require login, just show login page
+          }}
+        />
+      </React.Suspense>
+    );
+  }
+
   if (!isAuthenticated) {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }

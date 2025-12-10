@@ -99,6 +99,30 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
 
                 <div style={dividerStyle}></div>
 
+                {/* Insert Image */}
+                <label style={{ ...buttonStyle, display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }} title="Insert Image">
+                    🖼️
+                    <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                    execCommand('insertImage', event.target.result);
+                                };
+                                reader.readAsDataURL(file);
+                            }
+                            // Reset input (optional, to allow same file selection again)
+                            e.target.value = '';
+                        }}
+                    />
+                </label>
+
+                <div style={dividerStyle}></div>
+
                 {/* Text Color */}
                 <input
                     type="color"

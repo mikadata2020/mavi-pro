@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getAllProjects } from '../utils/database';
+import { addKnowledgeBaseItem, updateKnowledgeBaseItem, getAllKnowledgeBaseItems, getKnowledgeBaseItem } from '../utils/knowledgeBaseDB';
 import HelpButton from './HelpButton';
 import { helpContent } from '../utils/helpContent.jsx';
 import GuideHeader from './manual/GuideHeader';
@@ -39,6 +40,8 @@ function ManualCreation() {
     });
 
     const [activeStepId, setActiveStepId] = useState(null);
+    const [savedManuals, setSavedManuals] = useState([]);
+    const [showOpenDialog, setShowOpenDialog] = useState(false);
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [layoutTemplate, setLayoutTemplate] = useState('standard'); // standard, compact, one-per-page
     const [isVoiceListening, setIsVoiceListening] = useState(false);
@@ -113,7 +116,7 @@ function ManualCreation() {
         }
     }, [selectedProjectId, projects]);
 
-    const loadProjects = async () => {
+    async function loadProjects() {
         try {
             const allProjects = await getAllProjects();
             setProjects(allProjects);
@@ -121,6 +124,89 @@ function ManualCreation() {
             console.error('Error loading projects:', error);
         }
     };
+
+    const handleSaveManual = async () => {
+        if (!guide.title) {
+            alert('Please enter a title for the manual before saving.');
+            return;
+        }
+
+        try {
+            const manualData = {
+                title: guide.title,
+                documentNumber: guide.documentNumber,
+                version: guide.version,
+                status: guide.status,
+                author: guide.author,
+                summary: guide.summary,
+                difficulty: guide.difficulty,
+                timeRequired: guide.timeRequired,
+                category: 'Work Instruction', // Default
+                type: 'manual',
+                steps: guide.steps,
+                content: guide.steps, // Fallback
+                effectiveDate: guide.effectiveDate,
+                revisionDate: guide.revisionDate
+            };
+
+            // Check if this manual already exists in KB (by ID match or Title match loosely?)
+            // For now, we rely on having an ID. But 'generateId' creates a random string not matching KB IDs unless loaded.
+            // If guide has a 'cloudId' or 'kbId', we assume update. Otherwise create.
+
+            if (guide.kbId) {
+                await updateKnowledgeBaseItem(guide.kbId, manualData);
+                alert('Manual updated successfully!');
+            } else {
+                const newId = await addKnowledgeBaseItem(manualData);
+                setGuide(prev => ({ ...prev, kbId: newId }));
+                alert('Manual saved to Knowledge Base!');
+            }
+        } catch (error) {
+            console.error('Error saving manual:', error);
+            alert('Failed to save manual: ' + error.message);
+        }
+    };
+
+    const handleLoadManualsList = async () => {
+        try {
+            const items = await getAllKnowledgeBaseItems();
+            const manuals = items.filter(item => item.type === 'manual');
+            setSavedManuals(manuals);
+            setShowOpenDialog(true);
+        } catch (error) {
+            console.error('Error loading manuals list:', error);
+            alert('Failed to load manuals list.');
+        }
+    };
+
+    const handleOpenManual = (manual) => {
+        setGuide({
+            id: manual.cloudId || generateId(),
+            kbId: manual.id, // Local IndexedDB ID
+            title: manual.title || '',
+            summary: manual.summary || manual.description || '',
+            difficulty: manual.difficulty || 'Moderate',
+            timeRequired: manual.timeRequired || '',
+            documentNumber: manual.documentNumber || '',
+            version: manual.version || '1.0',
+            status: manual.status || 'Draft',
+            author: manual.author || '',
+            revisionDate: manual.updatedAt ? new Date(manual.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            effectiveDate: manual.effectiveDate || '',
+            steps: manual.steps || manual.content || []
+        });
+
+        if (manual.steps && manual.steps.length > 0) {
+            setActiveStepId(manual.steps[0].id);
+        } else {
+            setActiveStepId(null);
+        }
+
+        setShowOpenDialog(false);
+        // Set selectedProject to enable the editor view
+        setSelectedProject({ projectName: manual.title || 'Loaded Manual' });
+    };
+
 
     const handleStepSelect = (id) => setActiveStepId(id);
 
@@ -157,18 +243,11 @@ function ManualCreation() {
 
     const [isAiLoading, setIsAiLoading] = useState(false);
 
-    const getApiKey = () => localStorage.getItem('gemini_api_key');
-
     const handleAiGenerate = async (stepId, taskName) => {
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            alert('Please set your AI API Key in Settings first.');
-            return;
-        }
 
         setIsAiLoading(true);
         try {
-            const content = await generateManualContent(taskName, apiKey);
+            const content = await generateManualContent(taskName);
 
             // Format instructions from description + key points
             let instructions = `<p>${content.description}</p>`;
@@ -195,11 +274,6 @@ function ManualCreation() {
     };
 
     const handleAiImprove = async (stepId, currentStep) => {
-        const apiKey = getApiKey();
-        if (!apiKey) {
-            alert('Please set your AI API Key in Settings first.');
-            return;
-        }
 
         setIsAiLoading(true);
         try {
@@ -214,7 +288,7 @@ function ManualCreation() {
                 safety: currentStep.bullets.filter(b => b.type === 'warning' || b.type === 'caution').map(b => b.text).join(', ')
             };
 
-            const improved = await improveManualContent(inputContent, apiKey);
+            const improved = await improveManualContent(inputContent);
 
             handleStepChange(stepId, {
                 ...currentStep,
@@ -674,6 +748,21 @@ function ManualCreation() {
                     >
                         {isPreviewMode ? '✏️ Edit Mode' : '👁️ Preview Mode'}
                     </button>
+                    <button
+                        onClick={handleSaveManual}
+                        style={{ padding: '4px 12px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                        title="Save to Knowledge Base & Cloud"
+                    >
+                        💾 Save
+                    </button>
+                    <button
+                        onClick={handleLoadManualsList}
+                        style={{ padding: '4px 12px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                        title="Open saved manual"
+                    >
+                        📂 Open
+                    </button>
+
                     <select
                         onChange={(e) => {
                             const format = e.target.value;
@@ -724,306 +813,329 @@ function ManualCreation() {
                 </div>
             </div>
 
-            {selectedProject ? (
-                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                    {/* Left: Step List */}
-                    {!isPreviewMode && (
-                        <StepList
-                            steps={guide.steps}
-                            activeStepId={activeStepId}
-                            onSelectStep={handleStepSelect}
-                            onAddStep={handleAddStep}
-                            onDeleteStep={handleDeleteStep}
-                        />
-                    )}
-
-                    {/* Center: Main Editor or Preview */}
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #333', overflowY: 'auto' }}>
-                        {isPreviewMode ? (
-                            <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto', backgroundColor: '#fff', color: '#000', minHeight: '100%', position: 'relative' }}>
-                                {/* QR Code - Top Right Corner (50% smaller) */}
+            {/* Main Content Area */}
+            {
+                selectedProject ? (
+                    <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                        {/* Left: Steps Editor / Preview */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px' }}>
+                            {isPreviewMode ? (
                                 <div style={{
-                                    position: 'absolute',
-                                    top: '20px',
-                                    right: '20px',
-                                    backgroundColor: '#f8f9fa',
-                                    padding: '8px',
-                                    borderRadius: '6px',
-                                    border: '1px solid #e0e0e0',
-                                    textAlign: 'center'
+                                    backgroundColor: 'white',
+                                    color: '#000',
+                                    minHeight: '100%',
+                                    padding: '40px',
+                                    borderRadius: '4px',
+                                    boxShadow: '0 0 10px rgba(0,0,0,0.5)'
                                 }}>
-                                    <QRCodeSVG
-                                        value={`${window.location.origin}/#/manual/${guide.id}?doc=${encodeURIComponent(guide.documentNumber || '')}&title=${encodeURIComponent(guide.title || '')}`}
-                                        size={35}
-                                        level="M"
-                                        bgColor="#ffffff"
-                                        fgColor="#0078d4"
-                                    />
-                                    <p style={{ margin: '4px 0 0 0', fontSize: '0.55rem', fontWeight: 'bold', color: '#333' }}>
-                                        Scan
-                                    </p>
-                                </div>
-
-                                {/* Document Header */}
-                                <div style={{ marginBottom: '30px', borderBottom: '3px solid #0078d4', paddingBottom: '10px', paddingRight: '70px' }}>
-                                    <h1 style={{ margin: 0, fontSize: '2rem', color: '#0078d4' }}>{guide.title || 'Work Instructions'}</h1>
-                                </div>
-
-                                {/* Document Metadata Table */}
-                                <table style={{ width: '100%', marginBottom: '30px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                    <tbody>
-                                        <tr>
-                                            <td style={headerCellStyle}>Document Number</td>
-                                            <td style={dataCellStyle}>{guide.documentNumber || '-'}</td>
-                                            <td style={headerCellStyle}>Revision Date</td>
-                                            <td style={dataCellStyle}>{guide.revisionDate || '-'}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style={headerCellStyle}>Version</td>
-                                            <td style={dataCellStyle}>{guide.version || '1.0'}</td>
-                                            <td style={headerCellStyle}>Effective Date</td>
-                                            <td style={dataCellStyle}>{guide.effectiveDate || '-'}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style={headerCellStyle}>Status</td>
-                                            <td style={dataCellStyle}>
-                                                <span style={{
-                                                    padding: '2px 8px',
-                                                    backgroundColor: guide.status === 'Released' ? '#4caf50' : guide.status === 'Approved' ? '#2196f3' : '#ff9800',
-                                                    color: 'white',
-                                                    borderRadius: '3px',
-                                                    fontSize: '0.8rem',
-                                                    fontWeight: 'bold'
-                                                }}>
-                                                    {guide.status || 'Draft'}
-                                                </span>
-                                            </td>
-                                            <td style={headerCellStyle}>Difficulty</td>
-                                            <td style={dataCellStyle}>{guide.difficulty}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style={headerCellStyle}>Author</td>
-                                            <td style={dataCellStyle}>{guide.author || '-'}</td>
-                                            <td style={headerCellStyle}>Time Required</td>
-                                            <td style={dataCellStyle}>{guide.timeRequired || '-'}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style={headerCellStyle}>Description</td>
-                                            <td colSpan="3" style={dataCellStyle}>{guide.summary || '-'}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-
-                                {/* Render steps based on layout template */}
-                                {layoutTemplate === 'compact' ? (
-                                    // Compact Table Layout
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
-                                        <thead>
-                                            <tr style={{ backgroundColor: '#0078d4', color: 'white' }}>
-                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '5%' }}>#</th>
-                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '20%' }}>Step</th>
-                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '30%' }}>Image</th>
-                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '45%' }}>Instructions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {guide.steps.map((step, idx) => (
-                                                <tr key={step.id}>
-                                                    <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>{idx + 1}</td>
-                                                    <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{step.title}</td>
-                                                    <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                                        {step.media && step.media.url && (
-                                                            <img src={step.media.url} alt={step.title} style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '4px' }} />
-                                                        )}
-                                                    </td>
-                                                    <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '13px' }}>
-                                                        {step.instructions && <div dangerouslySetInnerHTML={{ __html: step.instructions }} />}
-                                                        {step.bullets && step.bullets.length > 0 && (
-                                                            <div style={{ marginTop: '8px' }}>
-                                                                {step.bullets.map((b, i) => (
-                                                                    <div key={i} style={{ fontSize: '12px', marginBottom: '4px', color: b.type === 'warning' ? '#ff9800' : b.type === 'caution' ? '#d13438' : '#0078d4' }}>
-                                                                        <strong>{b.type.toUpperCase()}:</strong> {b.text}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                ) : layoutTemplate === 'one-per-page' ? (
-                                    // One Step Per Page Layout
-                                    guide.steps.map((step, idx) => (
-                                        <div key={step.id} style={{ marginBottom: '50px', pageBreakAfter: 'always', minHeight: '600px' }}>
-                                            <h2 style={{ color: '#0078d4', marginBottom: '30px', fontSize: '2rem', textAlign: 'center' }}>
-                                                Step {idx + 1}: {step.title}
-                                            </h2>
-
-                                            {step.media && step.media.url && (
-                                                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                                                    <img
-                                                        src={step.media.url}
-                                                        alt={step.title}
-                                                        style={{
-                                                            maxWidth: '80%',
-                                                            maxHeight: '400px',
-                                                            borderRadius: '8px',
-                                                            border: '2px solid #0078d4',
-                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                                                        }}
-                                                    />
-                                                </div>
-                                            )}
-
-                                            {step.instructions && (
-                                                <div
-                                                    style={{
-                                                        lineHeight: '1.8',
-                                                        marginBottom: '20px',
-                                                        fontSize: '16px',
-                                                        padding: '20px',
-                                                        backgroundColor: '#f9f9f9',
-                                                        borderRadius: '8px'
-                                                    }}
-                                                    dangerouslySetInnerHTML={{ __html: step.instructions }}
-                                                />
-                                            )}
-
-                                            {step.bullets && step.bullets.length > 0 && (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
-                                                    {step.bullets.map((b, i) => (
-                                                        <div key={i} style={{
-                                                            padding: '15px',
-                                                            borderLeft: `6px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`,
-                                                            backgroundColor: '#f9f9f9',
-                                                            borderRadius: '0 8px 8px 0',
-                                                            fontSize: '14px'
-                                                        }}>
-                                                            <strong style={{ color: b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888' }}>
-                                                                {b.type.toUpperCase()}:
-                                                            </strong> {b.text}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
+                                    {/* Preview Content */}
+                                    <div style={{ marginBottom: '40px', borderBottom: '1px solid #eee', paddingBottom: '20px' }}>
+                                        <h1 style={{ color: '#0078d4', margin: '0 0 10px 0' }}>{guide.title || 'Work Instructions'}</h1>
+                                        <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                                            {guide.author && <span>Author: {guide.author} | </span>}
+                                            {guide.revisionDate && <span>Updated: {guide.revisionDate} | </span>}
+                                            {guide.documentNumber && <span>Doc #: {guide.documentNumber}</span>}
                                         </div>
-                                    ))
-                                ) : (
-                                    // Standard Layout (current)
-                                    guide.steps.map((step, idx) => (
-                                        <div key={step.id} style={{ marginBottom: '50px', pageBreakInside: 'avoid' }}>
-                                            <h3 style={{ color: '#0078d4', marginBottom: '20px' }}>Step {idx + 1}: {step.title}</h3>
+                                        {guide.id && (
+                                            <div style={{ marginTop: '10px' }}>
+                                                <QRCodeSVG value={`${window.location.origin}/#/manual/${guide.id}`} size={100} />
+                                                <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '5px' }}>Scan for public view</div>
+                                            </div>
+                                        )}
+                                    </div>
 
-                                            {/* Side-by-side layout */}
-                                            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-                                                {/* Left: Image */}
-                                                {step.media && step.media.url && (
-                                                    <div style={{ flex: '0 0 45%' }}>
-                                                        <img
-                                                            src={step.media.url}
-                                                            alt={step.title}
-                                                            style={{
-                                                                width: '100%',
-                                                                borderRadius: '4px',
-                                                                border: '1px solid #ddd',
-                                                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                                                            }}
-                                                        />
-                                                    </div>
-                                                )}
+                                    {
+                                        layoutTemplate === 'compact' ? (
+                                            // Compact Table Layout
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+                                                <thead>
+                                                    <tr style={{ backgroundColor: '#0078d4', color: 'white' }}>
+                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '5%' }}>#</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '20%' }}>Step</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '30%' }}>Image</th>
+                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '45%' }}>Instructions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {guide.steps.map((step, idx) => (
+                                                        <tr key={step.id}>
+                                                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>{idx + 1}</td>
+                                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{step.title}</td>
+                                                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                                {step.media && step.media.url && (
+                                                                    <img src={step.media.url} alt={step.title} style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '4px' }} />
+                                                                )}
+                                                            </td>
+                                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '13px' }}>
+                                                                {step.instructions && <div dangerouslySetInnerHTML={{ __html: step.instructions }} />}
+                                                                {step.bullets && step.bullets.length > 0 && (
+                                                                    <div style={{ marginTop: '8px' }}>
+                                                                        {step.bullets.map((b, i) => (
+                                                                            <div key={i} style={{ fontSize: '12px', marginBottom: '4px', color: b.type === 'warning' ? '#ff9800' : b.type === 'caution' ? '#d13438' : '#0078d4' }}>
+                                                                                <strong>{b.type.toUpperCase()}:</strong> {b.text}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        ) : layoutTemplate === 'one-per-page' ? (
+                                            // One Step Per Page Layout
+                                            guide.steps.map((step, idx) => (
+                                                <div key={step.id} style={{ marginBottom: '50px', pageBreakAfter: 'always', minHeight: '600px' }}>
+                                                    <h2 style={{ color: '#0078d4', marginBottom: '30px', fontSize: '2rem', textAlign: 'center' }}>
+                                                        Step {idx + 1}: {step.title}
+                                                    </h2>
 
-                                                {/* Right: Instructions & Alerts */}
-                                                <div style={{ flex: 1 }}>
+                                                    {step.media && step.media.url && (
+                                                        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                                                            <img
+                                                                src={step.media.url}
+                                                                alt={step.title}
+                                                                style={{
+                                                                    maxWidth: '80%',
+                                                                    maxHeight: '400px',
+                                                                    borderRadius: '8px',
+                                                                    border: '2px solid #0078d4',
+                                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    )}
+
                                                     {step.instructions && (
                                                         <div
                                                             style={{
-                                                                lineHeight: '1.6',
-                                                                marginBottom: '15px',
-                                                                fontSize: '14px'
+                                                                lineHeight: '1.8',
+                                                                marginBottom: '20px',
+                                                                fontSize: '16px',
+                                                                padding: '20px',
+                                                                backgroundColor: '#f9f9f9',
+                                                                borderRadius: '8px'
                                                             }}
                                                             dangerouslySetInnerHTML={{ __html: step.instructions }}
                                                         />
                                                     )}
 
                                                     {step.bullets && step.bullets.length > 0 && (
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
                                                             {step.bullets.map((b, i) => (
                                                                 <div key={i} style={{
-                                                                    padding: '10px',
-                                                                    borderLeft: `4px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`,
+                                                                    padding: '15px',
+                                                                    borderLeft: `6px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`,
                                                                     backgroundColor: '#f9f9f9',
-                                                                    display: 'flex',
-                                                                    gap: '10px',
-                                                                    alignItems: 'flex-start',
-                                                                    borderRadius: '0 4px 4px 0'
+                                                                    borderRadius: '0 8px 8px 0',
+                                                                    fontSize: '14px'
                                                                 }}>
-                                                                    <strong style={{
-                                                                        minWidth: '70px',
-                                                                        color: b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888',
-                                                                        fontSize: '12px'
-                                                                    }}>
+                                                                    <strong style={{ color: b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888' }}>
                                                                         {b.type.toUpperCase()}:
-                                                                    </strong>
-                                                                    <span style={{ fontSize: '13px' }}>{b.text}</span>
+                                                                    </strong> {b.text}
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        ) : (
-                            <>
-                                <GuideHeader headerInfo={guide} onChange={(info) => setGuide(prev => ({ ...prev, ...info }))} />
-                                <StepEditor
-                                    step={activeStep}
-                                    onChange={handleStepChange}
-                                    onCaptureImage={handleCaptureFrame}
-                                    onAiImprove={handleAiImprove}
-                                    onAiGenerate={handleAiGenerate}
-                                    isAiLoading={isAiLoading}
-                                    onVoiceDictate={handleVoiceDictate}
-                                    isVoiceListening={isVoiceListening}
-                                />
-                            </>
-                        )}
-                    </div>
+                                            ))
+                                        ) : (
+                                            // Standard Layout (current)
+                                            guide.steps.map((step, idx) => (
+                                                <div key={step.id} style={{ marginBottom: '50px', pageBreakInside: 'avoid' }}>
+                                                    <h3 style={{ color: '#0078d4', marginBottom: '20px' }}>Step {idx + 1}: {step.title}</h3>
 
-                    {/* Right: Video Source */}
-                    {!isPreviewMode && (
-                        <div style={{ width: '300px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #333' }}>
-                            <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc' }}>
-                                Source Video
-                            </div>
-                            <div style={{ flex: 1, padding: '10px', display: 'flex', flexDirection: 'column' }}>
-                                {videoSrc ? (
-                                    <video
-                                        ref={videoRef}
-                                        src={videoSrc}
-                                        controls
-                                        style={{ width: '100%', borderRadius: '4px', backgroundColor: '#000' }}
+                                                    {/* Side-by-side layout */}
+                                                    <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+                                                        {/* Left: Image */}
+                                                        {step.media && step.media.url && (
+                                                            <div style={{ flex: '0 0 45%' }}>
+                                                                <img
+                                                                    src={step.media.url}
+                                                                    alt={step.title}
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        borderRadius: '4px',
+                                                                        border: '1px solid #ddd',
+                                                                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        )}
+
+                                                        {/* Right: Instructions & Alerts */}
+                                                        <div style={{ flex: 1 }}>
+                                                            {step.instructions && (
+                                                                <div
+                                                                    style={{
+                                                                        lineHeight: '1.6',
+                                                                        marginBottom: '15px',
+                                                                        fontSize: '14px'
+                                                                    }}
+                                                                    dangerouslySetInnerHTML={{ __html: step.instructions }}
+                                                                />
+                                                            )}
+
+                                                            {step.bullets && step.bullets.length > 0 && (
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    {step.bullets.map((b, i) => (
+                                                                        <div key={i} style={{
+                                                                            padding: '10px',
+                                                                            borderLeft: `4px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`,
+                                                                            backgroundColor: '#f9f9f9',
+                                                                            display: 'flex',
+                                                                            gap: '10px',
+                                                                            alignItems: 'flex-start',
+                                                                            borderRadius: '0 4px 4px 0'
+                                                                        }}>
+                                                                            <strong style={{
+                                                                                minWidth: '70px',
+                                                                                color: b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888',
+                                                                                fontSize: '12px'
+                                                                            }}>
+                                                                                {b.type.toUpperCase()}:
+                                                                            </strong>
+                                                                            <span style={{ fontSize: '13px' }}>{b.text}</span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )
+                                    }
+                                </div>
+                            ) : (
+                                <>
+                                    <GuideHeader headerInfo={guide} onChange={(info) => setGuide(prev => ({ ...prev, ...info }))} />
+                                    <StepEditor
+                                        step={activeStep}
+                                        onChange={handleStepChange}
+                                        onCaptureImage={handleCaptureFrame}
+                                        onAiImprove={handleAiImprove}
+                                        onAiGenerate={handleAiGenerate}
+                                        isAiLoading={isAiLoading}
+                                        onVoiceDictate={handleVoiceDictate}
+                                        isVoiceListening={isVoiceListening}
                                     />
+                                </>
+                            )
+                            }
+                        </div >
+
+                        {/* Right: Video Source */}
+                        {
+                            !isPreviewMode && (
+                                <div style={{ width: '300px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #333' }}>
+                                    <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc' }}>
+                                        Source Video
+                                    </div>
+                                    <div style={{ flex: 1, padding: '10px', display: 'flex', flexDirection: 'column' }}>
+                                        {videoSrc ? (
+                                            <video
+                                                ref={videoRef}
+                                                src={videoSrc}
+                                                controls
+                                                style={{ width: '100%', borderRadius: '4px', backgroundColor: '#000' }}
+                                            />
+                                        ) : (
+                                            <div style={{ color: '#888', textAlign: 'center', marginTop: '20px' }}>
+                                                No video loaded
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )
+                        }
+                    </div >
+                ) : (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📘</div>
+                        <h2>No Manual Selected</h2>
+                        <p style={{ marginBottom: '30px' }}>Select a project to generate steps from video analysis, or create a manual from scratch.</p>
+                        <div style={{ display: 'flex', gap: '15px' }}>
+                            <select
+                                value={selectedProjectId}
+                                onChange={(e) => setSelectedProjectId(e.target.value)}
+                                style={{ padding: '10px', borderRadius: '4px', backgroundColor: '#333', color: 'white', border: '1px solid #555' }}
+                            >
+                                <option value="">-- Select Project --</option>
+                                {projects.map(p => (
+                                    <option key={p.projectName} value={p.projectName}>{p.projectName}</option>
+                                ))}
+                            </select>
+                            <button
+                                onClick={() => {
+                                    // Create scratch manual
+                                    setSelectedProject({ projectName: 'New Manual' }); // Dummy project to enable UI
+                                    setGuide(prev => ({ ...prev, title: 'New Manual', steps: [] }));
+                                }}
+                                style={{ padding: '10px 20px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                                + Create from Scratch
+                            </button>
+                            <button
+                                onClick={handleLoadManualsList}
+                                style={{ padding: '10px 20px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                                📂 Open Saved Manual
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+            {/* Open Manual Dialog */}
+            {
+                showOpenDialog && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1100,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <div style={{
+                            backgroundColor: '#252526', width: '500px', maxHeight: '80vh',
+                            borderRadius: '8px', display: 'flex', flexDirection: 'column',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+                        }}>
+                            <div style={{ padding: '15px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0 }}>📂 Open Saved Manual</h3>
+                                <button onClick={() => setShowOpenDialog(false)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.2rem', cursor: 'pointer' }}>×</button>
+                            </div>
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+                                {savedManuals.length === 0 ? (
+                                    <p style={{ color: '#888', textAlign: 'center' }}>No saved manuals found.</p>
                                 ) : (
-                                    <div style={{ color: '#888', textAlign: 'center', marginTop: '20px' }}>
-                                        No video loaded
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        {savedManuals.map(m => (
+                                            <div
+                                                key={m.id}
+                                                onClick={() => handleOpenManual(m)}
+                                                style={{
+                                                    padding: '12px',
+                                                    backgroundColor: '#333',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    border: '1px solid #444',
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.target.style.backgroundColor = '#444'}
+                                                onMouseLeave={(e) => e.target.style.backgroundColor = '#333'}
+                                            >
+                                                <div style={{ fontWeight: 'bold' }}>{m.title}</div>
+                                                <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+                                                    Ver: {m.version} | Updated: {new Date(m.updatedAt || m.createdAt).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>
                         </div>
-                    )}
-                </div>
-            ) : (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-                    <div style={{ textAlign: 'center' }}>
-                        <p style={{ fontSize: '1.2rem', marginBottom: '10px' }}>📁 No Project Selected</p>
-                        <p>Please select a project from the dropdown above to start creating a manual.</p>
                     </div>
-                </div>
-            )}
+                )
+            }
         </div>
     );
 }

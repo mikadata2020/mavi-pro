@@ -88,6 +88,11 @@ const ImageMarkupDialog = ({ isOpen, onClose, imageSrc, onSave }) => {
             const radius = Math.sqrt(Math.pow(pos.x - startPos.x, 2) + Math.pow(pos.y - startPos.y, 2));
             context.arc(startPos.x, startPos.y, radius, 0, 2 * Math.PI);
             context.stroke();
+        } else if (tool === 'line') {
+            context.beginPath();
+            context.moveTo(startPos.x, startPos.y);
+            context.lineTo(pos.x, pos.y);
+            context.stroke();
         } else if (tool === 'arrow') {
             drawArrow(context, startPos.x, startPos.y, pos.x, pos.y);
         }
@@ -140,6 +145,7 @@ const ImageMarkupDialog = ({ isOpen, onClose, imageSrc, onSave }) => {
             }}>
                 <div style={{ display: 'flex', gap: '5px' }}>
                     <button onClick={() => setTool('arrow')} style={toolStyle(tool === 'arrow')}>↗ Arrow</button>
+                    <button onClick={() => setTool('line')} style={toolStyle(tool === 'line')}>━ Line</button>
                     <button onClick={() => setTool('rect')} style={toolStyle(tool === 'rect')}>⬜ Box</button>
                     <button onClick={() => setTool('circle')} style={toolStyle(tool === 'circle')}>⭕ Circle</button>
                 </div>

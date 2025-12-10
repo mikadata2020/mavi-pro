@@ -1,5 +1,13 @@
 
 /**
+ * Helper to get the API key from storage if not provided
+ */
+const getStoredApiKey = (providedKey) => {
+    if (providedKey) return providedKey;
+    return localStorage.getItem('gemini_api_key') || '';
+};
+
+/**
  * Generates content for a work instruction manual step using Google Gemini API.
  * @param {string} taskName - The name of the task/step.
  * @param {string} apiKey - The Google Gemini API Key.
@@ -7,8 +15,9 @@
  * @returns {Promise<{description: string, keyPoints: string, safety: string}>}
  */
 export const generateManualContent = async (taskName, apiKey, model = null) => {
-    if (!apiKey) {
-        throw new Error("API Key is missing.");
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) {
+        throw new Error("API Key is missing. Please configure it in AI Settings.");
     }
 
     const prompt = `
@@ -26,7 +35,7 @@ export const generateManualContent = async (taskName, apiKey, model = null) => {
         }
     `;
 
-    return await callGemini(prompt, apiKey, model);
+    return await callGemini(prompt, keyToUse, model);
 };
 
 /**
@@ -37,8 +46,9 @@ export const generateManualContent = async (taskName, apiKey, model = null) => {
  * @returns {Promise<{description: string, keyPoints: string, safety: string}>}
  */
 export const improveManualContent = async (content, apiKey, model = null) => {
-    if (!apiKey) {
-        throw new Error("API Key is missing.");
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) {
+        throw new Error("API Key is missing. Please configure it in AI Settings.");
     }
 
     const prompt = `
@@ -56,7 +66,7 @@ export const improveManualContent = async (content, apiKey, model = null) => {
         Description: "${content.description || ''}"
         Key Points: "${content.keyPoints || ''}"
         Safety: "${content.safety || ''}"
-
+ 
         Output the corrected text (SAME LANGUAGE, SAME LENGTH, SAME MEANING) in JSON format:
         {
             "description": "Grammar-corrected description",
@@ -68,7 +78,7 @@ export const improveManualContent = async (content, apiKey, model = null) => {
     `;
 
     console.log('AI Improve Request:', { content, model });
-    const result = await callAIProvider(prompt, apiKey, model);
+    const result = await callAIProvider(prompt, keyToUse, model);
     console.log('AI Improve Response:', result);
     return result;
 };
@@ -77,14 +87,14 @@ export const improveManualContent = async (content, apiKey, model = null) => {
  * Generates a comprehensive Kaizen Report based on project data.
  * @param {object} context - Project data (measurements, metrics, etc.)
  * @param {string} apiKey - The Google Gemini API Key.
- * @param {string} apiKey - The Google Gemini API Key.
  * @param {string} model - The specific model to use (optional).
  * @param {string} language - The target language for the report (default: 'English').
  * @returns {Promise<string>} Markdown formatted report
  */
 export const generateKaizenReport = async (context, apiKey, model = null, language = 'English') => {
-    if (!apiKey) {
-        throw new Error("API Key is missing.");
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) {
+        throw new Error("API Key is missing. Please configure it in AI Settings.");
     }
 
     // Format context data for the prompt
@@ -134,8 +144,7 @@ export const generateKaizenReport = async (context, apiKey, model = null, langua
     `;
 
     console.log('Generating Kaizen Report...');
-    console.log('Generating Kaizen Report...');
-    return await callAIProvider(prompt, apiKey, model, false); // Expect text/markdown, not JSON
+    return await callAIProvider(prompt, keyToUse, model, false); // Expect text/markdown, not JSON
 };
 
 /**
@@ -147,7 +156,8 @@ export const generateKaizenReport = async (context, apiKey, model = null, langua
  * @returns {Promise<Array>} Optimized nodes with new x,y coordinates
  */
 export const generateLayoutOptimization = async (nodes, flowData, apiKey, model = null) => {
-    if (!apiKey) throw new Error("API Key is missing.");
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) throw new Error("API Key is missing. Please configure it in AI Settings.");
 
     const nodesList = nodes.map(n => n.name).join(', ');
     const flowList = flowData.map(f => `${f.from} -> ${f.to} (${f.count} times)`).join('\n');
@@ -181,7 +191,7 @@ export const generateLayoutOptimization = async (nodes, flowData, apiKey, model 
     `;
 
     console.log('Generating Layout Optimization...');
-    return await callAIProvider(prompt, apiKey, model, true); // Expect JSON
+    return await callAIProvider(prompt, keyToUse, model, true); // Expect JSON
 };
 
 /**
@@ -190,8 +200,15 @@ export const generateLayoutOptimization = async (nodes, flowData, apiKey, model 
  * @returns {Promise<string[]>} List of available model names
  */
 export const validateApiKey = async (apiKey) => {
+    // For validation, we might want to explicitly require the key passed in, 
+    // but consistency says we could fallback. 
+    // However, validation is usually for a specific NEW key. 
+    // Let's keep existing logic but allow fallback if called without arg (though unlikely for validation).
+    const keyToUse = apiKey || localStorage.getItem('gemini_api_key');
+    if (!keyToUse) throw new Error("API Key is missing");
+
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${keyToUse}`);
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -224,8 +241,9 @@ export const validateApiKey = async (apiKey) => {
  * @returns {Promise<string>} AI response
  */
 export const chatWithAI = async (userMessage, context = {}, chatHistory = [], apiKey, model = null) => {
-    if (!apiKey) {
-        throw new Error("API Key is missing.");
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) {
+        throw new Error("API Key is missing. Please configure it in AI Settings.");
     }
 
     // Build context summary from measurement data
@@ -285,11 +303,9 @@ ${elementList}
 
     console.log('AI Chat Request:', { userMessage, context: contextSummary });
 
-    console.log('AI Chat Request:', { userMessage, context: contextSummary });
-
     try {
         if (provider === 'gemini') {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`, {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${keyToUse}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -316,7 +332,7 @@ ${elementList}
             return aiResponse;
         } else {
             // OpenAI Compatible Chat
-            return await callOpenAICompatible(prompt, apiKey, model, baseUrl);
+            return await callOpenAICompatible(prompt, keyToUse, model, baseUrl);
         }
 
     } catch (error) {
@@ -331,6 +347,7 @@ ${elementList}
 const callAIProvider = async (prompt, apiKey, specificModel = null, expectJson = true) => {
     const provider = localStorage.getItem('ai_provider') || 'gemini';
     const baseUrl = localStorage.getItem('ai_base_url') || '';
+    const keyToUse = getStoredApiKey(apiKey);
 
     // Default models if not specified
     let model = specificModel;
@@ -339,9 +356,9 @@ const callAIProvider = async (prompt, apiKey, specificModel = null, expectJson =
     }
 
     if (provider === 'gemini') {
-        return await callGemini(prompt, apiKey, model, expectJson);
+        return await callGemini(prompt, keyToUse, model, expectJson);
     } else {
-        return await callOpenAICompatible(prompt, apiKey, model, baseUrl, expectJson);
+        return await callOpenAICompatible(prompt, keyToUse, model, baseUrl, expectJson);
     }
 };
 
@@ -350,6 +367,7 @@ const callAIProvider = async (prompt, apiKey, specificModel = null, expectJson =
  */
 const callOpenAICompatible = async (prompt, apiKey, model, baseUrl, expectJson = true) => {
     const url = baseUrl ? `${baseUrl}/chat/completions` : 'https://api.openai.com/v1/chat/completions';
+    const keyToUse = getStoredApiKey(apiKey);
 
     console.log(`Calling OpenAI Compatible API: ${url} with model ${model}`);
 
@@ -358,7 +376,7 @@ const callOpenAICompatible = async (prompt, apiKey, model, baseUrl, expectJson =
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${keyToUse}`
             },
             body: JSON.stringify({
                 model: model,
@@ -412,10 +430,11 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
     // Otherwise, fallback to the list of stable models.
     const models = specificModel ? [specificModel] : ['gemini-1.5-flash', 'gemini-1.5-pro'];
     let lastError = null;
+    const keyToUse = getStoredApiKey(apiKey);
 
     for (const model of models) {
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

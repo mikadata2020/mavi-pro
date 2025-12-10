@@ -7,7 +7,6 @@ function KaizenReportDialog({ isOpen, onClose, projectData }) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [reportContent, setReportContent] = useState('');
     const [error, setError] = useState(null);
-    const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
     const [language, setLanguage] = useState('English');
 
     const languages = [
@@ -27,17 +26,12 @@ function KaizenReportDialog({ isOpen, onClose, projectData }) {
     }, [isOpen]);
 
     const handleGenerate = async () => {
-        if (!apiKey) {
-            setError("API Key is missing. Please configure it in Settings.");
-            return;
-        }
-
         setIsGenerating(true);
         setError(null);
         setReportContent('');
 
         try {
-            const report = await generateKaizenReport(projectData, apiKey, null, language);
+            const report = await generateKaizenReport(projectData, undefined, null, language);
             setReportContent(report);
         } catch (err) {
             console.error("Report generation failed:", err);

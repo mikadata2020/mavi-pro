@@ -92,12 +92,32 @@ const StepEditor = ({ step, onChange, onCaptureImage, onAiImprove, onAiGenerate,
                     <div style={{ padding: '40px' }}>
                         <div style={{ fontSize: '2rem', marginBottom: '10px' }}>🖼️</div>
                         <p style={{ color: '#888' }}>Drag and drop media here or</p>
-                        <button
-                            onClick={onCaptureImage}
-                            style={{ padding: '8px 16px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                            Capture from Video
-                        </button>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                            <button
+                                onClick={onCaptureImage}
+                                style={{ padding: '8px 16px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                                📷 Capture
+                            </button>
+                            <label style={{ padding: '8px 16px', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', display: 'inline-block' }}>
+                                📂 Upload
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => {
+                                        const file = e.target.files[0];
+                                        if (file) {
+                                            const reader = new FileReader();
+                                            reader.onload = (event) => {
+                                                handleChange('media', { type: 'image', url: event.target.result });
+                                            };
+                                            reader.readAsDataURL(file);
+                                        }
+                                    }}
+                                />
+                            </label>
+                        </div>
                     </div>
                 )}
             </div>

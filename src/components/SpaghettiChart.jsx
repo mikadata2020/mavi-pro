@@ -244,11 +244,7 @@ function SpaghettiChart({ currentProject, projectMeasurements }) {
             return;
         }
 
-        const apiKey = localStorage.getItem('gemini_api_key');
-        if (!apiKey) {
-            alert("Please configure your AI API Key in Settings first.");
-            return;
-        }
+
 
         setIsOptimizing(true);
 
@@ -275,7 +271,7 @@ function SpaghettiChart({ currentProject, projectMeasurements }) {
             console.log("Flow Data:", flowData);
             // 2. Call AI
             console.log("Calling AI...");
-            const optimizedNodes = await generateLayoutOptimization(nodes, flowData, apiKey);
+            const optimizedNodes = await generateLayoutOptimization(nodes, flowData);
             console.log("AI Response:", optimizedNodes);
 
             // 3. Update Nodes
