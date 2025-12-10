@@ -1008,19 +1008,33 @@ function ManualCreation() {
                                     }
                                 </div>
                             ) : (
-                                <>
-                                    <GuideHeader headerInfo={guide} onChange={(info) => setGuide(prev => ({ ...prev, ...info }))} />
-                                    <StepEditor
-                                        step={activeStep}
-                                        onChange={handleStepChange}
-                                        onCaptureImage={handleCaptureFrame}
-                                        onAiImprove={handleAiImprove}
-                                        onAiGenerate={handleAiGenerate}
-                                        isAiLoading={isAiLoading}
-                                        onVoiceDictate={handleVoiceDictate}
-                                        isVoiceListening={isVoiceListening}
-                                    />
-                                </>
+                                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                                    {/* Left: Step List */}
+                                    <div style={{ width: '250px', borderRight: '1px solid #333', overflowY: 'auto' }}>
+                                        <StepList
+                                            steps={guide.steps}
+                                            activeStepId={activeStepId}
+                                            onStepSelect={handleStepSelect}
+                                            onAddStep={handleAddStep}
+                                            onDeleteStep={handleDeleteStep}
+                                        />
+                                    </div>
+
+                                    {/* Center: Editor */}
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px' }}>
+                                        <GuideHeader headerInfo={guide} onChange={(info) => setGuide(prev => ({ ...prev, ...info }))} />
+                                        <StepEditor
+                                            step={activeStep}
+                                            onChange={handleStepChange}
+                                            onCaptureImage={handleCaptureFrame}
+                                            onAiImprove={handleAiImprove}
+                                            onAiGenerate={handleAiGenerate}
+                                            isAiLoading={isAiLoading}
+                                            onVoiceDictate={handleVoiceDictate}
+                                            isVoiceListening={isVoiceListening}
+                                        />
+                                    </div>
+                                </div>
                             )
                             }
                         </div >
@@ -1084,7 +1098,8 @@ function ManualCreation() {
                             </button>
                         </div>
                     </div>
-                )}
+                )
+            }
 
             {/* Open Manual Dialog */}
             {
@@ -1136,7 +1151,7 @@ function ManualCreation() {
                     </div>
                 )
             }
-        </div>
+        </div >
     );
 }
 
