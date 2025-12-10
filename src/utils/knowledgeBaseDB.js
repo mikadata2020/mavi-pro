@@ -85,7 +85,7 @@ export const addKnowledgeBaseItem = async (item) => {
                 });
             }
 
-            resolve(localId);
+            resolve({ id: localId, cloudId: cloudId });
         };
         request.onerror = () => reject(request.error);
     });

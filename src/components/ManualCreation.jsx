@@ -157,8 +157,10 @@ function ManualCreation() {
                 await updateKnowledgeBaseItem(guide.kbId, manualData);
                 alert('Manual updated successfully!');
             } else {
-                const newId = await addKnowledgeBaseItem(manualData);
-                setGuide(prev => ({ ...prev, kbId: newId }));
+                const result = await addKnowledgeBaseItem(manualData);
+                // result is { id, cloudId }
+                setGuide(prev => ({ ...prev, kbId: result.id, cloudId: result.cloudId, id: result.cloudId }));
+                // We update main 'id' to cloudId as well, as that's what we use for external refs
                 alert('Manual saved to Knowledge Base!');
             }
         } catch (error) {
