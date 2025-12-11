@@ -4,9 +4,10 @@
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 
 const DB_NAME = 'MotionAnalysisDB';
-const DB_VERSION = 2; // Updated version for projects
+const DB_VERSION = 3; // Updated version for folders
 const STORE_NAME = 'measurements';
 const PROJECTS_STORE = 'projects';
+const FOLDERS_STORE = 'folders';
 
 // Supabase table names
 const SUPABASE_PROJECTS_TABLE = 'projects';
@@ -22,6 +23,7 @@ export const initDB = () => {
 
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
+            const transaction = event.target.transaction;
 
             // Create measurements store if not exists
             if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -36,6 +38,21 @@ export const initDB = () => {
                 projectStore.createIndex('projectName', 'projectName', { unique: true });
                 projectStore.createIndex('createdAt', 'createdAt', { unique: false });
                 projectStore.createIndex('lastModified', 'lastModified', { unique: false });
+            }
+
+            // Version 3: Projects Folder Support
+            if (transaction) {
+                const projectStore = transaction.objectStore(PROJECTS_STORE);
+                if (!projectStore.indexNames.contains('folderId')) {
+                    projectStore.createIndex('folderId', 'folderId', { unique: false });
+                }
+            }
+
+            // Create folders store
+            if (!db.objectStoreNames.contains(FOLDERS_STORE)) {
+                const folderStore = db.createObjectStore(FOLDERS_STORE, { keyPath: 'id', autoIncrement: true });
+                folderStore.createIndex('parentId', 'parentId', { unique: false });
+                folderStore.createIndex('section', 'section', { unique: false }); // 'projects' or 'manuals'
             }
         };
     });

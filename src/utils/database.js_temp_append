@@ -1,0 +1,136 @@
+
+// ===== FOLDER MANAGEMENT FUNCTIONS =====
+
+// Create a new folder
+export const createFolder = async (name, section = 'projects', parentId = null) => {
+    const db = await initDB();
+    const FOLDERS_STORE = 'folders';
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([FOLDERS_STORE], 'readwrite');
+        const store = transaction.objectStore(FOLDERS_STORE);
+
+        const folder = {
+            name,
+            section, // 'projects' or 'manuals'
+            parentId,
+            createdAt: new Date().toISOString()
+        };
+
+        const request = store.add(folder);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+// Get folders by parentId and section
+export const getFolders = async (section, parentId = null) => {
+    const db = await initDB();
+    const FOLDERS_STORE = 'folders';
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([FOLDERS_STORE], 'readonly');
+        const store = transaction.objectStore(FOLDERS_STORE);
+        const index = store.index('section');
+        // We get all for section then filter by parentId in JS for simplicity usually, or use compound key.
+        // IndexedDB filtering is basic. Let's get all and filter or use cursor.
+        // For small number of folders, getting all is fine.
+        
+        const request = index.getAll(section);
+
+        request.onsuccess = () => {
+             const allSectionFolders = request.result;
+             // Filter by parentId (ensure null vs undefined handling matches)
+             const filtered = allSectionFolders.filter(f => {
+                 if (parentId === null) return f.parentId === null || f.parentId === undefined;
+                 return f.parentId === parentId;
+             });
+             resolve(filtered);
+        };
+        request.onerror = () => reject(request.error);
+    });
+};
+
+// Get folder path (breadcrumbs)
+export const getFolderBreadcrumbs = async (folderId) => {
+     if (!folderId) return [];
+     const db = await initDB();
+     const FOLDERS_STORE = 'folders';
+     
+     const transaction = db.transaction([FOLDERS_STORE], 'readonly');
+     const store = transaction.objectStore(FOLDERS_STORE);
+     
+     const breadcrumbs = [];
+     let currentId = folderId;
+
+     // Iterative look up
+     while (currentId) {
+         try {
+             // We need to await request, but we are in a loop. 
+             // We can't await inside non-async transaction block easily without promisifying each get.
+             // Let's break out loop logic.
+             const folder = await new Promise((res, rej) => {
+                 const req = store.get(currentId);
+                 req.onsuccess = () => res(req.result);
+                 req.onerror = () => rej(req.error);
+             });
+             
+             if (folder) {
+                 breadcrumbs.unshift(folder);
+                 currentId = folder.parentId;
+             } else {
+                 break;
+             }
+         } catch (e) {
+             break;
+         }
+     }
+     return breadcrumbs;
+};
+
+// Delete folder (and optionally contents - for now simple delete, contents become orphans or move to root? 
+// Strategy: Move contents to Root used for safety)
+export const deleteFolder = async (folderId) => {
+    const db = await initDB();
+    const FOLDERS_STORE = 'folders';
+    const PROJECTS_STORE = 'projects';
+
+    // 1. Get Folder
+    // 2. Move contents to root (parentId = null) or delete? 
+    // Let's simpler: Move items to root.
+    
+    return new Promise(async (resolve, reject) => {
+        try {
+            const transaction = db.transaction([FOLDERS_STORE, PROJECTS_STORE], 'readwrite');
+            const folderStore = transaction.objectStore(FOLDERS_STORE);
+            const projectStore = transaction.objectStore(PROJECTS_STORE);
+
+            // Delete folder
+            folderStore.delete(folderId);
+
+            // Move projects in this folder to root
+            // Need index on projects by folderId to do this efficiently
+            const index = projectStore.index('folderId');
+            const request = index.getAll(folderId);
+            
+            request.onsuccess = () => {
+                const projects = request.result;
+                projects.forEach(p => {
+                    p.folderId = null;
+                    projectStore.put(p);
+                });
+            };
+            
+            // Also need to handle child folders? Reset their parentId to null
+            // We can't access same store for index cursor easily while modifying? 
+            // Actually transaction covers it.
+            // Let's implement child folder move in a separate step or just leave them (they become hidden if we only query by parentId?)
+            // If we query by parentId=null, they appear in root.
+            
+            resolve();
+        } catch (e) {
+            reject(e);
+        }
+    });
+};

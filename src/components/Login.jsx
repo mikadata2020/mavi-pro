@@ -1,28 +1,40 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
-// Hardcoded credentials
-const CREDENTIALS = {
-    username: 'admin',
-    password: 'mikadata'
-};
+function Login() {
+    const { signIn, signUp } = useAuth();
 
-function Login({ onLoginSuccess }) {
-    const [username, setUsername] = useState('');
+    // UI State
+    const [isSignUp, setIsSignUp] = useState(false);
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [message, setMessage] = useState('');
     const [showPassword, setShowPassword] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
+        setMessage('');
+        setLoading(true);
 
-        if (username === CREDENTIALS.username && password === CREDENTIALS.password) {
-            // Login successful
-            setError('');
-            onLoginSuccess();
-        } else {
-            // Login failed
-            setError('Username atau password salah!');
-            setPassword('');
+        try {
+            if (isSignUp) {
+                const { error } = await signUp(email, password);
+                if (error) throw error;
+                setMessage('Account created! Please check your email for verification.');
+                // Optionally switch to sign in mode
+                // setIsSignUp(false);
+            } else {
+                const { error } = await signIn(email, password);
+                if (error) throw error;
+                // onLoginSuccess handled by AuthContext listener in App.jsx
+            }
+        } catch (err) {
+            setError(err.message || 'An error occurred during authentication');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -59,13 +71,13 @@ function Login({ onLoginSuccess }) {
                         Motion Analysis
                     </h1>
                     <p style={{ color: '#888', margin: 0, fontSize: '0.9rem' }}>
-                        Silakan login untuk melanjutkan
+                        {isSignUp ? 'Create a new account' : 'Sign in to continue'}
                     </p>
                 </div>
 
                 {/* Login Form */}
                 <form onSubmit={handleSubmit}>
-                    {/* Username Field */}
+                    {/* Email Field */}
                     <div style={{ marginBottom: '20px' }}>
                         <label style={{
                             display: 'block',
@@ -74,14 +86,15 @@ function Login({ onLoginSuccess }) {
                             fontSize: '0.9rem',
                             fontWeight: '500'
                         }}>
-                            Username
+                            Email
                         </label>
                         <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            placeholder="Masukkan username"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="user@example.com"
                             autoFocus
+                            required
                             style={{
                                 width: '100%',
                                 padding: '12px',
@@ -114,7 +127,8 @@ function Login({ onLoginSuccess }) {
                                 type={showPassword ? 'text' : 'password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Masukkan password"
+                                placeholder="Enter password"
+                                required
                                 style={{
                                     width: '100%',
                                     padding: '12px',
@@ -145,14 +159,14 @@ function Login({ onLoginSuccess }) {
                                     fontSize: '1.2rem',
                                     padding: '5px'
                                 }}
-                                title={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                                title={showPassword ? 'Hide password' : 'Show password'}
                             >
                                 {showPassword ? '👁️' : '👁️‍🗨️'}
                             </button>
                         </div>
                     </div>
 
-                    {/* Error Message */}
+                    {/* Feedback Messages */}
                     {error && (
                         <div style={{
                             padding: '12px',
@@ -168,36 +182,85 @@ function Login({ onLoginSuccess }) {
                         </div>
                     )}
 
-                    {/* Login Button */}
+                    {message && (
+                        <div style={{
+                            padding: '12px',
+                            backgroundColor: 'rgba(50, 205, 50, 0.15)',
+                            border: '1px solid #32cd32',
+                            borderRadius: '6px',
+                            color: '#32cd32',
+                            marginBottom: '20px',
+                            fontSize: '0.9rem',
+                            textAlign: 'center'
+                        }}>
+                            ✅ {message}
+                        </div>
+                    )}
+
+                    {/* Submit Button */}
                     <button
                         type="submit"
+                        disabled={loading}
                         style={{
                             width: '100%',
                             padding: '14px',
-                            backgroundColor: 'var(--accent-blue)',
+                            backgroundColor: loading ? '#444' : 'var(--accent-blue)',
                             color: 'white',
                             border: 'none',
                             borderRadius: '6px',
                             fontSize: '1rem',
                             fontWeight: 'bold',
-                            cursor: 'pointer',
+                            cursor: loading ? 'not-allowed' : 'pointer',
                             transition: 'all 0.2s',
-                            boxShadow: '0 4px 12px rgba(74, 158, 255, 0.3)'
+                            boxShadow: loading ? 'none' : '0 4px 12px rgba(74, 158, 255, 0.3)',
+                            opacity: loading ? 0.7 : 1
                         }}
                         onMouseEnter={(e) => {
-                            e.target.style.backgroundColor = '#3a8aff';
-                            e.target.style.transform = 'translateY(-2px)';
-                            e.target.style.boxShadow = '0 6px 16px rgba(74, 158, 255, 0.4)';
+                            if (!loading) {
+                                e.target.style.backgroundColor = '#3a8aff';
+                                e.target.style.transform = 'translateY(-2px)';
+                                e.target.style.boxShadow = '0 6px 16px rgba(74, 158, 255, 0.4)';
+                            }
                         }}
                         onMouseLeave={(e) => {
-                            e.target.style.backgroundColor = 'var(--accent-blue)';
-                            e.target.style.transform = 'translateY(0)';
-                            e.target.style.boxShadow = '0 4px 12px rgba(74, 158, 255, 0.3)';
+                            if (!loading) {
+                                e.target.style.backgroundColor = 'var(--accent-blue)';
+                                e.target.style.transform = 'translateY(0)';
+                                e.target.style.boxShadow = '0 4px 12px rgba(74, 158, 255, 0.3)';
+                            }
                         }}
                     >
-                        Login
+                        {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Sign In')}
                     </button>
                 </form>
+
+                {/* Toggle Mode */}
+                <div style={{
+                    marginTop: '20px',
+                    textAlign: 'center',
+                    borderTop: '1px solid #333',
+                    paddingTop: '20px'
+                }}>
+                    <button
+                        onClick={() => {
+                            setIsSignUp(!isSignUp);
+                            setError('');
+                            setMessage('');
+                        }}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent-blue)',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem',
+                            textDecoration: 'underline'
+                        }}
+                    >
+                        {isSignUp
+                            ? 'Already have an account? Sign In'
+                            : 'Don\'t have an account? Sign Up'}
+                    </button>
+                </div>
 
                 {/* Footer Info */}
                 <div style={{

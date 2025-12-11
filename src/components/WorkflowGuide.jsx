@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { ChevronRight, CheckCircle, Circle } from 'lucide-react';
 
-const WorkflowGuide = ({ onNavigate }) => {
+import { useNavigate } from 'react-router-dom';
+
+const WorkflowGuide = () => {
+    const navigate = useNavigate();
     const [completedSteps, setCompletedSteps] = useState([]);
     const [selectedStep, setSelectedStep] = useState(null);
 
@@ -368,37 +371,37 @@ const WorkflowGuide = ({ onNavigate }) => {
                                                         onClick={() => {
                                                             const viewMap = {
                                                                 // Step 1: Upload Video
-                                                                'Video Workspace': 'dashboard',
-                                                                'IP Camera Connect': 'dashboard',
-                                                                'Video Recorder': 'dashboard',
+                                                                'Video Workspace': '/',
+                                                                'IP Camera Connect': '/',
+                                                                'Video Recorder': '/',
 
                                                                 // Step 2: Element Editor
-                                                                'Timeline Measurement': 'dashboard',
-                                                                'Voice Commands': 'dashboard',
-                                                                'Auto Cycle Detection': 'dashboard',
+                                                                'Timeline Measurement': '/',
+                                                                'Voice Commands': '/',
+                                                                'Auto Cycle Detection': '/',
 
                                                                 // Step 3: AI Analysis
-                                                                'Action Recognition': 'action-recognition',
-                                                                'ML Data': 'ml-data',
-                                                                'Ergonomic Analysis': 'dashboard',
-                                                                'Object Tracking': 'object-tracking',
+                                                                'Action Recognition': '/action-recognition',
+                                                                'ML Data': '/ml-data',
+                                                                'Ergonomic Analysis': '/',
+                                                                'Object Tracking': '/object-tracking',
 
                                                                 // Step 4: Analysis
-                                                                'Analysis Dashboard': 'analysis',
-                                                                'Waste Elimination': 'waste-elimination',
-                                                                'Statistical Analysis': 'statistical-analysis',
+                                                                'Analysis Dashboard': '/analysis',
+                                                                'Waste Elimination': '/waste-elimination',
+                                                                'Statistical Analysis': '/statistical-analysis',
 
                                                                 // Step 5: Manual Creation
-                                                                'Manual Creation': 'manual-creation',
-                                                                'AI Generate': 'manual-creation',
-                                                                'Voice Dictation': 'manual-creation',
+                                                                'Manual Creation': '/manual-creation',
+                                                                'AI Generate': '/manual-creation',
+                                                                'Voice Dictation': '/manual-creation',
 
                                                                 // Step 6: Knowledge Base
-                                                                'Knowledge Base': 'knowledge-base',
-                                                                'Template Upload': 'knowledge-base'
+                                                                'Knowledge Base': '/knowledge-base',
+                                                                'Template Upload': '/knowledge-base'
                                                             };
-                                                            const view = viewMap[feature];
-                                                            if (view && onNavigate) onNavigate(view);
+                                                            const path = viewMap[feature];
+                                                            if (path) navigate(path);
                                                         }}
                                                         style={{
                                                             padding: '10px 16px',

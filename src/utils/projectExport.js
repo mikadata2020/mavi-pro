@@ -2,58 +2,53 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 
 // Export project as ZIP file
+// Generate ZIP blob for a project
+export const generateProjectZip = async (project) => {
+    if (!project) throw new Error('No project data provided');
+    // Allow export even without videoBlob for metadata-only projects if needed, 
+    // but current logic enforces it. Keeping enforcement for now.
+    if (!project.videoBlob) throw new Error('Video blob not found in project');
+
+    const zip = new JSZip();
+
+    // Add project metadata
+    zip.file('project.json', JSON.stringify({
+        projectName: project.projectName,
+        videoName: project.videoName,
+        createdAt: project.createdAt,
+        lastModified: project.lastModified
+    }, null, 2));
+
+    // Add measurements data
+    zip.file('measurements.json', JSON.stringify(project.measurements || [], null, 2));
+
+    // Add narration data if exists
+    if (project.narration) {
+        zip.file('narration.json', JSON.stringify(project.narration, null, 2));
+    }
+
+    // Add video file
+    zip.file(project.videoName, project.videoBlob);
+
+    // Generate ZIP blob
+    return await zip.generateAsync({
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 }
+    });
+};
+
+// Export project as ZIP file
 export const exportProject = async (project) => {
     try {
         console.log('Starting export for project:', project.projectName);
-
-        if (!project) {
-            throw new Error('No project data provided');
-        }
-
-        if (!project.videoBlob) {
-            throw new Error('Video blob not found in project');
-        }
-
-        const zip = new JSZip();
-
-        // Add project metadata
-        zip.file('project.json', JSON.stringify({
-            projectName: project.projectName,
-            videoName: project.videoName,
-            createdAt: project.createdAt,
-            lastModified: project.lastModified
-        }, null, 2));
-
-        // Add measurements data
-        zip.file('measurements.json', JSON.stringify(project.measurements || [], null, 2));
-
-        // Add narration data if exists
-        if (project.narration) {
-            zip.file('narration.json', JSON.stringify(project.narration, null, 2));
-        }
-
-        // Add video file
-        console.log('Adding video file:', project.videoName);
-        zip.file(project.videoName, project.videoBlob);
-
-        // Generate ZIP blob
-        console.log('Generating ZIP file...');
-        const blob = await zip.generateAsync({
-            type: 'blob',
-            compression: 'DEFLATE',
-            compressionOptions: { level: 6 }
-        });
-
-        console.log('ZIP generated, size:', blob.size, 'bytes');
-
-        // Download using FileSaver.js
+        const blob = await generateProjectZip(project);
         const fileName = `${project.projectName}.zip`;
+
         console.log('Downloading file:', fileName);
         saveAs(blob, fileName);
 
         console.log('Export completed successfully');
-
-        // Show message
         alert(`Export selesai!\n\nFile: ${fileName}\nUkuran: ${(blob.size / 1024 / 1024).toFixed(2)} MB\n\nCek folder Downloads Anda.`);
 
         return true;

@@ -1,49 +1,89 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 import SessionManager from './components/SessionManager';
 import VideoWorkspace from './components/VideoWorkspace';
 import Header from './components/Header';
-import AnalysisDashboard from './components/AnalysisDashboard';
-import ElementRearrangement from './components/ElementRearrangement';
-import CycleTimeAnalysis from './components/CycleTimeAnalysis';
-import CycleAggregation from './components/CycleAggregation';
-import StandardTime from './components/StandardTime';
-import WasteElimination from './components/WasteElimination';
-import BestWorstCycle from './components/BestWorstCycle';
-import VideoComparison from './components/VideoComparison';
-import Help from './components/Help';
-import TherbligAnalysis from './components/TherbligAnalysis';
 import NewProjectDialog from './components/NewProjectDialog';
 import OpenProjectDialog from './components/OpenProjectDialog';
 import Login from './components/Login';
-import StandardWorkCombinationSheet from './components/StandardWorkCombinationSheet';
-import StatisticalAnalysis from './components/StatisticalAnalysis';
-import MTMCalculator from './components/MTMCalculator';
-import AllowanceCalculator from './components/AllowanceCalculator';
-import YamazumiChart from './components/YamazumiChart';
-import MultiAxialAnalysis from './components/MultiAxialAnalysis';
-import MultiCameraFusion from './components/MultiCameraFusion';
-import ManualCreation from './components/ManualCreation';
-import VRTrainingMode from './components/VRTrainingMode';
-import KnowledgeBase from './components/KnowledgeBase';
-import ObjectTracking from './components/ObjectTracking';
-import PredictiveMaintenance from './components/PredictiveMaintenance';
-import BroadcastManager from './components/features/BroadcastManager';
-import BroadcastViewer from './components/features/BroadcastViewer';
 import CollaborationOverlay from './components/features/CollaborationOverlay';
 import BroadcastControls from './components/features/BroadcastControls';
-import MachineLearningData from './components/MachineLearningData';
-import ActionRecognition from './components/ActionRecognition';
-import SpaghettiChart from './components/SpaghettiChart';
-import WorkflowGuide from './components/WorkflowGuide';
-import FileExplorer from './components/FileExplorer';
 import { saveProject, getProjectByName, updateProject } from './utils/database';
 import { importProject } from './utils/projectExport';
 import StreamHandler from './utils/streamHandler';
 import { LanguageProvider } from './i18n/LanguageContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './index.css';
 
-function App() {
-  const [currentView, setCurrentView] = useState('workflow-guide');
+// Lazy load components
+const AnalysisDashboard = React.lazy(() => import('./components/AnalysisDashboard'));
+const ElementRearrangement = React.lazy(() => import('./components/ElementRearrangement'));
+const CycleTimeAnalysis = React.lazy(() => import('./components/CycleTimeAnalysis'));
+const CycleAggregation = React.lazy(() => import('./components/CycleAggregation'));
+const StandardTime = React.lazy(() => import('./components/StandardTime'));
+const WasteElimination = React.lazy(() => import('./components/WasteElimination'));
+const BestWorstCycle = React.lazy(() => import('./components/BestWorstCycle'));
+const VideoComparison = React.lazy(() => import('./components/VideoComparison'));
+const Help = React.lazy(() => import('./components/Help'));
+const TherbligAnalysis = React.lazy(() => import('./components/TherbligAnalysis'));
+const StandardWorkCombinationSheet = React.lazy(() => import('./components/StandardWorkCombinationSheet'));
+const StatisticalAnalysis = React.lazy(() => import('./components/StatisticalAnalysis'));
+const MTMCalculator = React.lazy(() => import('./components/MTMCalculator'));
+const AllowanceCalculator = React.lazy(() => import('./components/AllowanceCalculator'));
+const YamazumiChart = React.lazy(() => import('./components/YamazumiChart'));
+const MultiAxialAnalysis = React.lazy(() => import('./components/MultiAxialAnalysis'));
+const MultiCameraFusion = React.lazy(() => import('./components/MultiCameraFusion'));
+const ManualCreation = React.lazy(() => import('./components/ManualCreation'));
+const VRTrainingMode = React.lazy(() => import('./components/VRTrainingMode'));
+const KnowledgeBase = React.lazy(() => import('./components/KnowledgeBase'));
+const ObjectTracking = React.lazy(() => import('./components/ObjectTracking'));
+const PredictiveMaintenance = React.lazy(() => import('./components/PredictiveMaintenance'));
+const BroadcastManager = React.lazy(() => import('./components/features/BroadcastManager'));
+const BroadcastViewer = React.lazy(() => import('./components/features/BroadcastViewer'));
+const MachineLearningData = React.lazy(() => import('./components/MachineLearningData'));
+const ActionRecognition = React.lazy(() => import('./components/ActionRecognition'));
+const SpaghettiChart = React.lazy(() => import('./components/SpaghettiChart'));
+const WorkflowGuide = React.lazy(() => import('./components/WorkflowGuide'));
+const FileExplorer = React.lazy(() => import('./components/FileExplorer'));
+const PublicManualViewer = React.lazy(() => import('./components/PublicManualViewer'));
+
+// Loading component
+const LoadingSpinner = () => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
+    width: '100%',
+    color: 'var(--text-secondary)',
+    flexDirection: 'column',
+    gap: '15px'
+  }}>
+    <div className="spinner" style={{
+      width: '40px',
+      height: '40px',
+      border: '4px solid rgba(255,255,255,0.1)',
+      borderLeftColor: 'var(--accent-blue)',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    }}></div>
+    <div>Loading...</div>
+    <style>{`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+  </div>
+);
+
+function AppContent() {
+  const { user, signOut } = useAuth();
+  const isAuthenticated = !!user;
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [showSessionManager, setShowSessionManager] = useState(false);
   const [measurements, setMeasurements] = useState([]);
@@ -68,31 +108,22 @@ function App() {
   const [qrManualId, setQrManualId] = useState(null);
 
   useEffect(() => {
-    // Check for "watch" query param
     const params = new URLSearchParams(window.location.search);
     const watchId = params.get('watch');
     if (watchId) {
       setWatchRoomId(watchId);
     }
 
-    // Check for manual route from QR code scan (e.g., /#/manual/abc123?doc=...&title=...)
     const hash = window.location.hash;
     if (hash.startsWith('#/manual/')) {
-      const manualPath = hash.substring(9); // Remove "#/manual/"
-      const [manualId, queryString] = manualPath.split('?');
+      const manualPath = hash.substring(9);
+      const [manualId] = manualPath.split('?');
       if (manualId) {
         setQrManualId(manualId);
-        setCurrentView('knowledge-base');
-        // Clear hash after processing
-        window.history.replaceState(null, '', window.location.pathname);
+        navigate('/knowledge-base');
       }
     }
-  }, []);
-
-  // Authentication state
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('isAuthenticated') === 'true';
-  });
+  }, [navigate]);
 
   // Project management state
   const [currentProject, setCurrentProject] = useState(null);
@@ -109,44 +140,30 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   };
 
-  const handleFeatureSelect = (category, feature) => {
-    if (feature === 'Standard Work Combination Sheet') {
-      setCurrentView('swcs');
-      return;
-    }
-    setSelectedFeature({ category, feature });
-  };
-
   const handleLoadSession = (session) => {
     setMeasurements(session.measurements);
-    setCurrentView('dashboard');
+    navigate('/');
   };
 
-  // Authentication handlers
   const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-    sessionStorage.setItem('isAuthenticated', 'true');
+    navigate('/workflow-guide');
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    sessionStorage.removeItem('isAuthenticated');
-    // Reset application state
+  const handleLogout = async () => {
+    await signOut();
     setCurrentProject(null);
     setMeasurements([]);
     setVideoSrc(null);
     setVideoName('');
-    setCurrentView('dashboard');
+    navigate('/');
   };
 
-  // Load video from Knowledge Base
   const handleLoadVideoFromKB = (videoUrl, videoTitle) => {
     setVideoSrc(videoUrl);
     setVideoName(videoTitle || 'Knowledge Base Video');
-    setCurrentView('dashboard'); // Show VideoWorkspace
+    navigate('/');
   };
 
-  // Project management handlers
   const handleNewProject = async (projectName, videoFile) => {
     try {
       const videoBlob = new Blob([await videoFile.arrayBuffer()], { type: videoFile.type });
@@ -157,7 +174,7 @@ function App() {
       setVideoName(videoFile.name);
       setMeasurements([]);
       setShowNewProjectDialog(false);
-      setCurrentView('dashboard');
+      navigate('/');
     } catch (error) {
       console.error('Error creating project:', error);
       alert('Gagal membuat proyek: ' + error.message);
@@ -177,7 +194,7 @@ function App() {
       setVideoName(project.videoName);
       setMeasurements(project.measurements || []);
       setShowOpenProjectDialog(false);
-      setCurrentView('dashboard');
+      navigate('/');
     } catch (error) {
       console.error('Error opening project:', error);
       alert('Gagal membuka proyek: ' + error.message);
@@ -203,16 +220,12 @@ function App() {
   const handleImportProject = async (zipFile) => {
     try {
       const projectData = await importProject(zipFile);
-
-      // Check if project name already exists
       const existing = await getProjectByName(projectData.projectName);
       if (existing) {
         const newName = prompt('Proyek sudah ada. Masukkan nama baru:', projectData.projectName + ' (imported)');
         if (!newName) return;
         projectData.projectName = newName;
       }
-
-      // Save to IndexedDB
       await saveProject(
         projectData.projectName,
         projectData.videoBlob,
@@ -220,8 +233,6 @@ function App() {
         projectData.measurements,
         projectData.narration
       );
-
-      // Load project
       handleOpenProject(projectData.projectName);
     } catch (error) {
       console.error('Error importing project:', error);
@@ -229,10 +240,8 @@ function App() {
     }
   };
 
-  // Auto-save project when measurements change
   useEffect(() => {
     if (!currentProject) return;
-
     const saveTimer = setTimeout(async () => {
       try {
         await updateProject(currentProject.name, {
@@ -242,8 +251,7 @@ function App() {
       } catch (error) {
         console.error('Error auto-saving project:', error);
       }
-    }, 1000); // Debounce 1 second
-
+    }, 1000);
     return () => clearTimeout(saveTimer);
   }, [measurements, currentProject]);
 
@@ -276,22 +284,21 @@ function App() {
   };
 
   if (watchRoomId) {
-    return <BroadcastViewer roomId={watchRoomId} onClose={() => setWatchRoomId(null)} />;
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <BroadcastViewer roomId={watchRoomId} onClose={() => setWatchRoomId(null)} />
+      </Suspense>
+    );
   }
 
-  // Public Manual Viewer - accessible without login via QR code
   if (qrManualId) {
-    const PublicManualViewer = React.lazy(() => import('./components/PublicManualViewer'));
     return (
-      <React.Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f5f5f5' }}><p>Loading...</p></div>}>
+      <Suspense fallback={<LoadingSpinner />}>
         <PublicManualViewer
           manualId={qrManualId}
-          onClose={() => {
-            setQrManualId(null);
-            // Don't require login, just show login page
-          }}
+          onClose={() => setQrManualId(null)}
         />
-      </React.Suspense>
+      </Suspense>
     );
   }
 
@@ -299,272 +306,187 @@ function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
 
+  const isDashboard = location.pathname === '/';
+
   return (
-    <LanguageProvider>
-      <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        <CollaborationOverlay cursor={remoteCursor} lastDrawingAction={lastDrawingAction} />
+    <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <CollaborationOverlay cursor={remoteCursor} lastDrawingAction={lastDrawingAction} />
 
-        {/* Global Broadcast Controls */}
-        <BroadcastControls
-          isBroadcasting={isBroadcasting}
-          isMuted={isMuted}
-          onToggleMute={handleToggleMute}
-          chatMessages={chatMessages}
-          onSendMessage={handleSendMessage}
-          onStopBroadcast={handleStopBroadcast}
-          userName="Host"
-        />
+      <BroadcastControls
+        isBroadcasting={isBroadcasting}
+        isMuted={isMuted}
+        onToggleMute={handleToggleMute}
+        chatMessages={chatMessages}
+        onSendMessage={handleSendMessage}
+        onStopBroadcast={handleStopBroadcast}
+        userName={user?.email || "Host"}
+      />
 
-        <button
-          className="sidebar-toggle"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+      <button
+        className="sidebar-toggle"
+        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        style={{
+          position: 'absolute',
+          right: sidebarCollapsed ? '10px' : '70px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          background: 'var(--bg-secondary)',
+          border: '1px solid var(--border-color)',
+          color: 'var(--text-primary)',
+          borderRadius: '50%',
+          width: '30px',
+          height: '30px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          fontSize: '1.2rem',
+          zIndex: 1001,
+          transition: 'right 0.3s ease',
+          boxShadow: '-2px 0 8px rgba(0,0,0,0.3)'
+        }}
+        title={sidebarCollapsed ? 'Show Menu' : 'Hide Menu'}
+      >
+        {sidebarCollapsed ? '◀' : '▶'}
+      </button>
+
+      <div className="main-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* Persistent VideoWorkspace - hidden when not on dashboard */}
+        <div
+          className="workspace-area"
           style={{
-            position: 'absolute',
-            right: sidebarCollapsed ? '10px' : '70px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-            color: 'var(--text-primary)',
-            borderRadius: '50%',
-            width: '30px',
-            height: '30px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '1.2rem',
-            zIndex: 1001,
-            transition: 'right 0.3s ease',
-            boxShadow: '-2px 0 8px rgba(0,0,0,0.3)'
+            flex: 1,
+            display: isDashboard ? 'flex' : 'none',
+            flexDirection: 'column',
+            padding: '10px',
+            gap: '10px'
           }}
-          title={sidebarCollapsed ? 'Show Menu' : 'Hide Menu'}
         >
-          {sidebarCollapsed ? '◀' : '▶'}
-        </button>
-
-        <div className="main-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* VideoWorkspace - Always rendered but hidden when not in dashboard */}
-          <div
-            className="workspace-area"
-            style={{
-              flex: 1,
-              display: currentView === 'dashboard' ? 'flex' : 'none',
-              flexDirection: 'column',
-              padding: '10px',
-              gap: '10px'
-            }}
-          >
-            <VideoWorkspace
-              measurements={measurements}
-              onUpdateMeasurements={setMeasurements}
-              videoSrc={videoSrc}
-              onVideoChange={setVideoSrc}
-              videoName={videoName}
-              onVideoNameChange={setVideoName}
-              currentProject={currentProject}
-              onNewProject={() => setShowNewProjectDialog(true)}
-              onOpenProject={() => setShowOpenProjectDialog(true)}
-              onExportProject={handleExportProject}
-              onImportProject={handleImportProject}
-              onLogout={handleLogout}
-            />
-          </div>
-
-          {/* Persistent BroadcastManager (Hidden when not in broadcast view) */}
-          <div style={{ display: currentView === 'broadcast' ? 'block' : 'none', flex: 1, padding: '10px', overflowY: 'auto' }}>
-            <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-              <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
-              <p style={{ color: 'var(--text-secondary)' }}>
-                Share your video stream with other devices in real-time.
-              </p>
-              <div style={{
-                padding: '15px',
-                backgroundColor: 'rgba(0, 120, 212, 0.1)',
-                border: '1px solid #0078d4',
-                borderRadius: '8px',
-                marginBottom: '15px',
-                color: 'var(--text-secondary)',
-                fontSize: '0.9rem'
-              }}>
-                💡 <strong>Tip:</strong> Make sure you have a video source active (file, webcam, or IP camera) before starting the broadcast.
-              </div>
-              <BroadcastManager
-                ref={broadcastManagerRef}
-                onRemoteInteraction={handleRemoteInteraction}
-                isBroadcasting={isBroadcasting}
-                setIsBroadcasting={setIsBroadcasting}
-                isMuted={isMuted}
-                setIsMuted={setIsMuted}
-                chatMessages={chatMessages}
-                setChatMessages={setChatMessages}
-              />
-            </div>
-          </div>
-
-
-          {currentView === 'analysis' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <AnalysisDashboard measurements={measurements} />
-            </div>
-          ) : currentView === 'rearrangement' ? (
-            <div style={{ flex: 1, padding: '10px', overflow: 'hidden' }}>
-              <ElementRearrangement measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} />
-            </div>
-          ) : currentView === 'cycle-analysis' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <CycleTimeAnalysis />
-            </div>
-          ) : currentView === 'swcs' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <StandardWorkCombinationSheet />
-            </div>
-          ) : currentView === 'aggregation' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <CycleAggregation measurements={measurements} />
-            </div>
-          ) : currentView === 'standard-time' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <StandardTime measurements={measurements} />
-            </div>
-          ) : currentView === 'waste-elimination' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <WasteElimination measurements={measurements} onUpdateMeasurements={setMeasurements} />
-            </div>
-          ) : currentView === 'best-worst' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <BestWorstCycle measurements={measurements} />
-            </div>
-          ) : currentView === 'video-comparison' ? (
-            <div style={{ flex: 1, padding: '10px', overflow: 'hidden' }}>
-              <VideoComparison />
-            </div>
-          ) : currentView === 'help' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <Help />
-            </div>
-          ) : currentView === 'spaghetti' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <TherbligAnalysis measurements={measurements} />
-            </div>
-          ) : currentView === 'statistical-analysis' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <StatisticalAnalysis measurements={measurements} />
-            </div>
-          ) : currentView === 'mtm-calculator' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <MTMCalculator />
-            </div>
-          ) : currentView === 'allowance-calculator' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <AllowanceCalculator />
-            </div>
-          ) : currentView === 'yamazumi' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <YamazumiChart measurements={measurements} />
-            </div>
-          ) : currentView === 'multi-axial' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <MultiAxialAnalysis />
-            </div>
-          ) : currentView === 'manual-creation' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <ManualCreation />
-            </div>
-          ) : currentView === 'ml-data' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <MachineLearningData videoSrc={videoSrc} />
-            </div>
-          ) : currentView === 'spaghetti-chart' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <SpaghettiChart
-                currentProject={currentProject}
-                projectMeasurements={measurements}
-              />
-            </div>
-          ) : currentView === 'multi-camera' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <MultiCameraFusion />
-            </div>
-          ) : currentView === 'vr-training' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <VRTrainingMode
-                measurements={measurements}
-                videoSrc={videoSrc}
-                videoName={videoName}
-                currentProject={currentProject}
-              />
-            </div>
-          ) : currentView === 'knowledge-base' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <KnowledgeBase onLoadVideo={handleLoadVideoFromKB} />
-            </div>
-          ) : currentView === 'action-recognition' ? (
-            <div style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
-              <ActionRecognition videoSrc={videoSrc} onActionsDetected={setMeasurements} />
-            </div>
-          ) : currentView === 'object-tracking' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <ObjectTracking
-                videoSrc={videoSrc}
-                measurements={measurements}
-                onUpdateMeasurements={setMeasurements}
-              />
-            </div>
-          ) : currentView === 'predictive-maintenance' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <PredictiveMaintenance
-                measurements={measurements}
-              />
-            </div>
-          ) : currentView === 'workflow-guide' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <WorkflowGuide onNavigate={(view) => setCurrentView(view)} />
-            </div>
-          ) : currentView === 'file-explorer' ? (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <FileExplorer onNavigate={(view) => setCurrentView(view)} />
-            </div>
-          ) : null}
+          <VideoWorkspace
+            measurements={measurements}
+            onUpdateMeasurements={setMeasurements}
+            videoSrc={videoSrc}
+            onVideoChange={setVideoSrc}
+            videoName={videoName}
+            onVideoNameChange={setVideoName}
+            currentProject={currentProject}
+            onNewProject={() => setShowNewProjectDialog(true)}
+            onOpenProject={() => setShowOpenProjectDialog(true)}
+            onExportProject={handleExportProject}
+            onImportProject={handleImportProject}
+            onLogout={handleLogout}
+          />
         </div>
 
-        <Header
-          videoName={videoName}
-          onUpload={(file) => {
-            const url = URL.createObjectURL(file);
-            setVideoSrc(url);
-            setVideoName(file.name);
-          }}
-          currentView={currentView}
-          setCurrentView={setCurrentView}
-          onOpenSessionManager={() => setShowSessionManager(true)}
-          theme={theme}
-          toggleTheme={toggleTheme}
-          sidebarCollapsed={sidebarCollapsed}
-        />
+        {/* Other Views Rendered via Routes with Lazy Loading */}
+        <div style={{ flex: 1, display: isDashboard ? 'none' : 'block', overflow: 'hidden' }}>
+          <Suspense fallback={<LoadingSpinner />}>
+            <Routes>
+              <Route path="/" element={null} /> {/* Handled by persistent div */}
+              <Route path="/analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AnalysisDashboard measurements={measurements} /></div>} />
+              <Route path="/rearrangement" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><ElementRearrangement measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} /></div>} />
+              <Route path="/cycle-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleTimeAnalysis /></div>} />
+              <Route path="/swcs" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardWorkCombinationSheet /></div>} />
+              <Route path="/aggregation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleAggregation measurements={measurements} /></div>} />
+              <Route path="/standard-time" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardTime measurements={measurements} /></div>} />
+              <Route path="/waste-elimination" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><WasteElimination measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
+              <Route path="/therblig" element={<div style={{ overflow: 'hidden', height: '100%' }}><TherbligAnalysis measurements={measurements} /></div>} />
+              <Route path="/statistical-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StatisticalAnalysis measurements={measurements} /></div>} />
+              <Route path="/mtm" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MTMCalculator /></div>} />
+              <Route path="/allowance" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AllowanceCalculator /></div>} />
+              <Route path="/best-worst" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><BestWorstCycle measurements={measurements} /></div>} />
+              <Route path="/yamazumi" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><YamazumiChart measurements={measurements} /></div>} />
+              <Route path="/multi-axial" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MultiAxialAnalysis /></div>} />
+              <Route path="/manual-creation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ManualCreation /></div>} />
+              <Route path="/spaghetti-chart" element={<div style={{ overflow: 'hidden', height: '100%' }}><SpaghettiChart currentProject={currentProject} projectMeasurements={measurements} /></div>} />
+              <Route path="/ml-data" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MachineLearningData videoSrc={videoSrc} /></div>} />
+              <Route path="/object-tracking" element={<div style={{ overflow: 'hidden', height: '100%' }}><ObjectTracking videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
+              <Route path="/predictive-maintenance" element={<div style={{ overflow: 'hidden', height: '100%' }}><PredictiveMaintenance measurements={measurements} /></div>} />
+              <Route path="/comparison" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><VideoComparison /></div>} />
+              <Route path="/help" element={<div style={{ overflow: 'hidden', height: '100%' }}><Help /></div>} />
+              <Route path="/multi-camera" element={<div style={{ overflow: 'hidden', height: '100%' }}><MultiCameraFusion /></div>} />
+              <Route path="/vr-training" element={<div style={{ overflow: 'hidden', height: '100%' }}><VRTrainingMode measurements={measurements} videoSrc={videoSrc} videoName={videoName} currentProject={currentProject} /></div>} />
+              <Route path="/knowledge-base" element={<div style={{ overflow: 'hidden', height: '100%' }}><KnowledgeBase onLoadVideo={handleLoadVideoFromKB} /></div>} />
+              <Route path="/broadcast" element={
+                <div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}>
+                  <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                    <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>Share your video stream with other devices in real-time.</p>
+                    <BroadcastManager
+                      ref={broadcastManagerRef}
+                      onRemoteInteraction={handleRemoteInteraction}
+                      isBroadcasting={isBroadcasting}
+                      setIsBroadcasting={setIsBroadcasting}
+                      isMuted={isMuted}
+                      setIsMuted={setIsMuted}
+                      chatMessages={chatMessages}
+                      setChatMessages={setChatMessages}
+                    />
+                  </div>
+                </div>
+              } />
+              <Route path="/action-recognition" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ActionRecognition videoSrc={videoSrc} onActionsDetected={setMeasurements} /></div>} />
 
-        {/* Session Manager Modal */}
-        {showSessionManager && (
-          <SessionManager
-            onLoadSession={handleLoadSession}
-            onClose={() => setShowSessionManager(false)}
-          />
-        )}
+              {/* Workflow Guide */}
+              <Route path="/workflow-guide" element={<div style={{ overflow: 'hidden', height: '100%' }}><WorkflowGuide /></div>} />
 
-        {/* Project Management Dialogs */}
-        <NewProjectDialog
-          isOpen={showNewProjectDialog}
-          onClose={() => setShowNewProjectDialog(false)}
-          onSubmit={handleNewProject}
-        />
+              {/* File Explorer */}
+              <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
 
-        <OpenProjectDialog
-          isOpen={showOpenProjectDialog}
-          onClose={() => setShowOpenProjectDialog(false)}
-          onOpenProject={handleOpenProject}
-        />
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </div>
       </div>
-    </LanguageProvider >
+
+      <Header
+        videoName={videoName}
+        onUpload={(file) => {
+          const url = URL.createObjectURL(file);
+          setVideoSrc(url);
+          setVideoName(file.name);
+        }}
+        onOpenSessionManager={() => setShowSessionManager(true)}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        sidebarCollapsed={sidebarCollapsed}
+      />
+
+      {showSessionManager && (
+        <SessionManager
+          onLoadSession={handleLoadSession}
+          onClose={() => setShowSessionManager(false)}
+        />
+      )}
+
+      <NewProjectDialog
+        isOpen={showNewProjectDialog}
+        onClose={() => setShowNewProjectDialog(false)}
+        onSubmit={handleNewProject}
+      />
+
+      <OpenProjectDialog
+        isOpen={showOpenProjectDialog}
+        onClose={() => setShowOpenProjectDialog(false)}
+        onOpenProject={handleOpenProject}
+      />
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <LanguageProvider>
+      <AuthProvider>
+        <ErrorBoundary>
+          <BrowserRouter>
+            <AppContent />
+          </BrowserRouter>
+        </ErrorBoundary>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }
 

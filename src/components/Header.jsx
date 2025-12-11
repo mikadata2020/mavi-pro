@@ -1,9 +1,42 @@
 import React, { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '../i18n/LanguageContext';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 
-function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessionManager, theme, toggleTheme, onLogout, sidebarCollapsed }) {
+const MENU_ITEMS = [
+    { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' }, // Moved to top
+    { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
+    { path: '/analysis', icon: '📊', labelKey: 'header.analysis' },
+    { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange' },
+    { path: '/cycle-analysis', icon: '📈', labelKey: 'header.cycleAnalysis' },
+    { path: '/aggregation', icon: 'Σ', labelKey: 'header.aggregation' },
+    { path: '/standard-time', icon: '⏱️', labelKey: 'header.standardTime' },
+    { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste' },
+    { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis' },
+    { path: '/statistical-analysis', icon: '📉', title: 'Statistical Analysis' },
+    { path: '/mtm', icon: '⏱️', title: 'MTM Calculator' },
+    { path: '/allowance', icon: '🔧', title: 'Allowance Calculator' },
+    { path: '/best-worst', icon: '🏆', labelKey: 'header.bestWorst' },
+    { path: '/yamazumi', icon: '🏔️', title: 'Yamazumi Chart' },
+    { path: '/multi-axial', icon: '📑', title: 'Multi-Axial Analysis' },
+    { path: '/manual-creation', icon: '📘', title: 'Manual Creation' },
+    { path: '/spaghetti-chart', icon: '🍝', title: 'Spaghetti Chart' },
+    { path: '/ml-data', icon: '🧠', title: 'Machine Learning Data' },
+    { path: '/object-tracking', icon: '📦', title: 'Object Detection & Tracking' },
+    { path: '/predictive-maintenance', icon: '🔮', title: 'Predictive Maintenance' },
+    { path: '/comparison', icon: '🎥', labelKey: 'header.comparison' },
+    { path: '/multi-camera', icon: '📹', title: 'Multi-Camera 3D Fusion' },
+    { path: '/vr-training', icon: '🥽', title: 'VR Training Mode' },
+    { path: '/knowledge-base', icon: '📚', title: 'Knowledge Base' },
+    { path: '/broadcast', icon: '📡', title: 'Broadcast' },
+    { path: '/action-recognition', icon: '🤖', title: 'Action Recognition' },
+    // { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide' }, // Moved
+    { path: '/files', icon: '📂', title: 'File Explorer' },
+    { path: '/help', icon: '❓', labelKey: 'header.help' },
+];
+
+function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme, onLogout, sidebarCollapsed }) {
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -26,610 +59,155 @@ function Header({ videoName, onUpload, currentView, setCurrentView, onOpenSessio
                 <h1 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--accent-blue)', writingMode: 'vertical-rl', textOrientation: 'mixed' }}>MAVi</h1>
             </div>
 
-            {setCurrentView && (
-                <div style={{
-                    display: sidebarCollapsed ? 'none' : 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                    alignItems: 'center',
-                    width: '100%',
-                    overflowY: 'auto',
-                    flex: 1,
-                    paddingBottom: '20px',
-                    scrollbarWidth: 'none', /* Firefox */
-                    msOverflowStyle: 'none'  /* IE and Edge */
-                }}>
-                    <style>
-                        {`
-                            header div::-webkit-scrollbar {
-                                display: none;
-                            }
-                        `}
-                    </style>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'dashboard' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('dashboard')}
-                        title={t('header.video')}
-                    >
-                        🎬
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'analysis' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('analysis')}
-                        title={t('header.analysis')}
-                    >
-                        📊
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'rearrangement' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('rearrangement')}
-                        title={t('header.rearrange')}
-                    >
-                        🔄
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'cycle-analysis' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('cycle-analysis')}
-                        title={t('header.cycleAnalysis')}
-                    >
-                        📈
-                    </button>
+            <div style={{
+                display: sidebarCollapsed ? 'none' : 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                alignItems: 'center',
+                width: '100%',
+                overflowY: 'auto',
+                flex: 1,
+                paddingBottom: '20px',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+            }}>
+                <style>
+                    {`
+                        header div::-webkit-scrollbar {
+                            display: none;
+                        }
+                    `}
+                </style>
 
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'aggregation' ? 'var(--accent-blue)' : '',
+                {MENU_ITEMS.map((item) => (
+                    <NavLink
+                        key={item.path}
+                        to={item.path}
+                        className={({ isActive }) => isNaN(isActive) ? "btn" : (`btn ${isActive ? 'active' : ''}`)}
+                        style={({ isActive }) => ({
+                            backgroundColor: isActive ? 'var(--accent-blue)' : '',
                             padding: '8px',
                             fontSize: '1.2rem',
                             width: '40px',
                             height: '40px',
                             display: 'flex',
                             justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('aggregation')}
-                        title={t('header.aggregation')}
+                            alignItems: 'center',
+                            color: 'white',
+                            textDecoration: 'none',
+                            borderRadius: '8px'
+                        })}
+                        title={item.labelKey ? t(item.labelKey) : item.title}
                     >
-                        Σ
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'standard-time' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('standard-time')}
-                        title={t('header.standardTime')}
-                    >
-                        ⏱️
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'waste-elimination' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('waste-elimination')}
-                        title={t('header.waste')}
-                    >
-                        🗑️
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'spaghetti' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('spaghetti')}
-                        title={t('header.therblig')}
-                    >
-                        📍
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'statistical-analysis' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('statistical-analysis')}
-                        title="Statistical Analysis"
-                    >
-                        📉
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'mtm-calculator' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('mtm-calculator')}
-                        title="MTM Calculator"
-                    >
-                        ⏱️
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'allowance-calculator' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('allowance-calculator')}
-                        title="Allowance Calculator"
-                    >
-                        🔧
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'best-worst' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('best-worst')}
-                        title={t('header.bestWorst')}
-                    >
-                        🏆
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'yamazumi' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('yamazumi')}
-                        title="Yamazumi Chart"
-                    >
-                        🏔️
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'multi-axial' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('multi-axial')}
-                        title="Multi-Axial Analysis"
-                    >
-                        📑
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'manual-creation' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('manual-creation')}
-                        title="Manual Creation"
-                    >
-                        📘
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'spaghetti-chart' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('spaghetti-chart')}
-                        title="Spaghetti Chart"
-                    >
-                        🍝
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'ml-data' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('ml-data')}
-                        title="Machine Learning Data"
-                    >
-                        🧠
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'object-tracking' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('object-tracking')}
-                        title="Object Detection & Tracking"
-                    >
-                        📦
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'predictive-maintenance' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('predictive-maintenance')}
-                        title="Predictive Maintenance (Fatigue)"
-                    >
-                        🔮
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'video-comparison' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('video-comparison')}
-                        title={t('header.comparison')}
-                    >
-                        🎥
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'multi-camera' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('multi-camera')}
-                        title="Multi-Camera 3D Fusion"
-                    >
-                        📹
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'vr-training' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('vr-training')}
-                        title="VR Training Mode"
-                    >
-                        🥽
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'knowledge-base' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('knowledge-base')}
-                        title="Knowledge Base & Best Practices"
-                    >
-                        📚
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'broadcast' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('broadcast')}
-                        title="Broadcast / Share Video"
-                    >
-                        📡
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'action-recognition' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('action-recognition')}
-                        title="Action Recognition - AI Auto-detect"
-                    >
-                        🤖
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'workflow-guide' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('workflow-guide')}
-                        title="Project Workflow Guide"
-                    >
-                        🚀
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'file-explorer' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('file-explorer')}
-                        title="File Explorer - Local Storage"
-                    >
-                        📂
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: currentView === 'help' ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => setCurrentView('help')}
-                        title={t('header.help')}
-                    >
-                        ❓
-                    </button>
-                    <button
-                        className="btn"
-                        onClick={toggleTheme}
-                        title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-                        style={{
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                    >
-                        {theme === 'dark' ? '☀️' : '🌙'}
-                    </button>
+                        {item.icon}
+                    </NavLink>
+                ))}
 
-                    <LanguageSelector />
+                <button
+                    className="btn"
+                    onClick={toggleTheme}
+                    title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+                    style={{
+                        padding: '8px',
+                        fontSize: '1.2rem',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                    }}
+                >
+                    {theme === 'dark' ? '☀️' : '🌙'}
+                </button>
 
-                    <div style={{ width: '30px', height: '1px', backgroundColor: '#555', margin: '5px 0' }}></div>
+                <LanguageSelector />
 
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: '#f80',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => document.getElementById('header-logo-upload')?.click()}
-                        title={t('header.uploadLogo')}
-                    >
-                        🎨
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: '#0a5',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => window.dispatchEvent(new CustomEvent('screenshot'))}
-                        title={t('header.screenshot')}
-                    >
-                        📸
-                    </button>
+                <div style={{ width: '30px', height: '1px', backgroundColor: '#555', margin: '5px 0' }}></div>
 
-                    <div style={{ width: '30px', height: '1px', backgroundColor: '#555', margin: '5px 0' }}></div>
+                <button
+                    className="btn"
+                    style={{
+                        backgroundColor: '#f80',
+                        padding: '8px',
+                        fontSize: '1.2rem',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                    }}
+                    onClick={() => document.getElementById('header-logo-upload')?.click()}
+                    title={t('header.uploadLogo')}
+                >
+                    🎨
+                </button>
+                <button
+                    className="btn"
+                    style={{
+                        backgroundColor: '#0a5',
+                        padding: '8px',
+                        fontSize: '1.2rem',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                    }}
+                    onClick={() => window.dispatchEvent(new CustomEvent('screenshot'))}
+                    title={t('header.screenshot')}
+                >
+                    📸
+                </button>
 
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: '#05a',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => window.dispatchEvent(new CustomEvent('export-json'))}
-                        title={t('header.exportData')}
-                    >
-                        💾
-                    </button>
-                    <button
-                        className="btn"
-                        style={{
-                            backgroundColor: '#0a5',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={onOpenSessionManager}
-                        title={t('header.sessions')}
-                    >
-                        📂
-                    </button>
-                    <input
-                        type="file"
-                        accept="image/*"
-                        id="header-logo-upload"
-                        style={{ display: 'none' }}
-                    />
-                </div>
-            )}
+                <div style={{ width: '30px', height: '1px', backgroundColor: '#555', margin: '5px 0' }}></div>
+
+                <button
+                    className="btn"
+                    style={{
+                        backgroundColor: '#05a',
+                        padding: '8px',
+                        fontSize: '1.2rem',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                    }}
+                    onClick={() => window.dispatchEvent(new CustomEvent('export-json'))}
+                    title={t('header.exportData')}
+                >
+                    💾
+                </button>
+                <button
+                    className="btn"
+                    style={{
+                        backgroundColor: '#0a5',
+                        padding: '8px',
+                        fontSize: '1.2rem',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center'
+                    }}
+                    onClick={onOpenSessionManager}
+                    title={t('header.sessions')}
+                >
+                    📂
+                </button>
+                <input
+                    type="file"
+                    accept="image/*"
+                    id="header-logo-upload"
+                    style={{ display: 'none' }}
+                />
+            </div>
 
             <GlobalSettingsDialog
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
             />
 
-            {/* Settings Button (Always visible at bottom or integrated) */}
             {!sidebarCollapsed && (
                 <div style={{ marginTop: 'auto', marginBottom: '10px' }}>
                     <button
