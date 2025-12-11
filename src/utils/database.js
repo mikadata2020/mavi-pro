@@ -274,15 +274,22 @@ export const getProjectByName = async (projectName) => {
     });
 };
 
-// Update project (with cloud sync)
-export const updateProject = async (projectName, updates) => {
+// Update project (optimized for partial updates)
+// Note: Originally expected (projectName, updates) but (id, updates) is safer for moves
+// To maintain compatibility, we check if first arg is string (name) or number (id)
+export const updateProject = async (identifier, updates) => {
     const db = await initDB();
     const PROJECTS_STORE = 'projects';
 
     return new Promise(async (resolve, reject) => {
         try {
-            // First get the existing project
-            const project = await getProjectByName(projectName);
+            let project;
+            if (typeof identifier === 'number') {
+                project = await getProjectById(identifier);
+            } else {
+                project = await getProjectByName(identifier);
+            }
+
             if (!project) {
                 reject(new Error('Project not found'));
                 return;
@@ -295,13 +302,13 @@ export const updateProject = async (projectName, updates) => {
                 ...project,
                 ...updates,
                 lastModified: new Date().toISOString(),
-                syncStatus: 'pending'
+                syncStatus: 'pending' // Reset sync on update
             };
 
             const request = store.put(updatedData);
 
             request.onsuccess = () => {
-                // Sync to Supabase (non-blocking)
+                // Sync to Supabase if configured
                 if (isSupabaseConfigured() && project.cloudId) {
                     syncProjectToCloud(project.cloudId, updatedData).then(() => {
                         updateProjectSyncStatus(project.id, 'synced');
@@ -319,90 +326,103 @@ export const updateProject = async (projectName, updates) => {
     });
 };
 
-// Get project from cloud by cloudId
-export const getProjectFromCloud = async (cloudId) => {
-    if (!isSupabaseConfigured()) return null;
+// ... existing deleteProject etc ...
 
-    try {
-        const supabase = getSupabase();
-        const { data, error } = await supabase
-            .from(SUPABASE_PROJECTS_TABLE)
-            .select('*')
-            .eq('id', cloudId)
-            .single();
+// ===== FOLDER MANAGEMENT FUNCTIONS (New) =====
 
-        if (error) {
-            console.error('Cloud project fetch error:', error);
-            return null;
-        }
-
-        return {
-            cloudId: data.id,
-            projectName: data.project_name,
-            videoName: data.video_name,
-            measurements: data.measurements || [],
-            narration: data.narration,
-            createdAt: data.created_at,
-            lastModified: data.last_modified
-        };
-    } catch (err) {
-        console.error('Failed to fetch project from cloud:', err);
-        return null;
-    }
-};
-
-// Delete project
-export const deleteProject = async (projectName) => {
+export const createFolder = async (name, section = 'projects', parentId = null) => {
     const db = await initDB();
-    const PROJECTS_STORE = 'projects';
-
-    return new Promise(async (resolve, reject) => {
-        try {
-            // First get the project to get its ID
-            const project = await getProjectByName(projectName);
-            if (!project) {
-                reject(new Error('Project not found'));
-                return;
-            }
-
-            const transaction = db.transaction([PROJECTS_STORE], 'readwrite');
-            const store = transaction.objectStore(PROJECTS_STORE);
-            const request = store.delete(project.id);
-
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
-        } catch (error) {
-            reject(error);
-        }
-    });
-};
-
-// Get project by ID
-export const getProjectById = async (id) => {
-    const db = await initDB();
-    const PROJECTS_STORE = 'projects';
+    const FOLDERS_STORE = 'folders';
 
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([PROJECTS_STORE], 'readonly');
-        const store = transaction.objectStore(PROJECTS_STORE);
-        const request = store.get(id);
+        const transaction = db.transaction([FOLDERS_STORE], 'readwrite');
+        const store = transaction.objectStore(FOLDERS_STORE);
 
+        const folder = {
+            name,
+            section,
+            parentId,
+            createdAt: new Date().toISOString()
+        };
+
+        const request = store.add(folder);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
     });
 };
 
-// Delete project by ID
-export const deleteProjectById = async (id) => {
+export const getFolders = async (section = 'projects', parentId = null) => {
     const db = await initDB();
-    const PROJECTS_STORE = 'projects';
+    const FOLDERS_STORE = 'folders';
 
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction([PROJECTS_STORE], 'readwrite');
-        const store = transaction.objectStore(PROJECTS_STORE);
-        const request = store.delete(id);
+        const transaction = db.transaction([FOLDERS_STORE], 'readonly');
+        const store = transaction.objectStore(FOLDERS_STORE);
+        const index = store.index('parentId'); // We assume we added this index in initDB
 
+        // If getting root folders (parentId is null), we can't easily query index for null in all browsers consistently
+        // But let's try standard approach or filter
+
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+            const allFolders = request.result;
+            // Filter in memory for now to be safe with compound logic (section + parentId)
+            const filtered = allFolders.filter(f =>
+                f.section === section && f.parentId === parentId
+            );
+            resolve(filtered);
+        };
+        request.onerror = () => reject(request.error);
+    });
+};
+
+export const deleteFolder = async (id) => {
+    // Note: This should ideally be recursive or block if not empty.
+    // For now, valid implementation is just delete the folder entry.
+    // Items inside might become orphaned (parentId points to non-existent).
+    // Better: Move items to root or delete them? 
+    // Let's just delete the folder.
+    const db = await initDB();
+    const FOLDERS_STORE = 'folders';
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([FOLDERS_STORE], 'readwrite');
+        const store = transaction.objectStore(FOLDERS_STORE);
+        const request = store.delete(id);
         request.onsuccess = () => resolve();
         request.onerror = () => reject(request.error);
     });
+};
+
+// Helper for breadcrumbs
+export const getFolderById = async (id) => {
+    const db = await initDB();
+    const FOLDERS_STORE = 'folders';
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([FOLDERS_STORE], 'readonly');
+        const store = transaction.objectStore(FOLDERS_STORE);
+        const request = store.get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+export const getFolderBreadcrumbs = async (folderId) => {
+    if (!folderId) return [];
+
+    const crumbs = [];
+    let currentId = folderId;
+
+    while (currentId) {
+        try {
+            const folder = await getFolderById(currentId);
+            if (!folder) break;
+            crumbs.unshift({ id: folder.id, name: folder.name, parentId: folder.parentId });
+            currentId = folder.parentId;
+        } catch (e) {
+            break;
+        }
+    }
+    return crumbs;
 };

@@ -26,7 +26,7 @@ function GlobalSettingsDialog({ isOpen, onClose }) {
             // Load AI settings
             setProvider(localStorage.getItem('ai_provider') || 'gemini');
             setApiKey(localStorage.getItem('gemini_api_key') || '');
-            setModel(localStorage.getItem('gemini_model') || 'gemini-1.5-flash');
+            setModel(localStorage.getItem('gemini_model') || 'gemini-1.5-flash-002');
             setBaseUrl(localStorage.getItem('ai_base_url') || '');
             setTestStatusAI(null);
 
@@ -44,7 +44,7 @@ function GlobalSettingsDialog({ isOpen, onClose }) {
 
         if (newProvider === 'gemini') {
             setBaseUrl('');
-            setModel('gemini-1.5-flash');
+            setModel('gemini-1.5-flash-002');
         } else if (newProvider === 'openai') {
             setBaseUrl('https://api.openai.com/v1');
             setModel('gpt-3.5-turbo');
@@ -63,7 +63,7 @@ function GlobalSettingsDialog({ isOpen, onClose }) {
 
         try {
             if (provider === 'gemini') {
-                const models = await validateApiKey(apiKey);
+                const models = await validateApiKey(apiKey.trim());
                 setAvailableModels(models);
                 setTestStatusAI('success');
             } else {
@@ -163,9 +163,9 @@ function GlobalSettingsDialog({ isOpen, onClose }) {
     const handleSave = () => {
         // Save AI Settings
         localStorage.setItem('ai_provider', provider);
-        localStorage.setItem('gemini_api_key', apiKey);
-        localStorage.setItem('gemini_model', model);
-        localStorage.setItem('ai_base_url', baseUrl);
+        localStorage.setItem('gemini_api_key', apiKey.trim());
+        localStorage.setItem('gemini_model', model.trim());
+        localStorage.setItem('ai_base_url', baseUrl.trim());
 
         // Save Cloud Settings
         saveSupabaseConfig(supabaseUrl, supabaseKey);

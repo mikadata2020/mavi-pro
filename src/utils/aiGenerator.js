@@ -204,15 +204,16 @@ export const validateApiKey = async (apiKey) => {
     // but consistency says we could fallback. 
     // However, validation is usually for a specific NEW key. 
     // Let's keep existing logic but allow fallback if called without arg (though unlikely for validation).
-    const keyToUse = apiKey || localStorage.getItem('gemini_api_key');
+    // Trim whitespace from key to avoid simple copy-paste errors
+    const keyToUse = (apiKey || localStorage.getItem('gemini_api_key') || '').trim();
     if (!keyToUse) throw new Error("API Key is missing");
 
     try {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${keyToUse}`);
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || "Failed to validate API Key");
+            const errorData = await response.json().catch(() => ({})); // Handle cases where json parse fails
+            throw new Error(errorData.error?.message || `API Error: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -227,6 +228,9 @@ export const validateApiKey = async (apiKey) => {
 
     } catch (error) {
         console.error("API Validation Error:", error);
+        if (error.message === 'Failed to fetch') {
+            throw new Error("Network Error: Could not connect to Google Gemini API. Please check your internet connection and disable any Ad Blockers or VPNs that might differ traffic.");
+        }
         throw error;
     }
 };
@@ -305,29 +309,8 @@ ${elementList}
 
     try {
         if (provider === 'gemini') {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${keyToUse}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{ text: prompt }]
-                    }]
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'Failed to get AI response');
-            }
-
-            const data = await response.json();
-            if (!data.candidates || data.candidates.length === 0) {
-                throw new Error("No response generated");
-            }
-
-            const aiResponse = data.candidates[0].content.parts[0].text;
+            const modelToUse = model || localStorage.getItem('gemini_model') || 'gemini-1.5-flash-002';
+            const aiResponse = await callGemini(prompt, keyToUse, modelToUse, false);
             console.log('AI Chat Response:', aiResponse);
             return aiResponse;
         } else {
@@ -352,7 +335,7 @@ const callAIProvider = async (prompt, apiKey, specificModel = null, expectJson =
     // Default models if not specified
     let model = specificModel;
     if (!model) {
-        model = localStorage.getItem('gemini_model') || (provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-3.5-turbo');
+        model = localStorage.getItem('gemini_model') || (provider === 'gemini' ? 'gemini-1.5-flash-002' : 'gpt-3.5-turbo');
     }
 
     if (provider === 'gemini') {
@@ -427,8 +410,15 @@ const callOpenAICompatible = async (prompt, apiKey, model, baseUrl, expectJson =
 
 const callGemini = async (prompt, apiKey, specificModel = null, expectJson = true) => {
     // If a specific model is provided, try only that one.
-    // Otherwise, fallback to the list of stable models.
-    const models = specificModel ? [specificModel] : ['gemini-1.5-flash', 'gemini-1.5-pro'];
+    // However, if the specific model is the generic 'gemini-1.5-flash', add fallbacks to specific versions 
+    // to handle cases where the alias might be temporarily unavailable or not found.
+    let models = specificModel ? [specificModel] : ['gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-pro'];
+
+    if (specificModel === 'gemini-1.5-flash') {
+        models = ['gemini-1.5-flash', 'gemini-1.5-flash-001', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
+    } else if (specificModel === 'gemini-1.5-pro') {
+        models = ['gemini-1.5-pro', 'gemini-1.5-pro-001', 'gemini-1.5-pro-002', 'gemini-1.5-flash'];
+    }
     let lastError = null;
     const keyToUse = getStoredApiKey(apiKey);
 

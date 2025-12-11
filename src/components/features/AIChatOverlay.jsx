@@ -12,6 +12,7 @@ function AIChatOverlay({
     const [chatHistory, setChatHistory] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const [isAiThinking, setIsAiThinking] = useState(false);
+    const [isChatFullscreen, setIsChatFullscreen] = useState(false);
 
     const messagesEndRef = useRef(null);
 
