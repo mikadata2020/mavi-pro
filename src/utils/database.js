@@ -326,7 +326,52 @@ export const updateProject = async (identifier, updates) => {
     });
 };
 
-// ... existing deleteProject etc ...
+// Get project by ID
+export const getProjectById = async (id) => {
+    const db = await initDB();
+    const PROJECTS_STORE = 'projects';
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([PROJECTS_STORE], 'readonly');
+        const store = transaction.objectStore(PROJECTS_STORE);
+        const request = store.get(id);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+// Delete project by ID
+export const deleteProjectById = async (id) => {
+    const db = await initDB();
+    const PROJECTS_STORE = 'projects';
+
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([PROJECTS_STORE], 'readwrite');
+        const store = transaction.objectStore(PROJECTS_STORE);
+        const request = store.delete(id);
+
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+};
+
+// Generic delete project (handles ID or Name)
+export const deleteProject = async (identifier) => {
+    try {
+        if (typeof identifier === 'number') {
+            return await deleteProjectById(identifier);
+        } else if (typeof identifier === 'string') {
+            const project = await getProjectByName(identifier);
+            if (!project) throw new Error('Project not found with name: ' + identifier);
+            return await deleteProjectById(project.id);
+        } else {
+            throw new Error('Invalid identifier type for deleteProject');
+        }
+    } catch (error) {
+        throw error;
+    }
+};
 
 // ===== FOLDER MANAGEMENT FUNCTIONS (New) =====
 

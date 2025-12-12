@@ -201,6 +201,12 @@ export const helpContent = {
                             <li><strong>📄 One Per Page</strong>: 1 step per halaman</li>
                         </ul>
                     </li>
+                    <li><strong>📥 Import Data</strong>:
+                        <ul>
+                            <li><strong>📊 Import Excel</strong>: Import steps dari Excel (Columns: Title, Instructions, Warning, Note)</li>
+                            <li><strong>📝 Import Word</strong>: Import steps dari Word (Headings = Titles, Text = Instructions)</li>
+                        </ul>
+                    </li>
                     <li>Klik <strong>👁️ Preview Mode</strong> untuk melihat hasil</li>
                     <li>Export via <strong>📥 Export As...</strong>:
                         <ul>

@@ -14,6 +14,9 @@ import { saveAs } from 'file-saver';
 import PptxGenJS from 'pptxgenjs';
 import { QRCodeSVG } from 'qrcode.react';
 import QRCode from 'qrcode';
+import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
+import { FileSpreadsheet, FileText, Upload } from 'lucide-react';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -735,35 +738,169 @@ function ManualCreation() {
         }
     };
 
+    const handleImportExcel = async (file) => {
+        if (!file) return;
+
+        try {
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data);
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (jsonData.length === 0) {
+                alert('Excel file is empty.');
+                return;
+            }
+
+            // Map data to steps
+            // Expected columns: Title, Instructions, Warning, Note
+            const newSteps = jsonData.map(row => {
+                const instructions = row['Instructions'] || row['Description'] || '';
+                const bullets = [];
+                if (row['Warning']) bullets.push({ type: 'warning', text: row['Warning'] });
+                if (row['Note']) bullets.push({ type: 'note', text: row['Note'] });
+
+                return {
+                    id: generateId(),
+                    title: row['Title'] || row['Step'] || 'New Step',
+                    media: null,
+                    instructions: instructions ? `<p>${instructions}</p>` : '',
+                    bullets: bullets
+                };
+            });
+
+            if (confirm(`Found ${newSteps.length} steps. Append to current manual?`)) {
+                setGuide(prev => ({
+                    ...prev,
+                    steps: [...prev.steps, ...newSteps]
+                }));
+                if (newSteps.length > 0) setActiveStepId(newSteps[0].id);
+            }
+
+        } catch (error) {
+            console.error('Excel Import Error:', error);
+            alert('Failed to import Excel: ' + error.message);
+        }
+    };
+
+    const handleImportWord = async (file) => {
+        if (!file) return;
+
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+            const html = result.value;
+
+            // Simple parsing: split by Header tags (h1, h2, etc) if possible
+            // But mammoth returns flat HTML.
+            // Let's assume h1/h2 are step titles.
+
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const elements = Array.from(doc.body.children);
+
+            const newSteps = [];
+            let currentStep = null;
+
+            elements.forEach(el => {
+                const tagName = el.tagName.toLowerCase();
+                if (['h1', 'h2', 'h3'].includes(tagName)) {
+                    // New Step
+                    if (currentStep) newSteps.push(currentStep);
+                    currentStep = {
+                        id: generateId(),
+                        title: el.innerText,
+                        media: null,
+                        instructions: '',
+                        bullets: []
+                    };
+                } else {
+                    if (currentStep) {
+                        currentStep.instructions += el.outerHTML;
+                    } else if (newSteps.length === 0 && el.innerText.trim()) {
+                        // Content before first header? treat as Summary or start first step
+                        // Let's create a "Introduction" step
+                        currentStep = {
+                            id: generateId(),
+                            title: 'Introduction',
+                            media: null,
+                            instructions: el.outerHTML,
+                            bullets: []
+                        };
+                    }
+                }
+            });
+            if (currentStep) newSteps.push(currentStep);
+
+            if (newSteps.length > 0) {
+                if (confirm(`Parsed ${newSteps.length} steps from Word. Append to current manual?`)) {
+                    setGuide(prev => ({
+                        ...prev,
+                        steps: [...prev.steps, ...newSteps]
+                    }));
+                    if (newSteps.length > 0) setActiveStepId(newSteps[0].id);
+                }
+            } else {
+                alert('No steps found. Ensure your Word doc uses Headings for steps.');
+            }
+
+        } catch (error) {
+            console.error('Word Import Error:', error);
+            alert('Failed to import Word: ' + error.message);
+        }
+    };
+
     const activeStep = guide.steps.find(s => s.id === activeStepId);
 
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#121212', color: '#fff' }}>
             {/* Top Bar */}
             <div style={{ height: '50px', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 20px', backgroundColor: '#1e1e1e' }}>
-                <h2 style={{ fontSize: '1rem', margin: 0, marginRight: 'auto' }}>📘 Manual Creation (Dozuki Style)</h2>
+                <h2 style={{ fontSize: '1rem', margin: 0, marginRight: 'auto' }}>📘 Manual Creator</h2>
 
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button
                         onClick={() => setIsPreviewMode(!isPreviewMode)}
-                        style={{ padding: '4px 12px', backgroundColor: isPreviewMode ? '#0078d4' : '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer' }}
+                        style={{ height: '32px', padding: '0 12px', backgroundColor: isPreviewMode ? '#0078d4' : '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
                     >
                         {isPreviewMode ? '✏️ Edit Mode' : '👁️ Preview Mode'}
                     </button>
                     <button
                         onClick={handleSaveManual}
-                        style={{ padding: '4px 12px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ height: '32px', padding: '0 12px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}
                         title="Save to Knowledge Base & Cloud"
                     >
                         💾 Save
                     </button>
                     <button
                         onClick={handleLoadManualsList}
-                        style={{ padding: '4px 12px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ height: '32px', padding: '0 12px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}
                         title="Open saved manual"
                     >
                         📂 Open
                     </button>
+
+                    <div style={{ display: 'flex', gap: '5px', borderLeft: '1px solid #555', paddingLeft: '10px', alignItems: 'center' }}>
+                        <label className="btn" style={{ height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#107c41', color: 'white', borderRadius: '4px', cursor: 'pointer' }} title="Import Excel">
+                            <FileSpreadsheet size={18} />
+                            <input
+                                type="file"
+                                accept=".xlsx, .xls"
+                                style={{ display: 'none' }}
+                                onChange={(e) => handleImportExcel(e.target.files[0])}
+                            />
+                        </label>
+                        <label className="btn" style={{ height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2b579a', color: 'white', borderRadius: '4px', cursor: 'pointer' }} title="Import Word">
+                            <FileText size={18} />
+                            <input
+                                type="file"
+                                accept=".docx"
+                                style={{ display: 'none' }}
+                                onChange={(e) => handleImportWord(e.target.files[0])}
+                            />
+                        </label>
+                    </div>
 
                     <select
                         onChange={(e) => {
@@ -775,7 +912,8 @@ function ManualCreation() {
                         }}
                         disabled={!selectedProject}
                         style={{
-                            padding: '4px 12px',
+                            height: '32px',
+                            padding: '0 12px',
                             backgroundColor: '#555',
                             color: 'white',
                             border: 'none',
@@ -1045,8 +1183,24 @@ function ManualCreation() {
                         {
                             !isPreviewMode && (
                                 <div style={{ width: '300px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #333' }}>
-                                    <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc' }}>
+                                    <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         Source Video
+                                        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: '#0078d4' }}>
+                                            <Upload size={14} />
+                                            Upload
+                                            <input
+                                                type="file"
+                                                accept="video/*"
+                                                style={{ display: 'none' }}
+                                                onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        const url = URL.createObjectURL(file);
+                                                        setVideoSrc(url);
+                                                    }
+                                                }}
+                                            />
+                                        </label>
                                     </div>
                                     <div style={{ flex: 1, padding: '10px', display: 'flex', flexDirection: 'column' }}>
                                         {videoSrc ? (
@@ -1057,8 +1211,24 @@ function ManualCreation() {
                                                 style={{ width: '100%', borderRadius: '4px', backgroundColor: '#000' }}
                                             />
                                         ) : (
-                                            <div style={{ color: '#888', textAlign: 'center', marginTop: '20px' }}>
-                                                No video loaded
+                                            <div style={{ color: '#888', textAlign: 'center', marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                                <div>No video loaded</div>
+                                                <label className="btn" style={{ padding: '8px 16px', backgroundColor: '#333', color: 'white', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <Upload size={16} />
+                                                    Upload Video
+                                                    <input
+                                                        type="file"
+                                                        accept="video/*"
+                                                        style={{ display: 'none' }}
+                                                        onChange={(e) => {
+                                                            const file = e.target.files[0];
+                                                            if (file) {
+                                                                const url = URL.createObjectURL(file);
+                                                                setVideoSrc(url);
+                                                            }
+                                                        }}
+                                                    />
+                                                </label>
                                             </div>
                                         )}
                                     </div>

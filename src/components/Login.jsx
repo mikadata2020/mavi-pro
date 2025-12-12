@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
-function Login() {
+function Login({ onLoginSuccess, onBack }) {
     const { signIn, signUp } = useAuth();
 
     // UI State
@@ -61,14 +61,34 @@ function Login() {
                 maxWidth: '500px'
             }}>
                 {/* Logo/Title */}
-                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                <div style={{ textAlign: 'center', marginBottom: '30px', position: 'relative' }}>
+                    {onBack && (
+                        <button
+                            onClick={onBack}
+                            style={{
+                                position: 'absolute',
+                                left: 0,
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                background: 'none',
+                                border: 'none',
+                                color: '#666',
+                                cursor: 'pointer',
+                                fontSize: '1.2rem',
+                                padding: '5px'
+                            }}
+                            title="Back to Home"
+                        >
+                            ←
+                        </button>
+                    )}
                     <h1 style={{
                         color: 'var(--accent-blue)',
                         margin: '0 0 10px 0',
                         fontSize: '2rem',
                         fontWeight: 'bold'
                     }}>
-                        Motion Analysis
+                        Mavi
                     </h1>
                     <p style={{ color: '#888', margin: 0, fontSize: '0.9rem' }}>
                         {isSignUp ? 'Create a new account' : 'Sign in to continue'}

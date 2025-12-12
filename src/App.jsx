@@ -47,6 +47,8 @@ const SpaghettiChart = React.lazy(() => import('./components/SpaghettiChart'));
 const WorkflowGuide = React.lazy(() => import('./components/WorkflowGuide'));
 const FileExplorer = React.lazy(() => import('./components/FileExplorer'));
 const PublicManualViewer = React.lazy(() => import('./components/PublicManualViewer'));
+const SystemDiagnostics = React.lazy(() => import('./components/SystemDiagnostics'));
+const LandingPage = React.lazy(() => import('./components/LandingPage'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -86,6 +88,7 @@ function AppContent() {
 
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [showSessionManager, setShowSessionManager] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [measurements, setMeasurements] = useState([]);
   const [videoSrc, setVideoSrc] = useState(null);
   const [videoName, setVideoName] = useState('');
@@ -303,7 +306,17 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <Login onLoginSuccess={handleLoginSuccess} />;
+    if (showLogin) {
+      return <Login onLoginSuccess={handleLoginSuccess} onBack={() => setShowLogin(false)} />;
+    }
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <LandingPage
+          onLogin={() => setShowLogin(true)}
+          onDemo={() => setShowLogin(true)}
+        />
+      </Suspense>
+    );
   }
 
   const isDashboard = location.pathname === '/';
@@ -433,6 +446,9 @@ function AppContent() {
 
               {/* File Explorer */}
               <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
+
+              {/* System Diagnostics */}
+              <Route path="/diagnostics" element={<div style={{ overflow: 'hidden', height: '100%' }}><SystemDiagnostics /></div>} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

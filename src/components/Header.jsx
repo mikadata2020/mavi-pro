@@ -33,6 +33,7 @@ const MENU_ITEMS = [
     { path: '/action-recognition', icon: '🤖', title: 'Action Recognition' },
     // { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide' }, // Moved
     { path: '/files', icon: '📂', title: 'File Explorer' },
+    { path: '/diagnostics', icon: '🩺', title: 'System Diagnostics' },
     { path: '/help', icon: '❓', labelKey: 'header.help' },
 ];
 
