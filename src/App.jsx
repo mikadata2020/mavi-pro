@@ -50,6 +50,7 @@ const PublicManualViewer = React.lazy(() => import('./components/PublicManualVie
 const SystemDiagnostics = React.lazy(() => import('./components/SystemDiagnostics'));
 const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
+const CycleSegmentation = React.lazy(() => import('./components/CycleSegmentation'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -441,6 +442,9 @@ function AppContent() {
                 </div>
               } />
               <Route path="/action-recognition" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ActionRecognition videoSrc={videoSrc} onActionsDetected={setMeasurements} /></div>} />
+
+              {/* Cycle Segmentation */}
+              <Route path="/cycle-segmentation" element={<div style={{ overflow: 'hidden', height: '100%' }}><CycleSegmentation /></div>} />
 
               {/* Workflow Guide */}
               <Route path="/workflow-guide" element={<div style={{ overflow: 'hidden', height: '100%' }}><WorkflowGuide /></div>} />

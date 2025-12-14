@@ -31,6 +31,7 @@ const MENU_ITEMS = [
     { path: '/knowledge-base', icon: '📚', title: 'Knowledge Base' },
     { path: '/broadcast', icon: '📡', title: 'Broadcast' },
     { path: '/action-recognition', icon: '🤖', title: 'Action Recognition' },
+    { path: '/cycle-segmentation', icon: '🔄', title: 'Cycle Segmentation' },
     // { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide' }, // Moved
     { path: '/files', icon: '📂', title: 'File Explorer' },
     { path: '/diagnostics', icon: '🩺', title: 'System Diagnostics' },
