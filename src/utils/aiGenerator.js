@@ -35,7 +35,7 @@ export const generateManualContent = async (taskName, apiKey, model = null) => {
         }
     `;
 
-    return await callGemini(prompt, keyToUse, model);
+    return await callAIProvider(prompt, apiKey, model, true);
 };
 
 /**
@@ -235,6 +235,23 @@ export const validateApiKey = async (apiKey) => {
     }
 };
 
+import { helpContent } from './helpContent';
+
+// Helper to strip HTML/JSX tags for AI context
+const getPlainHelpText = () => {
+    let text = "APPLICATION USER GUIDE:\n\n";
+    Object.entries(helpContent).forEach(([key, value]) => {
+        // Simple regex to strip tags, could be improved but sufficient for context
+        const cleanContent = JSON.stringify(value.content)
+            .replace(/<[^>]*>/g, ' ') // Remove HTML tags
+            .replace(/\\n/g, ' ')
+            .replace(/\s+/g, ' ') // Normalize spaces
+            .trim();
+        text += `FEATURE: ${value.title}\n${cleanContent}\n\n`;
+    });
+    return text;
+};
+
 /**
  * Chat with AI for Industrial Engineering analysis
  * @param {string} userMessage - User's question or message
@@ -268,6 +285,9 @@ ${elementList}
 `;
     }
 
+    // Get Application Knowledge Base
+    const appKnowledge = getPlainHelpText();
+
     // Get provider settings
     const provider = localStorage.getItem('ai_provider') || 'gemini';
     const baseUrl = localStorage.getItem('ai_base_url') || '';
@@ -280,27 +300,26 @@ ${elementList}
     }
 
     const prompt = `
-        You are an expert Industrial Engineer specializing in:
-        - Time and Motion Study
-        - Work Measurement
-        - Process Optimization
-        - Lean Manufacturing
-        - Ergonomics
-        - Productivity Improvement
+        You are "Mavi", an expert Industrial Engineer and the official assistant for the "Motion Study Application".
         
+        **YOUR KNOWLEDGE BASE (How this app works):**
+        ${appKnowledge}
+
+        **CURRENT ANALYSIS CONTEXT:**
         ${contextSummary}
+        
+        **HISTORY:**
         ${historyContext}
         
-        User Question: ${userMessage}
+        **USER QUESTION:** 
+        ${userMessage}
         
-        Provide a helpful, professional response in the SAME LANGUAGE as the user's question.
-        If the user asks in Indonesian, respond in Indonesian. If in English, respond in English.
-        
-        Your response should:
-        - Be concise and actionable
-        - Reference the measurement data when relevant
-        - Provide specific recommendations based on Industrial Engineering principles
-        - Use professional but understandable language
+        **INSTRUCTIONS:**
+        1. Always answer based on the "Application User Guide" if the user asks about features.
+        2. If asked about Industrial Engineering (Time Study, Line Balancing, etc.), use your general expert knowledge.
+        3. Be helpful, professional, and concise.
+        4. Provide specific recommendations based on the measurement data if available.
+        5. Respond in the SAME LANGUAGE as the user (Indonesian or English).
         
         Respond directly without JSON formatting.
     `;
@@ -317,6 +336,7 @@ ${elementList}
             // OpenAI Compatible Chat
             return await callOpenAICompatible(prompt, keyToUse, model, baseUrl);
         }
+
 
     } catch (error) {
         console.error('AI Chat Error:', error);
@@ -409,21 +429,36 @@ const callOpenAICompatible = async (prompt, apiKey, model, baseUrl, expectJson =
 };
 
 const callGemini = async (prompt, apiKey, specificModel = null, expectJson = true) => {
-    // If a specific model is provided, try only that one.
-    // However, if the specific model is the generic 'gemini-1.5-flash', add fallbacks to specific versions 
-    // to handle cases where the alias might be temporarily unavailable or not found.
-    let models = specificModel ? [specificModel] : ['gemini-1.5-flash', 'gemini-1.5-flash-002', 'gemini-1.5-pro'];
+    // Standardize model names to ensure we aren't sending bad strings
+    const cleanModel = (m) => m ? m.replace('models/', '') : null;
 
-    if (specificModel === 'gemini-1.5-flash') {
-        models = ['gemini-1.5-flash', 'gemini-1.5-flash-001', 'gemini-1.5-flash-002', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'];
-    } else if (specificModel === 'gemini-1.5-pro') {
-        models = ['gemini-1.5-pro', 'gemini-1.5-pro-001', 'gemini-1.5-pro-002', 'gemini-1.5-flash'];
+    // Priority list:
+    // 1. specificModel (if provided)
+    // 2. gemini-1.5-flash (Fast, assume stable)
+    // 3. gemini-1.5-pro (Higher quality, fallback if flash fails?) - No, usually flash is the fallback for pro.
+    // 4. gemini-pro (Old reliable)
+
+    // If specificModel is provided, we try it first.
+    // If it fails, we fall back to 'gemini-1.5-flash' (unless specificModel was already flash).
+
+    let modelsToTry = [];
+    if (specificModel) {
+        modelsToTry.push(cleanModel(specificModel));
     }
+
+    // Always add efficient fallbacks if they aren't already the first choice
+    // Always add efficient fallbacks if they aren't already the first choice
+    if (!modelsToTry.includes('gemini-1.5-flash')) modelsToTry.push('gemini-1.5-flash');
+    if (!modelsToTry.includes('gemini-2.0-flash-exp')) modelsToTry.push('gemini-2.0-flash-exp'); // Try newer experimental if flash fails
+    if (!modelsToTry.includes('gemini-1.5-pro')) modelsToTry.push('gemini-1.5-pro'); // Try pro last
+
+
     let lastError = null;
     const keyToUse = getStoredApiKey(apiKey);
 
-    for (const model of models) {
+    for (const model of modelsToTry) {
         try {
+            console.log(`Attempting AI generation with model: ${model}`);
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`, {
                 method: 'POST',
                 headers: {
@@ -437,13 +472,13 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                if (response.status === 404 || response.status === 400) {
-                    console.warn(`Model ${model} failed:`, errorData);
-                    lastError = new Error(errorData.error?.message || `Model ${model} failed`);
-                    continue;
-                }
-                throw new Error(errorData.error?.message || 'Failed to generate content');
+                const errorData = await response.json().catch(() => ({}));
+                console.warn(`Model ${model} failed with status ${response.status}:`, errorData);
+
+                // If 404 (Not Found) or 400 (Bad Request), it's likely a model name issue. Try next.
+                // If 403 (Permission) or 429 (Quota), it might be key/quota related, but we can still try a cheaper model (like flash) just in case.
+                lastError = new Error(errorData.error?.message || `Model ${model} failed`);
+                continue;
             }
 
             const data = await response.json();
@@ -460,32 +495,27 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
             }
 
             // Extract JSON from the text
-            // Match either {...} or [...]
             const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
             if (jsonMatch) {
                 let jsonText = jsonMatch[0];
-
-                // Sanitize control characters in the JSON string
-                // Replace problematic characters but preserve intentional newlines in values
+                // Sanitize control characters
                 jsonText = jsonText
-                    .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F]/g, '') // Remove control chars except \n, \r, \t
-                    .replace(/\n/g, ' ') // Replace newlines with spaces
-                    .replace(/\r/g, '') // Remove carriage returns
-                    .replace(/\t/g, ' '); // Replace tabs with spaces
+                    .replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F]/g, '')
+                    .replace(/\n/g, ' ')
+                    .replace(/\r/g, '')
+                    .replace(/\t/g, ' ');
 
                 try {
                     return JSON.parse(jsonText);
                 } catch (e) {
                     console.error('JSON Parse Error:', e);
-                    console.error('Problematic JSON:', jsonText);
                     throw new Error("Invalid JSON format from AI: " + e.message);
                 }
             } else {
-                // Try parsing the entire text as JSON
                 try {
                     return JSON.parse(text);
                 } catch (e) {
-                    console.error('Failed to parse AI response:', text);
+                    // console.error('Failed to parse AI response:', text); // Optional logging
                     throw new Error("Invalid response format from AI - no valid JSON found");
                 }
             }
@@ -493,8 +523,9 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
         } catch (error) {
             console.error(`AI Generation Error (${model}):`, error);
             lastError = error;
+            // Continue to next model in list
         }
     }
 
-    throw lastError || new Error("AI generation failed. Please check your API Key and Model selection.");
+    throw lastError || new Error("AI generation failed. Please check your API Key and network connection.");
 };

@@ -48,6 +48,7 @@ const WorkflowGuide = React.lazy(() => import('./components/WorkflowGuide'));
 const FileExplorer = React.lazy(() => import('./components/FileExplorer'));
 const PublicManualViewer = React.lazy(() => import('./components/PublicManualViewer'));
 const SystemDiagnostics = React.lazy(() => import('./components/SystemDiagnostics'));
+const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
 
 // Loading component
@@ -446,6 +447,9 @@ function AppContent() {
 
               {/* File Explorer */}
               <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
+
+              {/* Admin Panel */}
+              <Route path="/admin" element={<div style={{ overflow: 'hidden', height: '100%' }}><AdminPanel /></div>} />
 
               {/* System Diagnostics */}
               <Route path="/diagnostics" element={<div style={{ overflow: 'hidden', height: '100%' }}><SystemDiagnostics /></div>} />
