@@ -15,7 +15,9 @@ import { useVideoPlayer } from '../hooks/useVideoPlayer';
 import { captureScreenshot, exportAnalysisData } from '../utils/screenshotCapture';
 import CollaborationManager from '../utils/CollaborationManager';
 import CollaborationControl from './features/CollaborationControl';
+
 import CollaborationOverlay from './features/CollaborationOverlay';
+import PoseVisualizer from './features/PoseVisualizer';
 
 function VideoWorkspace({
     measurements,
@@ -55,7 +57,9 @@ function VideoWorkspace({
     const [isMJPEG, setIsMJPEG] = useState(false);
     const [showCycleDetection, setShowCycleDetection] = useState(false);
     const [showVoiceCommand, setShowVoiceCommand] = useState(false);
+
     const [showErgonomicAnalysis, setShowErgonomicAnalysis] = useState(false);
+    const [ergonomicData, setErgonomicData] = useState(null);
 
     const containerRef = useRef(null);
     const videoContainerRef = useRef(null);
@@ -634,6 +638,17 @@ function VideoWorkspace({
                                 <CollaborationOverlay remoteCursors={remoteCursors} />
                             </div>
                         )}
+
+                        {/* Pose Visualizer Overlay (Ergonomic Analysis) */}
+                        {ergonomicData && ergonomicData.isAnalyzing && ergonomicData.pose && (
+                            <PoseVisualizer
+                                pose={ergonomicData.pose}
+                                videoElement={videoRef.current}
+                                riskScores={ergonomicData.scores}
+                                width={videoRef.current?.clientWidth}
+                                height={videoRef.current?.clientHeight}
+                            />
+                        )}
                     </div>
 
                     {/* Placeholder when no video */}
@@ -735,32 +750,95 @@ function VideoWorkspace({
             </div>
 
             {/* Drawing Toolbar - Rendered OUTSIDE the video container to avoid scaling and z-index issues */}
-            {showAnnotationTool && (
-                <div style={{
-                    position: 'absolute',
-                    top: '60px', // Below the top buttons
-                    left: '10px',
-                    backgroundColor: 'rgba(26, 26, 26, 0.95)',
-                    padding: '10px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
-                    zIndex: 1000, // Very high z-index
-                    border: '1px solid #444',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                    width: '40px', // Compact vertical toolbar
-                    alignItems: 'center'
-                }}>
-                    {/* Tools */}
-                    {tools.map(tool => (
+            {
+                showAnnotationTool && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '60px', // Below the top buttons
+                        left: '10px',
+                        backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        zIndex: 1000, // Very high z-index
+                        border: '1px solid #444',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                        width: '40px', // Compact vertical toolbar
+                        alignItems: 'center'
+                    }}>
+                        {/* Tools */}
+                        {tools.map(tool => (
+                            <button
+                                key={tool.id}
+                                onClick={() => setCurrentTool(tool.id)}
+                                style={{
+                                    padding: '6px',
+                                    backgroundColor: currentTool === tool.id ? '#005a9e' : 'transparent',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '1.2rem',
+                                    width: '32px',
+                                    height: '32px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'all 0.2s'
+                                }}
+                                title={tool.label}
+                            >
+                                {tool.icon}
+                            </button>
+                        ))}
+
+                        <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+
+                        {/* Colors - Compact Color Picker */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {colors.slice(0, 5).map(color => ( // Show first 5 colors
+                                <button
+                                    key={color}
+                                    onClick={() => setDrawColor(color)}
+                                    style={{
+                                        width: '24px',
+                                        height: '24px',
+                                        backgroundColor: color,
+                                        border: drawColor === color ? '2px solid white' : '1px solid #666',
+                                        borderRadius: '50%',
+                                        cursor: 'pointer',
+                                        padding: 0
+                                    }}
+                                />
+                            ))}
+                        </div>
+
+                        <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+
+                        {/* Line Width */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <span style={{ color: '#aaa', fontSize: '0.6rem' }}>Size</span>
+                            <input
+                                type="range"
+                                min="1"
+                                max="10"
+                                value={lineWidth}
+                                onChange={(e) => setLineWidth(parseInt(e.target.value))}
+                                style={{ width: '60px', transform: 'rotate(-90deg)', margin: '20px 0' }}
+                            />
+                        </div>
+
+                        <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
+
+                        {/* Clear Action */}
                         <button
-                            key={tool.id}
-                            onClick={() => setCurrentTool(tool.id)}
+                            onClick={() => setDrawingAnnotations([])}
                             style={{
                                 padding: '6px',
-                                backgroundColor: currentTool === tool.id ? '#005a9e' : 'transparent',
-                                color: 'white',
+                                backgroundColor: 'transparent',
+                                color: '#c50f1f',
                                 border: 'none',
                                 borderRadius: '4px',
                                 cursor: 'pointer',
@@ -769,108 +847,49 @@ function VideoWorkspace({
                                 height: '32px',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.2s'
+                                justifyContent: 'center'
                             }}
-                            title={tool.label}
+                            title="Clear All Drawings"
                         >
-                            {tool.icon}
+                            🗑️
                         </button>
-                    ))}
-
-                    <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
-
-                    {/* Colors - Compact Color Picker */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {colors.slice(0, 5).map(color => ( // Show first 5 colors
-                            <button
-                                key={color}
-                                onClick={() => setDrawColor(color)}
-                                style={{
-                                    width: '24px',
-                                    height: '24px',
-                                    backgroundColor: color,
-                                    border: drawColor === color ? '2px solid white' : '1px solid #666',
-                                    borderRadius: '50%',
-                                    cursor: 'pointer',
-                                    padding: 0
-                                }}
-                            />
-                        ))}
                     </div>
-
-                    <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
-
-                    {/* Line Width */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                        <span style={{ color: '#aaa', fontSize: '0.6rem' }}>Size</span>
-                        <input
-                            type="range"
-                            min="1"
-                            max="10"
-                            value={lineWidth}
-                            onChange={(e) => setLineWidth(parseInt(e.target.value))}
-                            style={{ width: '60px', transform: 'rotate(-90deg)', margin: '20px 0' }}
-                        />
-                    </div>
-
-                    <div style={{ width: '100%', height: '1px', backgroundColor: '#444', margin: '4px 0' }} />
-
-                    {/* Clear Action */}
-                    <button
-                        onClick={() => setDrawingAnnotations([])}
-                        style={{
-                            padding: '6px',
-                            backgroundColor: 'transparent',
-                            color: '#c50f1f',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '1.2rem',
-                            width: '32px',
-                            height: '32px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}
-                        title="Clear All Drawings"
-                    >
-                        🗑️
-                    </button>
-                </div>
-            )}
+                )
+            }
 
             {/* Resizer Handle - Hidden in full screen mode */}
-            {fullScreenMode === 'none' && (
-                <div
-                    onMouseDown={startResizing}
-                    style={{
-                        width: '12px',
-                        background: '#1a1a1a',
-                        cursor: 'col-resize',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 10,
-                        borderLeft: '1px solid #333',
-                        borderRight: '1px solid #333',
-                        transition: 'background 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.target.style.background = '#333'}
-                    onMouseLeave={(e) => e.target.style.background = '#1a1a1a'}
-                    title="Drag to resize"
-                >
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '3px'
-                    }}>
-                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
-                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
-                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+            {
+                fullScreenMode === 'none' && (
+                    <div
+                        onMouseDown={startResizing}
+                        style={{
+                            width: '12px',
+                            background: '#1a1a1a',
+                            cursor: 'col-resize',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 10,
+                            borderLeft: '1px solid #333',
+                            borderRight: '1px solid #333',
+                            transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.target.style.background = '#333'}
+                        onMouseLeave={(e) => e.target.style.background = '#1a1a1a'}
+                        title="Drag to resize"
+                    >
+                        <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '3px'
+                        }}>
+                            <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                            <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                            <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Right Panel: Element Editor + Timeline */}
             <div style={{
@@ -991,83 +1010,93 @@ function VideoWorkspace({
             </div>
 
             {/* Cycle Detection Panel */}
-            {showCycleDetection && (
-                <CycleDetectionPanel
-                    videoRef={videoRef}
-                    onApplyCycles={(cycles) => {
-                        updateMeasurements([...videoState.measurements, ...cycles]);
-                    }}
-                    onClose={() => setShowCycleDetection(false)}
-                />
-            )}
+            {
+                showCycleDetection && (
+                    <CycleDetectionPanel
+                        videoRef={videoRef}
+                        onApplyCycles={(cycles) => {
+                            updateMeasurements([...videoState.measurements, ...cycles]);
+                        }}
+                        onClose={() => setShowCycleDetection(false)}
+                    />
+                )
+            }
 
             {/* Voice Command Panel - Floating Window */}
-            {showVoiceCommand && (
-                <VoiceCommandPanel
-                    onCommand={(action) => {
-                        console.log('Voice command:', action);
+            {
+                showVoiceCommand && (
+                    <VoiceCommandPanel
+                        onCommand={(action) => {
+                            console.log('Voice command:', action);
 
-                        switch (action) {
-                            case 'play':
-                                if (videoRef.current && videoRef.current.paused) {
-                                    togglePlay();
-                                }
-                                break;
-                            case 'pause':
-                                if (videoRef.current && !videoRef.current.paused) {
-                                    togglePlay();
-                                }
-                                break;
-                            case 'startMeasurement':
-                                window.dispatchEvent(new CustomEvent('start-measurement'));
-                                break;
-                            case 'endMeasurement':
-                                window.dispatchEvent(new CustomEvent('end-measurement'));
-                                break;
-                            case 'nextFrame':
-                                nextFrame();
-                                break;
-                            case 'previousFrame':
-                                previousFrame();
-                                break;
-                            case 'speedUp':
-                                const currentSpeed = videoState.playbackSpeed;
-                                if (currentSpeed < 2) {
-                                    setPlaybackSpeed(Math.min(2, currentSpeed + 0.25));
-                                }
-                                break;
-                            case 'slowDown':
-                                const speed = videoState.playbackSpeed;
-                                if (speed > 0.25) {
-                                    setPlaybackSpeed(Math.max(0.25, speed - 0.25));
-                                }
-                                break;
-                            case 'zoomIn':
-                                if (videoState.zoom < 3) {
-                                    setZoom(Math.min(3, videoState.zoom + 0.25));
-                                }
-                                break;
-                            case 'zoomOut':
-                                if (videoState.zoom > 0.5) {
-                                    setZoom(Math.max(0.5, videoState.zoom - 0.25));
-                                }
-                                break;
-                            default:
-                                console.warn('Unknown voice command:', action);
-                        }
-                    }}
-                    onClose={() => setShowVoiceCommand(false)}
-                />
-            )}
+                            switch (action) {
+                                case 'play':
+                                    if (videoRef.current && videoRef.current.paused) {
+                                        togglePlay();
+                                    }
+                                    break;
+                                case 'pause':
+                                    if (videoRef.current && !videoRef.current.paused) {
+                                        togglePlay();
+                                    }
+                                    break;
+                                case 'startMeasurement':
+                                    window.dispatchEvent(new CustomEvent('start-measurement'));
+                                    break;
+                                case 'endMeasurement':
+                                    window.dispatchEvent(new CustomEvent('end-measurement'));
+                                    break;
+                                case 'nextFrame':
+                                    nextFrame();
+                                    break;
+                                case 'previousFrame':
+                                    previousFrame();
+                                    break;
+                                case 'speedUp':
+                                    const currentSpeed = videoState.playbackSpeed;
+                                    if (currentSpeed < 2) {
+                                        setPlaybackSpeed(Math.min(2, currentSpeed + 0.25));
+                                    }
+                                    break;
+                                case 'slowDown':
+                                    const speed = videoState.playbackSpeed;
+                                    if (speed > 0.25) {
+                                        setPlaybackSpeed(Math.max(0.25, speed - 0.25));
+                                    }
+                                    break;
+                                case 'zoomIn':
+                                    if (videoState.zoom < 3) {
+                                        setZoom(Math.min(3, videoState.zoom + 0.25));
+                                    }
+                                    break;
+                                case 'zoomOut':
+                                    if (videoState.zoom > 0.5) {
+                                        setZoom(Math.max(0.5, videoState.zoom - 0.25));
+                                    }
+                                    break;
+                                default:
+                                    console.warn('Unknown voice command:', action);
+                            }
+                        }}
+                        onClose={() => setShowVoiceCommand(false)}
+                    />
+                )
+            }
 
             {/* Ergonomic Analysis Panel */}
-            {showErgonomicAnalysis && (
-                <ErgonomicAnalysis
-                    videoRef={videoRef}
-                    onClose={() => setShowErgonomicAnalysis(false)}
-                />
-            )}
-        </div>
+            {
+                showErgonomicAnalysis && (
+                    <ErgonomicAnalysis
+                        videoRef={videoRef}
+                        onClose={() => {
+                            setShowErgonomicAnalysis(false);
+                            setErgonomicData(null);
+                        }}
+                        onUpdate={setErgonomicData}
+                    />
+                )
+            }
+        </div >
     );
 }
 

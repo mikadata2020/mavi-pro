@@ -21,6 +21,7 @@ const MENU_ITEMS = [
     { path: '/yamazumi', icon: '🏔️', title: 'Yamazumi Chart' },
     { path: '/multi-axial', icon: '📑', title: 'Multi-Axial Analysis' },
     { path: '/manual-creation', icon: '📘', title: 'Manual Creation' },
+    { path: '/value-stream-map', icon: '🏭', title: 'Value Stream Map' },
     { path: '/spaghetti-chart', icon: '🍝', title: 'Spaghetti Chart' },
     { path: '/ml-data', icon: '🧠', title: 'Machine Learning Data' },
     { path: '/object-tracking', icon: '📦', title: 'Object Detection & Tracking' },

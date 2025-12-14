@@ -3,9 +3,9 @@ import { initializePoseDetector, detectPose, disposeDetector } from '../utils/po
 import AngleCalculator from '../utils/angleCalculator';
 import RULACalculator from '../utils/rulaCalculator';
 import REBACalculator from '../utils/rebaCalculator';
-import PoseVisualizer from './features/PoseVisualizer';
 
-function ErgonomicAnalysis({ videoRef, onClose }) {
+
+function ErgonomicAnalysis({ videoRef, onClose, onUpdate }) {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [status, setStatus] = useState('Initializing...');
     const [pose, setPose] = useState(null);
@@ -87,6 +87,17 @@ function ErgonomicAnalysis({ videoRef, onClose }) {
             }
         }
     }, [isAnalyzing, analyzeFrame]);
+
+    // Update parent with analysis data
+    useEffect(() => {
+        if (onUpdate) {
+            onUpdate({
+                pose,
+                scores: scores ? scores.scores : {},
+                isAnalyzing
+            });
+        }
+    }, [pose, scores, isAnalyzing, onUpdate]);
 
     const toggleAnalysis = () => {
         setIsAnalyzing(!isAnalyzing);
@@ -291,17 +302,6 @@ function ErgonomicAnalysis({ videoRef, onClose }) {
                     </div>
                 )}
             </div>
-
-            {/* Pose Visualizer Overlay */}
-            {isAnalyzing && pose && videoRef.current && (
-                <PoseVisualizer
-                    pose={pose}
-                    videoElement={videoRef.current}
-                    riskScores={scores ? scores.scores : {}}
-                    width={videoRef.current.clientWidth}
-                    height={videoRef.current.clientHeight}
-                />
-            )}
         </div>
     );
 }
