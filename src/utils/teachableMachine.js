@@ -1,16 +1,19 @@
 /**
- * Utility to handle Teachable Machine Pose model loading and prediction.
+ * Utility to handle Teachable Machine Pose and Image model loading and prediction.
  * Uses dynamic script injection to load the required libraries from CDN.
  */
 
 const TM_POSE_SCRIPT = "https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js";
+const TM_IMAGE_SCRIPT = "https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js";
 const TF_SCRIPT = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js";
 
 let isLibraryLoaded = false;
 let isLoadingLibrary = false;
+let isImageLibraryLoaded = false;
+let isLoadingImageLibrary = false;
 
 /**
- * Loads the Teachable Machine scripts dynamically
+ * Loads the Teachable Machine POSE scripts dynamically
  */
 export const loadScripts = () => {
     return new Promise((resolve, reject) => {
@@ -62,7 +65,64 @@ export const loadScripts = () => {
 };
 
 /**
- * Load a model from a URL (Online)
+ * Loads the Teachable Machine IMAGE scripts dynamically
+ */
+export const loadImageScripts = () => {
+    return new Promise((resolve, reject) => {
+        if (isImageLibraryLoaded) {
+            resolve();
+            return;
+        }
+
+        if (isLoadingImageLibrary) {
+            const checkParams = setInterval(() => {
+                if (isImageLibraryLoaded) {
+                    clearInterval(checkParams);
+                    resolve();
+                }
+            }, 100);
+            return;
+        }
+
+        isLoadingImageLibrary = true;
+
+        const loadImageLib = () => {
+            const tmScript = document.createElement('script');
+            tmScript.src = TM_IMAGE_SCRIPT;
+            tmScript.onload = () => {
+                console.log('Teachable Machine Image loaded');
+                isImageLibraryLoaded = true;
+                isLoadingImageLibrary = false;
+                resolve();
+            };
+            tmScript.onerror = (e) => {
+                isLoadingImageLibrary = false;
+                reject(new Error('Failed to load Teachable Machine Image library'));
+            };
+            document.head.appendChild(tmScript);
+        };
+
+        if (window.tf) {
+            loadImageLib();
+        } else {
+            // Load TensorFlow.js first if not already present
+            const tfScript = document.createElement('script');
+            tfScript.src = TF_SCRIPT;
+            tfScript.onload = () => {
+                console.log('TensorFlow.js loaded for TM Image');
+                loadImageLib();
+            };
+            tfScript.onerror = () => {
+                isLoadingImageLibrary = false;
+                reject(new Error('Failed to load TFJS for Image'));
+            };
+            document.head.appendChild(tfScript);
+        }
+    });
+};
+
+/**
+ * Load a POSE model from a URL (Online)
  * @param {string} url - The URL of the model (should end with /)
  */
 export const loadModelFromURL = async (url) => {
@@ -85,21 +145,54 @@ export const loadModelFromURL = async (url) => {
 };
 
 /**
+ * Load an IMAGE model from a URL (Online)
+ * @param {string} url - The URL of the model (should end with /)
+ */
+export const loadImageModelFromURL = async (url) => {
+    await loadImageScripts();
+    if (!window.tmImage) throw new Error('Teachable Machine Image library not loaded');
+
+    // Ensure URL ends with slash
+    if (!url.endsWith('/')) url = url + '/';
+
+    const modelURL = url + "model.json";
+    const metadataURL = url + "metadata.json";
+
+    try {
+        const model = await window.tmImage.load(modelURL, metadataURL);
+        return model;
+    } catch (error) {
+        console.error("Error loading TM Image model from URL:", error);
+        throw new Error("Failed to load image model. Check URL.");
+    }
+};
+
+/**
  * Load a model from uploaded files (Offline)
  * @param {File} modelFile - model.json
  * @param {File} weightsFile - weights.bin
  * @param {File} metadataFile - metadata.json
+ * @param {string} type - 'pose' or 'image'
  */
-export const loadModelFromFiles = async (modelFile, weightsFile, metadataFile) => {
-    await loadScripts();
-    if (!window.tmPose) throw new Error('Teachable Machine library not loaded');
-
-    try {
-        const model = await window.tmPose.loadFromFiles(modelFile, weightsFile, metadataFile);
-        return model;
-    } catch (error) {
-        console.error("Error loading TM model from files:", error);
-        throw new Error("Failed to load model from files. Ensure you have model.json, weights.bin, and metadata.json");
+export const loadModelFromFiles = async (modelFile, weightsFile, metadataFile, type = 'pose') => {
+    if (type === 'image') {
+        await loadImageScripts();
+        if (!window.tmImage) throw new Error('TM Image lib not loaded');
+        try {
+            return await window.tmImage.loadFromFiles(modelFile, weightsFile, metadataFile);
+        } catch (e) {
+            console.error(e);
+            throw new Error("Failed to load offline image model.");
+        }
+    } else {
+        await loadScripts();
+        if (!window.tmPose) throw new Error('TM Pose lib not loaded');
+        try {
+            return await window.tmPose.loadFromFiles(modelFile, weightsFile, metadataFile);
+        } catch (error) {
+            console.error("Error loading TM model from files:", error);
+            throw new Error("Failed to load model from files. Ensure you have model.json, weights.bin, and metadata.json");
+        }
     }
 };
 
@@ -111,27 +204,47 @@ export const loadModelFromFiles = async (modelFile, weightsFile, metadataFile) =
 export const predict = async (model, input) => {
     if (!model) return null;
 
-    // estimatePose outputs: { pose, posenetOutput }
-    const { pose, posenetOutput } = await model.estimatePose(input);
+    // Check if it's a Pose model (has estimatePose) or Image model
+    if (model.estimatePose) {
+        // POSE MODEL
+        const { pose, posenetOutput } = await model.estimatePose(input);
+        const prediction = await model.predict(posenetOutput);
 
-    // predict outputs: [{ className, probability }, ...]
-    const prediction = await model.predict(posenetOutput);
+        // Find best class
+        let highestProb = 0;
+        let bestClass = "";
+        prediction.forEach(p => {
+            if (p.probability > highestProb) {
+                highestProb = p.probability;
+                bestClass = p.className;
+            }
+        });
 
-    // Find class with highest probability
-    let highestProb = 0;
-    let bestClass = "";
+        return {
+            type: 'pose',
+            pose,
+            prediction,
+            bestClass,
+            accuracy: highestProb
+        };
+    } else {
+        // IMAGE MODEL
+        const prediction = await model.predict(input);
 
-    prediction.forEach(p => {
-        if (p.probability > highestProb) {
-            highestProb = p.probability;
-            bestClass = p.className;
-        }
-    });
+        let highestProb = 0;
+        let bestClass = "";
+        prediction.forEach(p => {
+            if (p.probability > highestProb) {
+                highestProb = p.probability;
+                bestClass = p.className;
+            }
+        });
 
-    return {
-        pose,
-        prediction,
-        bestClass,
-        accuracy: highestProb
-    };
+        return {
+            type: 'image',
+            prediction,
+            bestClass,
+            accuracy: highestProb
+        };
+    }
 };

@@ -23,7 +23,8 @@ export const translations = {
             uploadLogo: 'Upload Logo/Watermark',
             screenshot: 'Tangkap Screenshot',
             exportData: 'Export Data (JSON)',
-            sessions: 'Kelola Sesi'
+            sessions: 'Kelola Sesi',
+            workflowGuide: 'Panduan Alur Kerja'
         },
         common: {
             save: 'Simpan',
@@ -100,7 +101,8 @@ export const translations = {
             uploadLogo: 'Upload Logo/Watermark',
             screenshot: 'Capture Screenshot',
             exportData: 'Export Data (JSON)',
-            sessions: 'Manage Sessions'
+            sessions: 'Manage Sessions',
+            workflowGuide: 'Workflow Guide'
         },
         common: {
             save: 'Save',

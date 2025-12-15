@@ -2,7 +2,7 @@
 /**
  * Helper to get the API key from storage if not provided
  */
-const getStoredApiKey = (providedKey) => {
+export const getStoredApiKey = (providedKey) => {
     if (providedKey) return providedKey;
     return localStorage.getItem('gemini_api_key') || '';
 };
@@ -14,18 +14,39 @@ const getStoredApiKey = (providedKey) => {
  * @param {string} model - The specific model to use (optional).
  * @returns {Promise<{description: string, keyPoints: string, safety: string}>}
  */
-export const generateManualContent = async (taskName, apiKey, model = null) => {
+export const generateManualContent = async (taskName, apiKey, model = null, imageData = null, language = 'English') => {
     const keyToUse = getStoredApiKey(apiKey);
     if (!keyToUse) {
         throw new Error("API Key is missing. Please configure it in AI Settings.");
     }
 
-    const prompt = `
+    let prompt = "";
+    if (imageData) {
+        prompt = `
+        You are an industrial engineering expert analyzing a video frame of a work step.
+        For the task "${taskName || 'Unnamed Step'}", look at the provided image and generate the following in JSON format:
+        1. "description": A clear, concise, professional description of the action being performed in the image (max 2 sentences). Describe EXACTLY what the hands/operator are doing.
+        2. "keyPoints": 2-3 critical quality or efficiency observations based on the visual evidence (e.g. "Grip type", "Part orientation").
+        3. "safety": 1-2 important safety or ergonomic warnings based on the image (e.g. "PPE missing", "Awkward posture").
+        
+        CRITICAL INSTRUCTION: The output content MUST be written in ${language}.
+        
+        Example output format:
+        {
+            "description": "The operator is tightening the bolt using a torque wrench with the right hand while stabilizing the part with the left.",
+            "keyPoints": "Vertical grip used, Check torque setting",
+            "safety": "Safety glasses required, Watch pinch points"
+        }
+        `;
+    } else {
+        prompt = `
         You are an industrial engineering expert creating a Work Instruction Manual.
         For the task "${taskName}", provide the following in JSON format ONLY:
         1. "description": A clear, concise, professional description of the action (max 2 sentences).
         2. "keyPoints": 2-3 critical quality or efficiency points (comma separated).
         3. "safety": 1-2 important safety or ergonomic warnings (comma separated).
+        
+        CRITICAL INSTRUCTION: The output content MUST be written in ${language}.
         
         Example output format:
         {
@@ -33,9 +54,10 @@ export const generateManualContent = async (taskName, apiKey, model = null) => {
             "keyPoints": "Ensure firm grip, Check for burrs",
             "safety": "Wear gloves, Avoid sharp edges"
         }
-    `;
+        `;
+    }
 
-    return await callAIProvider(prompt, apiKey, model, true);
+    return await callAIProvider(prompt, apiKey, model, true, imageData);
 };
 
 /**
@@ -347,7 +369,7 @@ ${elementList}
 /**
  * Main entry point for AI calls. Routes to specific provider.
  */
-const callAIProvider = async (prompt, apiKey, specificModel = null, expectJson = true) => {
+const callAIProvider = async (prompt, apiKey, specificModel = null, expectJson = true, imageData = null) => {
     const provider = localStorage.getItem('ai_provider') || 'gemini';
     const baseUrl = localStorage.getItem('ai_base_url') || '';
     const keyToUse = getStoredApiKey(apiKey);
@@ -359,8 +381,9 @@ const callAIProvider = async (prompt, apiKey, specificModel = null, expectJson =
     }
 
     if (provider === 'gemini') {
-        return await callGemini(prompt, keyToUse, model, expectJson);
+        return await callGemini(prompt, keyToUse, model, expectJson, imageData);
     } else {
+        // OpenAI compatible currently doesn't support image in this helper, could be added later
         return await callOpenAICompatible(prompt, keyToUse, model, baseUrl, expectJson);
     }
 };
@@ -428,7 +451,7 @@ const callOpenAICompatible = async (prompt, apiKey, model, baseUrl, expectJson =
     }
 };
 
-const callGemini = async (prompt, apiKey, specificModel = null, expectJson = true) => {
+const callGemini = async (prompt, apiKey, specificModel = null, expectJson = true, imageData = null) => {
     // Standardize model names to ensure we aren't sending bad strings
     const cleanModel = (m) => m ? m.replace('models/', '') : null;
 
@@ -459,6 +482,20 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
     for (const model of modelsToTry) {
         try {
             console.log(`Attempting AI generation with model: ${model}`);
+
+            // Build parts
+            const parts = [{ text: prompt }];
+            if (imageData) {
+                // Remove header if present (data:image/jpeg;base64,)
+                const base64Data = imageData.split(',')[1] || imageData;
+                parts.unshift({
+                    inline_data: {
+                        mime_type: "image/jpeg",
+                        data: base64Data
+                    }
+                });
+            }
+
             const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`, {
                 method: 'POST',
                 headers: {
@@ -466,7 +503,7 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
                 },
                 body: JSON.stringify({
                     contents: [{
-                        parts: [{ text: prompt }]
+                        parts: parts
                     }]
                 })
             });
@@ -528,4 +565,94 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
     }
 
     throw lastError || new Error("AI generation failed. Please check your API Key and network connection.");
+};
+/**
+ * Uploads a file (video/image) to Google Gemini File API for processing.
+ * @param {File} file - The file object to upload.
+ * @param {string} apiKey - API Key.
+ * @returns {Promise<string>} The file URI (e.g., "https://generativelanguage.googleapis.com/v1beta/files/...")
+ */
+export const uploadFileToGemini = async (file, apiKey) => {
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) throw new Error("API Key is missing.");
+
+    // 1. Start Resumable Upload
+    const startUploadUrl = `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${keyToUse}`;
+
+    // Initial request to get the upload URL
+    const startResponse = await fetch(startUploadUrl, {
+        method: 'POST',
+        headers: {
+            'X-Goog-Upload-Protocol': 'resumable',
+            'X-Goog-Upload-Command': 'start',
+            'X-Goog-Upload-Header-Content-Length': file.size.toString(),
+            'X-Goog-Upload-Header-Content-Type': file.type,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file: { display_name: file.name } })
+    });
+
+    if (!startResponse.ok) {
+        throw new Error(`Failed to initiate upload: ${startResponse.statusText}`);
+    }
+
+    const uploadUrl = startResponse.headers.get('x-goog-upload-url');
+    if (!uploadUrl) {
+        throw new Error("Failed to retrieve upload URL from headers.");
+    }
+
+    // 2. Upload the actual bytes
+    const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Length': file.size.toString(),
+            'X-Goog-Upload-Offset': '0',
+            'X-Goog-Upload-Command': 'upload, finalize'
+        },
+        body: file
+    });
+
+    if (!uploadResponse.ok) {
+        throw new Error(`Failed to upload file content: ${uploadResponse.statusText}`);
+    }
+
+    const uploadResult = await uploadResponse.json();
+    return uploadResult.file.uri;
+};
+
+/**
+ * Chat with AI using a Video context (Gemini 1.5 Pro/Flash).
+ */
+export const chatWithVideo = async (userMessage, fileUri, chatHistory = [], apiKey) => {
+    const keyToUse = getStoredApiKey(apiKey);
+    const model = 'gemini-1.5-flash'; // Flash is best for video latency/cost
+
+    const parts = [
+        { text: userMessage },
+        {
+            file_data: {
+                mime_type: "video/mp4", // Should match uploaded type, but mp4 is safe generic for now or pass as arg
+                file_uri: fileUri
+            }
+        }
+    ];
+
+    // Add chat history if needed (simplified for now to just current turn + video)
+    // Real history would need to alternate user/model roles.
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts }]
+        })
+    });
+
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error?.message || "Video Chat Failed");
+    }
+
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
 };

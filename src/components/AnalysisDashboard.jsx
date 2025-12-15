@@ -1,19 +1,43 @@
 import React, { useState } from 'react';
 import { PieChart, Pie, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Shield, Camera, Activity } from 'lucide-react';
 import ProjectGanttChart from './ProjectGanttChart';
 import KaizenReportDialog from './features/KaizenReportDialog';
 import { calculateAllProductivityMetrics } from '../utils/productivityMetrics';
 import HelpButton from './HelpButton';
 import { helpContent } from '../utils/helpContent.jsx';
+import SafetyAnalysis from './SafetyAnalysis';
+import QualityControlAI from './QualityControlAI';
+import VideoIntelligence from './VideoIntelligence';
 
-function AnalysisDashboard({ measurements = [] }) {
+function AnalysisDashboard({ measurements = [], videoRef }) {
     const [isReportOpen, setIsReportOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState('productivity'); // productivity, safety, quality
+    const [showSafetyPanel, setShowSafetyPanel] = useState(false);
+    const [showQCPanel, setShowQCPanel] = useState(false);
+    const [showVideoIntel, setShowVideoIntel] = useState(false);
 
-    if (measurements.length === 0) {
+    if (measurements.length === 0 && activeTab === 'productivity') {
         return (
             <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
-                <p>Belum ada data untuk ditampilkan. Tambahkan measurements terlebih dahulu.</p>
+                <p>Belum ada data untuk ditampilkan. Tambahkan measurements terlebih dahulu atau gunakan Tab Safety/QC.</p>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '10px' }}>
+                    <button onClick={() => { setActiveTab('safety'); setShowSafetyPanel(true); }} style={{ padding: '8px 16px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                        🛡️ Open Safety AI
+                    </button>
+                    <button
+                        onClick={() => { setActiveTab('quality'); setShowQCPanel(true); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', backgroundColor: '#107c41', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
+                    >
+                        <Camera size={16} /> Visual QC (TM)
+                    </button>
+                    <button
+                        onClick={() => { setActiveTab('video'); setShowVideoIntel(true); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', backgroundColor: '#8B5CF6', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
+                    >
+                        <span style={{ fontSize: '1rem' }}>📹</span> Gemini Video Intelligence
+                    </button>
+                </div>
             </div>
         );
     }
@@ -68,12 +92,33 @@ function AnalysisDashboard({ measurements = [] }) {
         : 'N/A';
 
     return (
-        <div style={{ padding: '15px', backgroundColor: 'var(--bg-secondary)', height: '100%', overflowY: 'auto' }}>
+        <div style={{ padding: '15px', backgroundColor: 'var(--bg-secondary)', height: '100%', overflowY: 'auto', position: 'relative' }}>
+
+            {/* Header / Tabs */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem' }}>
                         📊 Analysis Summary
                     </h2>
+
+                    {/* Quick Launch Buttons for AI Features */}
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                        <button
+                            onClick={() => { setShowSafetyPanel(true); setShowQCPanel(false); }}
+                            title="Open Safety & Motion AI"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '5px', color: showSafetyPanel ? '#00d2ff' : '#888' }}
+                        >
+                            <Shield size={20} />
+                        </button>
+                        <button
+                            onClick={() => { setShowQCPanel(true); setShowSafetyPanel(false); }}
+                            title="Open Visual QC Inspector"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '5px', color: showQCPanel ? '#ffaa00' : '#888' }}
+                        >
+                            <Camera size={20} />
+                        </button>
+                    </div>
+
                     <button
                         onClick={() => setIsReportOpen(true)}
                         style={{
@@ -98,6 +143,28 @@ function AnalysisDashboard({ measurements = [] }) {
                     content={helpContent['analysis'].content}
                 />
             </div>
+
+            {/* AI Panels Overlays */}
+            {showSafetyPanel && (
+                <SafetyAnalysis
+                    videoRef={videoRef}
+                    onClose={() => setShowSafetyPanel(false)}
+                />
+            )}
+
+            {showQCPanel && (
+                <QualityControlAI
+                    videoRef={videoRef}
+                    onClose={() => setShowQCPanel(false)}
+                />
+            )}
+
+            {showVideoIntel && (
+                <VideoIntelligence
+                    videoRef={videoRef}
+                    onClose={() => setShowVideoIntel(false)}
+                />
+            )}
 
             <KaizenReportDialog
                 isOpen={isReportOpen}

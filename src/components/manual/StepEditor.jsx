@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import ImageMarkupDialog from './ImageMarkupDialog';
 import RichTextEditor from './RichTextEditor';
 
-const StepEditor = ({ step, onChange, onCaptureImage, onAiImprove, onAiGenerate, isAiLoading, onVoiceDictate, isVoiceListening, videoTime }) => {
+const StepEditor = ({ step, onChange, onCaptureImage, onAiImprove, onAiGenerate, onAiGenerateFromVideo, isAiLoading, onVoiceDictate, isVoiceListening, videoTime }) => {
     const [showMarkup, setShowMarkup] = useState(false);
 
     if (!step) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Select a step to edit</div>;
@@ -44,6 +44,28 @@ const StepEditor = ({ step, onChange, onCaptureImage, onAiImprove, onAiGenerate,
                         style={{ flex: 1, padding: '10px', fontSize: '1.2rem', backgroundColor: '#252526', border: '1px solid #333', color: '#fff', borderRadius: '4px' }}
                         placeholder="Enter step title..."
                     />
+                    {onAiGenerateFromVideo && (
+                        <button
+                            onClick={() => onAiGenerateFromVideo(step.id, step.title)}
+                            disabled={isAiLoading}
+                            style={{
+                                padding: '0 15px',
+                                backgroundColor: '#107c41',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: isAiLoading ? 'not-allowed' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                opacity: isAiLoading ? 0.6 : 1,
+                                height: '44px' // Match input height roughly
+                            }}
+                            title="Generate instructions from Video"
+                        >
+                            {isAiLoading ? '...' : '👁️ Mavi Look'}
+                        </button>
+                    )}
                     {onAiGenerate && (
                         <button
                             onClick={() => onAiGenerate(step.id, step.title)}

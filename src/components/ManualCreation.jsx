@@ -46,6 +46,7 @@ function ManualCreation() {
     const [savedManuals, setSavedManuals] = useState([]);
     const [showOpenDialog, setShowOpenDialog] = useState(false);
     const [isPreviewMode, setIsPreviewMode] = useState(false);
+    const [generationLanguage, setGenerationLanguage] = useState('English');
     const [layoutTemplate, setLayoutTemplate] = useState('standard'); // standard, compact, one-per-page
     const [isVoiceListening, setIsVoiceListening] = useState(false);
     const [voiceRecognizer] = useState(() => {
@@ -248,11 +249,10 @@ function ManualCreation() {
 
     const [isAiLoading, setIsAiLoading] = useState(false);
 
-    const handleAiGenerate = async (stepId, taskName) => {
-
+    const handleAiGenerate = async (stepId, taskName, imageData = null) => {
         setIsAiLoading(true);
         try {
-            const content = await generateManualContent(taskName);
+            const content = await generateManualContent(taskName, undefined, null, imageData, generationLanguage);
 
             // Format instructions from description + key points
             let instructions = `<p>${content.description}</p>`;
@@ -275,6 +275,38 @@ function ManualCreation() {
             alert('Failed to generate content: ' + error.message);
         } finally {
             setIsAiLoading(false);
+        }
+    };
+
+    const handleVideoAiGenerate = async (stepId, taskName) => {
+        if (!videoRef.current) {
+            alert("Please upload or select a video source first.");
+            return;
+        }
+
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = videoRef.current.videoWidth;
+            canvas.height = videoRef.current.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+            // Auto-save the capture as step media
+            const currentStep = guide.steps.find(s => s.id === stepId);
+            if (currentStep) {
+                handleStepChange(stepId, {
+                    ...currentStep,
+                    media: { type: 'image', url: dataUrl }
+                });
+            }
+
+            // Generate content using the image
+            await handleAiGenerate(stepId, taskName, dataUrl);
+
+        } catch (e) {
+            console.error(e);
+            alert("Failed to capture video frame for AI.");
         }
     };
 
@@ -926,6 +958,20 @@ function ManualCreation() {
                         <option value="word">📝 Word (.docx)</option>
                         <option value="pptx">📊 PowerPoint (.pptx)</option>
                     </select>
+
+                    <select
+                        value={generationLanguage}
+                        onChange={(e) => setGenerationLanguage(e.target.value)}
+                        style={{ padding: '4px 8px', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px' }}
+                        title="AI Generation Language"
+                    >
+                        <option value="English">🇺🇸 English</option>
+                        <option value="Indonesian">🇮🇩 Indonesia</option>
+                        <option value="Japanese">🇯🇵 日本語</option>
+                        <option value="Korean">🇰🇷 한국어</option>
+                        <option value="Chinese">🇨🇳 中文</option>
+                    </select>
+
                     <select
                         value={layoutTemplate}
                         onChange={(e) => setLayoutTemplate(e.target.value)}
@@ -1169,6 +1215,7 @@ function ManualCreation() {
                                             onCaptureImage={handleCaptureFrame}
                                             onAiImprove={handleAiImprove}
                                             onAiGenerate={handleAiGenerate}
+                                            onAiGenerateFromVideo={handleVideoAiGenerate}
                                             isAiLoading={isAiLoading}
                                             onVoiceDictate={handleVoiceDictate}
                                             isVoiceListening={isVoiceListening}
