@@ -625,34 +625,59 @@ export const uploadFileToGemini = async (file, apiKey) => {
  */
 export const chatWithVideo = async (userMessage, fileUri, chatHistory = [], apiKey) => {
     const keyToUse = getStoredApiKey(apiKey);
-    const model = 'gemini-1.5-flash'; // Flash is best for video latency/cost
 
-    const parts = [
-        { text: userMessage },
-        {
-            file_data: {
-                mime_type: "video/mp4", // Should match uploaded type, but mp4 is safe generic for now or pass as arg
-                file_uri: fileUri
-            }
-        }
-    ];
+    // Priority list of models to try
+    const userModel = localStorage.getItem('gemini_model');
+    let models = ['gemini-1.5-flash-002', 'gemini-1.5-flash', 'gemini-1.5-pro'];
 
-    // Add chat history if needed (simplified for now to just current turn + video)
-    // Real history would need to alternate user/model roles.
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{ parts }]
-        })
-    });
-
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error?.message || "Video Chat Failed");
+    // If user has a specific model setting, try that FIRST
+    if (userModel) {
+        const cleanUserModel = userModel.replace('models/', '');
+        models = [cleanUserModel, ...models.filter(m => m !== cleanUserModel)];
     }
 
-    const data = await response.json();
-    return data.candidates[0].content.parts[0].text;
+    let lastError = null;
+
+    for (const model of models) {
+        try {
+            console.log(`Video Chat: Attempting with model ${model}`);
+
+            const parts = [
+                { text: userMessage },
+                {
+                    file_data: {
+                        mime_type: "video/mp4", // generic fallback
+                        file_uri: fileUri
+                    }
+                }
+            ];
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts }]
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                console.warn(`Model ${model} failed:`, err);
+                throw new Error(err.error?.message || `Model ${model} failed`);
+            }
+
+            const data = await response.json();
+            if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                throw new Error("Empty response from AI");
+            }
+
+            return data.candidates[0].content.parts[0].text;
+
+        } catch (error) {
+            lastError = error;
+            // Continue to next model
+        }
+    }
+
+    throw lastError || new Error("All video models failed. Please check API Key.");
 };
