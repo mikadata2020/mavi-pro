@@ -7,7 +7,7 @@ import GlobalSettingsDialog from './GlobalSettingsDialog';
 const MENU_ITEMS = [
     { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' }, // Moved to top
     { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
-    { path: '/ai-process', icon: '🧠', title: 'AI Process Studio', labelKey: 'header.aiProcess' },
+    { path: '/ai-process', icon: '🧠', title: 'AI Proces', labelKey: 'header.aiProcess' },
     { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange' },
     { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste' },
     { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis' },

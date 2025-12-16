@@ -3,7 +3,7 @@ import { Upload, MessageSquare, Video, Loader, Send, Trash2, Maximize2, Minimize
 import { uploadFileToGemini, chatWithVideo, generateElementsFromVideo } from '../utils/aiGenerator';
 import { getStoredApiKey } from '../utils/aiGenerator';
 
-const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded = false }) => {
+const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded = false, videoFile }) => {
     const [fileUri, setFileUri] = useState(null);
     const [uploadStatus, setUploadStatus] = useState('idle'); // idle, uploading, ready, error
     const [chatHistory, setChatHistory] = useState([]);
@@ -14,6 +14,13 @@ const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
+    // Auto-upload when videoFile prop changes
+    useEffect(() => {
+        if (videoFile && !fileUri) {
+            handleFileUpload({ target: { files: [videoFile] } });
+        }
+    }, [videoFile]);
+
     // Scroll to bottom of chat
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -22,7 +29,7 @@ const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded
     // ... (handlers remain the same) ...
 
     const handleFileUpload = async (event) => {
-        const file = event.target.files[0];
+        const file = event.target.files ? event.target.files[0] : event; // Handle both event and direct file object
         if (!file) return;
 
         setUploadStatus('uploading');
@@ -130,7 +137,7 @@ const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded
         right: isExpanded ? '10px' : '20px',
         bottom: isExpanded ? '10px' : '20px',
         left: isExpanded ? '10px' : 'auto',
-        width: isExpanded ? 'auto' : '380px',
+        width: isExpanded ? 'auto' : '500px',
         backgroundColor: '#1a1a1a',
         border: '1px solid #333',
         borderRadius: '8px',
@@ -157,22 +164,26 @@ const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded
                     <Video size={18} color="#A78BFA" />
                     <span style={{ fontWeight: '600', color: '#fff' }}>Gemini Video Intelligence</span>
                 </div>
-                {!isEmbedded && (
+                {(onClose || !isEmbedded) && (
                     <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                            onClick={() => setIsExpanded(!isExpanded)}
-                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
-                            title={isExpanded ? "Collapse" : "Expand"}
-                        >
-                            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                        </button>
-                        <button
-                            onClick={onClose}
-                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
-                            title="Close"
-                        >
-                            ✕
-                        </button>
+                        {!isEmbedded && (
+                            <button
+                                onClick={() => setIsExpanded(!isExpanded)}
+                                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
+                                title={isExpanded ? "Collapse" : "Expand"}
+                            >
+                                {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                            </button>
+                        )}
+                        {onClose && (
+                            <button
+                                onClick={onClose}
+                                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
+                                title="Close"
+                            >
+                                ✕
+                            </button>
+                        )}
                     </div>
                 )}
             </div>

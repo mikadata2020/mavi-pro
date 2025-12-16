@@ -20,6 +20,7 @@ const AIProcessWorkspace = ({
 }) => {
     const [currentMode, setCurrentMode] = useState('cycle'); // cycle, object, ml, gemini
     const [leftPanelWidth, setLeftPanelWidth] = useState(65); // Default video width ~65%
+    const [currentVideoFile, setCurrentVideoFile] = useState(null); // Store raw file for AI
     const containerRef = useRef(null);
     const isResizing = useRef(false);
     const fileInputRef = useRef(null);
@@ -84,6 +85,7 @@ const AIProcessWorkspace = ({
         const file = event.target.files[0];
         if (file) {
             const url = URL.createObjectURL(file);
+            setCurrentVideoFile(file); // Capture file for AI
             onVideoChange(url);
             onVideoNameChange(file.name);
         }
@@ -137,17 +139,26 @@ const AIProcessWorkspace = ({
                     </div>
                 );
             case 'gemini':
-                // Gemini renders as a floating panel or sidebar item. 
-                // We'll put it in the sidebar or overlay? 
-                // Let's overlay it similar to CycleDetectionPanel for now, or put it in the sidebar?
-                // Given the request "tampilannya sama dengan menu video", sidebar usually has ElementEditor.
-                // Let's render Gemini as an overlay for now to not break the layout.
                 return (
-                    <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 100, height: '80%' }}>
+                    <div style={{
+                        position: 'absolute',
+                        top: 20,
+                        right: 20,
+                        width: '500px',
+                        maxWidth: '90%',
+                        height: '85%',
+                        zIndex: 100,
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: '1px solid #333'
+                    }}>
                         <VideoIntelligence
                             videoRef={videoRef}
                             onUpdateMeasurements={onUpdateMeasurements}
-                            isEmbedded={false} // Use floating style for overlay
+                            isEmbedded={true}
+                            videoFile={currentVideoFile}
+                            onClose={() => setCurrentMode(null)}
                         />
                     </div>
                 );
