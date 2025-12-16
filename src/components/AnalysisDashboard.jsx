@@ -10,7 +10,7 @@ import SafetyAnalysis from './SafetyAnalysis';
 import QualityControlAI from './QualityControlAI';
 import VideoIntelligence from './VideoIntelligence';
 
-function AnalysisDashboard({ measurements = [], videoRef }) {
+function AnalysisDashboard({ measurements = [], videoRef, onUpdateMeasurements }) {
     const [isReportOpen, setIsReportOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('productivity'); // productivity, safety, quality
     const [showSafetyPanel, setShowSafetyPanel] = useState(false);
@@ -41,6 +41,8 @@ function AnalysisDashboard({ measurements = [], videoRef }) {
             </div>
         );
     }
+    // ...
+
 
     // Calculate statistics
     const totalTime = measurements.reduce((sum, m) => sum + m.duration, 0);
@@ -163,6 +165,7 @@ function AnalysisDashboard({ measurements = [], videoRef }) {
                 <VideoIntelligence
                     videoRef={videoRef}
                     onClose={() => setShowVideoIntel(false)}
+                    onUpdateMeasurements={onUpdateMeasurements}
                 />
             )}
 

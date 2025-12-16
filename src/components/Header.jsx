@@ -7,6 +7,7 @@ import GlobalSettingsDialog from './GlobalSettingsDialog';
 const MENU_ITEMS = [
     { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' }, // Moved to top
     { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
+    { path: '/ai-process', icon: '🧠', title: 'AI Process Studio', labelKey: 'header.aiProcess' },
     { path: '/analysis', icon: '📊', labelKey: 'header.analysis' },
     { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange' },
     { path: '/cycle-analysis', icon: '📈', labelKey: 'header.cycleAnalysis' },
@@ -32,6 +33,7 @@ const MENU_ITEMS = [
     { path: '/knowledge-base', icon: '📚', title: 'Knowledge Base' },
     { path: '/broadcast', icon: '📡', title: 'Broadcast' },
     { path: '/action-recognition', icon: '🤖', title: 'Action Recognition' },
+    { path: '/cycle-segmentation', icon: '🔄', title: 'Cycle Segmentation' },
     { path: '/cycle-segmentation', icon: '🔄', title: 'Cycle Segmentation' },
     // { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide' }, // Moved
     { path: '/files', icon: '📂', title: 'File Explorer' },

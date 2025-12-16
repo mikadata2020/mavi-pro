@@ -11,7 +11,7 @@ import {
     disposeObjectDetector
 } from '../utils/objectDetector';
 
-const ObjectTracking = ({ videoSrc, measurements, onUpdateMeasurements }) => {
+const ObjectTracking = ({ videoSrc, measurements, onUpdateMeasurements, externalVideoRef }) => {
     const [isDetecting, setIsDetecting] = useState(false);
     const [detector, setDetector] = useState(null);
     const [status, setStatus] = useState('Initializing...');
@@ -24,7 +24,8 @@ const ObjectTracking = ({ videoSrc, measurements, onUpdateMeasurements }) => {
     const [fps, setFps] = useState(0);
     const [showHelp, setShowHelp] = useState(false);
 
-    const videoRef = useRef(null);
+    const internalRef = useRef(null);
+    const videoRef = externalVideoRef || internalRef;
     const canvasRef = useRef(null);
     const requestRef = useRef();
     const tracksRef = useRef(new Map());

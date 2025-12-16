@@ -1,0 +1,373 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useVideoPlayer } from '../hooks/useVideoPlayer';
+import TimelineEditor from './features/TimelineEditor';
+import ElementEditor from './ElementEditor';
+import PlaybackControls from './features/PlaybackControls';
+import CycleDetectionPanel from './features/CycleDetectionPanel';
+import ObjectTracking from './ObjectTracking';
+import MachineLearningData from './MachineLearningData';
+import VideoIntelligence from './VideoIntelligence';
+// Icons
+import { Brain, Box, Activity, Layers, MessageSquare, Upload } from 'lucide-react';
+
+const AIProcessWorkspace = ({
+    measurements,
+    onUpdateMeasurements,
+    videoSrc,
+    onVideoChange,
+    videoName,
+    onVideoNameChange
+}) => {
+    const [currentMode, setCurrentMode] = useState('cycle'); // cycle, object, ml, gemini
+    const [leftPanelWidth, setLeftPanelWidth] = useState(65); // Default video width ~65%
+    const containerRef = useRef(null);
+    const isResizing = useRef(false);
+    const fileInputRef = useRef(null);
+
+    // Use video player hook - centralized video state
+    const {
+        videoRef,
+        videoState,
+        togglePlay,
+        setPlaybackSpeed,
+        seekTo,
+        setZoom,
+        addMeasurement,
+        removeMeasurement,
+        updateMeasurements,
+        nextFrame,
+        previousFrame,
+        toggleReverse,
+        handleTimeUpdate,
+        handleLoadedMetadata
+    } = useVideoPlayer(measurements);
+
+    // Ensure videoRef is available globally (if needed for broadcast/etc similar to VideoWorkspace)
+    useEffect(() => {
+        if (videoRef.current) {
+            window.__motionVideoElement = videoRef.current;
+        }
+    }, [videoRef.current]);
+
+    // Resizing Logic (Identical to VideoWorkspace)
+    const startResizing = useCallback(() => {
+        isResizing.current = true;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    }, []);
+
+    const stopResizing = useCallback(() => {
+        isResizing.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    }, []);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!isResizing.current || !containerRef.current) return;
+        const containerRect = containerRef.current.getBoundingClientRect();
+        const newWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+        if (newWidth > 15 && newWidth < 85) { // Min/Max constraints
+            setLeftPanelWidth(newWidth);
+        }
+    }, []);
+
+    useEffect(() => {
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', stopResizing);
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', stopResizing);
+        };
+    }, [handleMouseMove, stopResizing]);
+
+    const handleFileChange = (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            onVideoChange(url);
+            onVideoNameChange(file.name);
+        }
+    };
+
+    // Render active AI overlay or panel
+    const renderActiveAI = () => {
+        if (!videoSrc) return null;
+
+        switch (currentMode) {
+            case 'cycle':
+                return (
+                    <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 100 }}>
+                        <CycleDetectionPanel
+                            videoRef={videoRef}
+                            duration={videoState.duration}
+                            currentTime={videoState.currentTime}
+                            measurements={measurements}
+                            onUpdateMeasurements={onUpdateMeasurements}
+                            onSeek={seekTo}
+                            isEmbedded={true}
+                        />
+                    </div>
+                );
+            case 'object':
+                // Object Tracking overlays its own canvas on the video
+                return (
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                        <div style={{ pointerEvents: 'auto', width: '100%', height: '100%' }}>
+                            <ObjectTracking
+                                videoSrc={videoSrc}
+                                measurements={measurements}
+                                onUpdateMeasurements={onUpdateMeasurements}
+                                externalVideoRef={videoRef}
+                            />
+                        </div>
+                    </div>
+                );
+            case 'ml':
+                // Machine Learning overlays or replaces view
+                return (
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+                        <div style={{ pointerEvents: 'auto', width: '100%', height: '100%' }}>
+                            <MachineLearningData
+                                videoSrc={videoSrc}
+                                measurements={measurements}
+                                onUpdateMeasurements={onUpdateMeasurements}
+                                externalVideoRef={videoRef}
+                            />
+                        </div>
+                    </div>
+                );
+            case 'gemini':
+                // Gemini renders as a floating panel or sidebar item. 
+                // We'll put it in the sidebar or overlay? 
+                // Let's overlay it similar to CycleDetectionPanel for now, or put it in the sidebar?
+                // Given the request "tampilannya sama dengan menu video", sidebar usually has ElementEditor.
+                // Let's render Gemini as an overlay for now to not break the layout.
+                return (
+                    <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 100, height: '80%' }}>
+                        <VideoIntelligence
+                            videoRef={videoRef}
+                            onUpdateMeasurements={onUpdateMeasurements}
+                            isEmbedded={false} // Use floating style for overlay
+                        />
+                    </div>
+                );
+            default:
+                return null;
+        }
+    };
+
+    return (
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100vh',
+            backgroundColor: '#111',
+            fontFamily: 'Inter, sans-serif'
+        }}>
+
+            {/* Main Workspace Layout (Video + Sidebar) */}
+            <div ref={containerRef} style={{ flex: 1, display: 'flex', minHeight: '0', position: 'relative' }}>
+
+                {/* 1. Video Player Section (Left Panel) */}
+                <div style={{
+                    width: `${leftPanelWidth}%`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: '#000',
+                    position: 'relative'
+                }}>
+                    {/* Toolbar inside video panel - matching VideoWorkspace style */}
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px',
+                        backgroundColor: '#1e1e1e',
+                        borderBottom: '1px solid #333',
+                        flexWrap: 'wrap',
+                        marginBottom: '0px'
+                    }}>
+                        {/* Title & File Name */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginRight: '15px' }}>
+                            <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#00d2ff', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <Brain size={20} /> AI Studio
+                            </h2>
+                            <span style={{ color: '#666' }}>|</span>
+                            <span style={{ color: '#aaa', fontSize: '0.9rem', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {videoName || 'No Video'}
+                            </span>
+                        </div>
+
+                        {/* Mode Tabs - Integrated into toolbar */}
+                        <div style={{ display: 'flex', gap: '5px', background: '#222', padding: '2px', borderRadius: '6px' }}>
+                            {[
+                                { id: 'cycle', icon: <Activity size={16} />, label: 'Auto Cycle' },
+                                { id: 'object', icon: <Box size={16} />, label: 'Object Tracking' },
+                                { id: 'ml', icon: <Layers size={16} />, label: 'Motion Analysis' },
+                                { id: 'gemini', icon: <MessageSquare size={16} />, label: 'Video Intelligence' }
+                            ].map(mode => (
+                                <button
+                                    key={mode.id}
+                                    onClick={() => setCurrentMode(mode.id)}
+                                    style={{
+                                        padding: '6px 10px',
+                                        background: currentMode === mode.id ? '#333' : 'transparent',
+                                        color: currentMode === mode.id ? '#fff' : '#888',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        fontSize: '0.85rem',
+                                        transition: 'all 0.2s',
+                                        fontWeight: currentMode === mode.id ? 'bold' : 'normal'
+                                    }}
+                                    title={mode.label}
+                                >
+                                    {mode.icon} {mode.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Import Button */}
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                style={{
+                                    padding: '6px 12px',
+                                    background: '#0056b3',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                <Upload size={16} /> Import
+                            </button>
+                        </div>
+                        <input type="file" ref={fileInputRef} accept="video/*" onChange={handleFileChange} style={{ display: 'none' }} />
+                    </div>
+
+                    <div style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        position: 'relative'
+                    }}>
+                        {videoSrc ? (
+                            <div style={{
+                                width: '100%',
+                                height: '100%',
+                                position: 'relative',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}>
+                                <video
+                                    ref={videoRef}
+                                    src={videoSrc}
+                                    style={{
+                                        maxWidth: '100%',
+                                        maxHeight: '100%',
+                                        transform: `scale(${videoState.zoom})`,
+                                        transformOrigin: 'center center',
+                                        transition: 'transform 0.2s'
+                                    }}
+                                    onTimeUpdate={handleTimeUpdate}
+                                    onLoadedMetadata={handleLoadedMetadata}
+                                />
+
+                                {/* AI Overlays based on mode */}
+                                {renderActiveAI()}
+
+                            </div>
+                        ) : (
+                            <div style={{ color: '#666', textAlign: 'center' }}>
+                                <p>Upload a video to start AI Analysis</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Timeline Editor */}
+                    {videoSrc && (
+                        <div style={{ backgroundColor: '#1e1e1e', borderTop: '1px solid #333' }}>
+                            <TimelineEditor
+                                videoState={videoState}
+                                measurements={measurements}
+                                onUpdateMeasurements={updateMeasurements}
+                                onSeek={seekTo}
+                                videoRef={videoRef}
+                            />
+                        </div>
+                    )}
+
+                    {/* Playback Controls */}
+                    {videoSrc && (
+                        <PlaybackControls
+                            videoState={videoState}
+                            onTogglePlay={togglePlay}
+                            onSetSpeed={setPlaybackSpeed}
+                            onNextFrame={nextFrame}
+                            onPreviousFrame={previousFrame}
+                            onSetZoom={setZoom}
+                            onToggleReverse={toggleReverse}
+                        />
+                    )}
+                </div>
+
+                {/* 2. Resizer Handle */}
+                <div
+                    onMouseDown={startResizing}
+                    style={{
+                        width: '12px',
+                        background: '#1a1a1a',
+                        cursor: 'col-resize',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10,
+                        borderLeft: '1px solid #333',
+                        borderRight: '1px solid #333'
+                    }}
+                    title="Drag to resize"
+                >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                        <div style={{ width: '4px', height: '4px', background: '#666', borderRadius: '50%' }}></div>
+                    </div>
+                </div>
+
+                {/* 3. Right Panel: Element Editor */}
+                <div style={{
+                    flex: 1,
+                    minWidth: '0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    padding: '10px',
+                    backgroundColor: '#1e1e1e'
+                }}>
+                    <div style={{ flex: 1, overflowY: 'auto' }}>
+                        <ElementEditor
+                            measurements={measurements}
+                            onUpdateMeasurements={updateMeasurements}
+                            currentTime={videoState.currentTime}
+                            onSeek={seekTo}
+                        />
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+};
+
+export default AIProcessWorkspace;

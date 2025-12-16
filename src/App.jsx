@@ -52,6 +52,7 @@ const AdminPanel = React.lazy(() => import('./components/AdminPanel'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
 const CycleSegmentation = React.lazy(() => import('./components/CycleSegmentation'));
 const ValueStreamMap = React.lazy(() => import('./components/ValueStreamMap'));
+const AIProcessWorkspace = React.lazy(() => import('./components/AIProcessWorkspace'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -400,7 +401,7 @@ function AppContent() {
           <Suspense fallback={<LoadingSpinner />}>
             <Routes>
               <Route path="/" element={null} /> {/* Handled by persistent div */}
-              <Route path="/analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AnalysisDashboard measurements={measurements} /></div>} />
+              <Route path="/analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AnalysisDashboard measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
               <Route path="/rearrangement" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><ElementRearrangement measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} /></div>} />
               <Route path="/cycle-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleTimeAnalysis /></div>} />
               <Route path="/swcs" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardWorkCombinationSheet /></div>} />
@@ -416,7 +417,7 @@ function AppContent() {
               <Route path="/multi-axial" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MultiAxialAnalysis /></div>} />
               <Route path="/manual-creation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ManualCreation /></div>} />
               <Route path="/spaghetti-chart" element={<div style={{ overflow: 'hidden', height: '100%' }}><SpaghettiChart currentProject={currentProject} projectMeasurements={measurements} /></div>} />
-              <Route path="/ml-data" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MachineLearningData videoSrc={videoSrc} /></div>} />
+              <Route path="/ml-data" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MachineLearningData videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
               <Route path="/object-tracking" element={<div style={{ overflow: 'hidden', height: '100%' }}><ObjectTracking videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
               <Route path="/predictive-maintenance" element={<div style={{ overflow: 'hidden', height: '100%' }}><PredictiveMaintenance measurements={measurements} /></div>} />
               <Route path="/comparison" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><VideoComparison /></div>} />
@@ -454,6 +455,9 @@ function AppContent() {
 
               {/* File Explorer */}
               <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
+
+              {/* AI Process Studio */}
+              <Route path="/ai-process" element={<div style={{ overflow: 'hidden', height: '100%' }}><AIProcessWorkspace measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} onVideoChange={setVideoSrc} videoName={videoName} onVideoNameChange={setVideoName} /></div>} />
 
               {/* Admin Panel */}
               <Route path="/admin" element={<div style={{ overflow: 'hidden', height: '100%' }}><AdminPanel /></div>} />

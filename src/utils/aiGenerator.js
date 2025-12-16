@@ -681,3 +681,108 @@ export const chatWithVideo = async (userMessage, fileUri, chatHistory = [], apiK
 
     throw lastError || new Error("All video models failed. Please check API Key.");
 };
+
+/**
+ * Generates structured content from a video using Gemini (Generic Handler).
+ */
+const generateVideoContent = async (prompt, fileUri, apiKey, expectJson = true) => {
+    const keyToUse = getStoredApiKey(apiKey);
+    const userModel = localStorage.getItem('gemini_model');
+    let models = ['gemini-1.5-flash-002', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+
+    if (userModel) {
+        const cleanUserModel = userModel.replace('models/', '');
+        models = [cleanUserModel, ...models.filter(m => m !== cleanUserModel)];
+    }
+
+    let lastError = null;
+
+    for (const model of models) {
+        try {
+            console.log(`Video Gen: Attempting with model ${model}`);
+
+            const parts = [
+                { text: prompt },
+                {
+                    file_data: {
+                        mime_type: "video/mp4",
+                        file_uri: fileUri
+                    }
+                }
+            ];
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${keyToUse}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts }]
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                console.warn(`Model ${model} failed:`, err);
+                throw new Error(err.error?.message || `Model ${model} failed`);
+            }
+
+            const data = await response.json();
+            if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                throw new Error("Empty response from AI");
+            }
+
+            let text = data.candidates[0].content.parts[0].text;
+            text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+            if (expectJson) {
+                const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+                if (jsonMatch) {
+                    try {
+                        return JSON.parse(jsonMatch[0]);
+                    } catch (e) {
+                        console.warn("JSON Parse failed, returning text");
+                    }
+                }
+            }
+
+            return text;
+
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    throw lastError || new Error("All video models failed. Please check API Key.");
+};
+
+/**
+ * Analyzes video to automatically generate timeline elements.
+ */
+export const generateElementsFromVideo = async (fileUri, apiKey) => {
+    const prompt = `
+        You are an expert Industrial Engineer analyzing a video for a Time and Motion Study.
+        
+        Task:
+        1. Break down the video into distinct, sequential WORK ELEMENTS (steps).
+        2. For each element, provide the start time, end time, and a clear description.
+        3. Classify each element as "Value-added", "Non value-added", or "Waste".
+        
+        Output format: JSON ARRAY of objects.
+        [
+            {
+                "elementName": "Description of the step (e.g., Reach for bolt)",
+                "startTime": 0.0,
+                "endTime": 2.5,
+                "duration": 2.5,
+                "category": "Value-added" (or "Non value-added" or "Waste"),
+                "therblig": "TE" (Transport Empty) - Optional Therblig code
+            }
+        ]
+        
+        Important:
+        - Ensure timestamps are accurate (in seconds).
+        - Cover the entire duration of the video if possible.
+        - The sequence should be logical.
+    `;
+
+    return await generateVideoContent(prompt, fileUri, apiKey, true);
+};

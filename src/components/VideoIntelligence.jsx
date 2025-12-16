@@ -1,16 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, MessageSquare, Video, Loader, Send, Trash2, Maximize2, Minimize2 } from 'lucide-react';
-import { uploadFileToGemini, chatWithVideo } from '../utils/aiGenerator';
-import { getStoredApiKey } from '../utils/aiGenerator'; // Need to export this or just rely on the helpers handle it internally? 
-// Actually aiGenerator doesn't export getStoredApiKey, but uploadFileToGemini handles it.
+import { Upload, MessageSquare, Video, Loader, Send, Trash2, Maximize2, Minimize2, Zap } from 'lucide-react';
+import { uploadFileToGemini, chatWithVideo, generateElementsFromVideo } from '../utils/aiGenerator';
+import { getStoredApiKey } from '../utils/aiGenerator';
 
-const VideoIntelligence = ({ videoRef, onClose }) => {
+const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded = false }) => {
     const [fileUri, setFileUri] = useState(null);
     const [uploadStatus, setUploadStatus] = useState('idle'); // idle, uploading, ready, error
     const [chatHistory, setChatHistory] = useState([]);
     const [inputMessage, setInputMessage] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -18,6 +18,8 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatHistory]);
+
+    // ... (handlers remain the same) ...
 
     const handleFileUpload = async (event) => {
         const file = event.target.files[0];
@@ -31,7 +33,7 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
             setUploadStatus('ready');
             setChatHistory(prev => [...prev, {
                 role: 'system',
-                content: `Video "${file.name}" uploaded successfully! You can now ask questions about it.`
+                content: `Video "${file.name}" uploaded successfully! You can now ask questions or generate elements.`
             }]);
         } catch (error) {
             console.error("Upload failed:", error);
@@ -40,6 +42,49 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
                 role: 'system',
                 content: `Error uploading video: ${error.message}. Please check your API Key and try again.`
             }]);
+        }
+    };
+
+    const handleGenerateElements = async () => {
+        if (!fileUri) return;
+
+        setIsGenerating(true);
+        setChatHistory(prev => [...prev, { role: 'system', content: '🔄 Analyzing video structure... This may take a minute.' }]);
+
+        try {
+            const elements = await generateElementsFromVideo(fileUri, null);
+
+            if (onUpdateMeasurements && Array.isArray(elements) && elements.length > 0) {
+                const newMeasurements = elements.map((el, i) => ({
+                    id: Date.now() + i,
+                    elementName: el.elementName || "Untitled Step",
+                    startTime: Number(el.startTime),
+                    endTime: Number(el.endTime),
+                    duration: Number(el.duration) || (Number(el.endTime) - Number(el.startTime)),
+                    category: el.category || "Value-added",
+                    therblig: el.therblig || null
+                }));
+
+                onUpdateMeasurements(newMeasurements);
+                setChatHistory(prev => [...prev, {
+                    role: 'system',
+                    content: `✅ Successfully generated ${newMeasurements.length} elements! The timeline has been updated.`
+                }]);
+            } else {
+                setChatHistory(prev => [...prev, {
+                    role: 'system',
+                    content: `⚠️ Analysis complete but no elements were returned or they were in an invalid format.`
+                }]);
+            }
+
+        } catch (error) {
+            console.error("Geneartion failed:", error);
+            setChatHistory(prev => [...prev, {
+                role: 'system',
+                content: `❌ Error generating elements: ${error.message}`
+            }]);
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -73,23 +118,31 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
         fileInputRef.current?.click();
     };
 
+    const containerStyle = isEmbedded ? {
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#1a1a1a',
+        display: 'flex',
+        flexDirection: 'column'
+    } : {
+        position: 'absolute',
+        top: isExpanded ? '10px' : '60px',
+        right: isExpanded ? '10px' : '20px',
+        bottom: isExpanded ? '10px' : '20px',
+        left: isExpanded ? '10px' : 'auto',
+        width: isExpanded ? 'auto' : '380px',
+        backgroundColor: '#1a1a1a',
+        border: '1px solid #333',
+        borderRadius: '8px',
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 1000,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        transition: 'all 0.3s ease'
+    };
+
     return (
-        <div style={{
-            position: 'absolute',
-            top: isExpanded ? '10px' : '60px',
-            right: isExpanded ? '10px' : '20px',
-            bottom: isExpanded ? '10px' : '20px',
-            left: isExpanded ? '10px' : 'auto',
-            width: isExpanded ? 'auto' : '380px',
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #333',
-            borderRadius: '8px',
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 1000,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-            transition: 'all 0.3s ease'
-        }}>
+        <div style={containerStyle}>
             {/* Header */}
             <div style={{
                 padding: '12px 16px',
@@ -98,28 +151,30 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 backgroundColor: '#252526',
-                borderRadius: '8px 8px 0 0'
+                borderRadius: isEmbedded ? '0' : '8px 8px 0 0'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Video size={18} color="#A78BFA" /> // Purple accent for Geminish look
+                    <Video size={18} color="#A78BFA" />
                     <span style={{ fontWeight: '600', color: '#fff' }}>Gemini Video Intelligence</span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
-                        title={isExpanded ? "Collapse" : "Expand"}
-                    >
-                        {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                    </button>
-                    <button
-                        onClick={onClose}
-                        style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
-                        title="Close"
-                    >
-                        ✕
-                    </button>
-                </div>
+                {!isEmbedded && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
+                            title={isExpanded ? "Collapse" : "Expand"}
+                        >
+                            {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                        </button>
+                        <button
+                            onClick={onClose}
+                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer' }}
+                            title="Close"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Content Area */}
@@ -187,11 +242,43 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
                 {/* Chat Section (if ready) */}
                 {uploadStatus === 'ready' && (
                     <>
+                        {/* Auto Generate Button Toolbar */}
+                        <div style={{
+                            padding: '10px 16px',
+                            borderBottom: '1px solid #333',
+                            backgroundColor: '#202020',
+                            display: 'flex',
+                            gap: '10px'
+                        }}>
+                            <button
+                                onClick={handleGenerateElements}
+                                disabled={isGenerating || isTyping}
+                                style={{
+                                    flex: 1,
+                                    padding: '8px',
+                                    backgroundColor: isGenerating ? '#444' : '#107c41',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    fontWeight: '500',
+                                    fontSize: '0.85rem'
+                                }}
+                            >
+                                {isGenerating ? <Loader size={14} className="spin" /> : <Zap size={14} />}
+                                Auto-Generate Elements
+                            </button>
+                        </div>
+
                         <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             {chatHistory.map((msg, idx) => (
                                 <div key={idx} style={{
                                     alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                    maxWidth: '80%',
+                                    maxWidth: '85%',
                                     backgroundColor: msg.role === 'user' ? '#A78BFA' : '#2d2d2d',
                                     color: msg.role === 'user' ? '#000' : '#e0e0e0',
                                     padding: '10px 14px',
@@ -202,7 +289,7 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
                                     {msg.content}
                                 </div>
                             ))}
-                            {isTyping && (
+                            {(isTyping || isGenerating) && (
                                 <div style={{ alignSelf: 'flex-start', color: '#666', fontSize: '0.8rem', marginLeft: '10px' }}>
                                     Gemini is analyzing video frames...
                                 </div>
@@ -230,7 +317,8 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
                                 value={inputMessage}
                                 onChange={(e) => setInputMessage(e.target.value)}
                                 onKeyPress={handleKeyPress}
-                                placeholder="Ask about this video (e.g., 'Is the worker wearing gloves?')"
+                                placeholder="Ask about this video..."
+                                disabled={isGenerating}
                                 style={{
                                     flex: 1,
                                     backgroundColor: '#2d2d2d',
@@ -243,14 +331,14 @@ const VideoIntelligence = ({ videoRef, onClose }) => {
                             />
                             <button
                                 onClick={handleSendMessage}
-                                disabled={isTyping || !inputMessage.trim()}
+                                disabled={isTyping || !inputMessage.trim() || isGenerating}
                                 style={{
                                     padding: '8px 12px',
-                                    backgroundColor: isTyping ? '#444' : '#A78BFA',
-                                    color: isTyping ? '#777' : '#000',
+                                    backgroundColor: (isTyping || isGenerating) ? '#444' : '#A78BFA',
+                                    color: (isTyping || isGenerating) ? '#777' : '#000',
                                     border: 'none',
                                     borderRadius: '4px',
-                                    cursor: isTyping ? 'default' : 'pointer'
+                                    cursor: (isTyping || isGenerating) ? 'default' : 'pointer'
                                 }}
                             >
                                 <Send size={18} />
