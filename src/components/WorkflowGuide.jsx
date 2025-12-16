@@ -38,29 +38,29 @@ const WorkflowGuide = () => {
         },
         {
             id: 3,
-            title: 'AI Analysis',
-            icon: '🤖',
+            title: 'AI Process Studio',
+            icon: '🧠',
             color: '#FF9800',
-            description: 'Gunakan AI untuk deteksi otomatis',
+            description: 'Centralized AI for process breakdown',
             details: [
-                'Action Recognition: Auto-detect gerakan',
-                'ML Data: Bandingkan dengan Golden Cycle',
-                'Ergonomic Analysis: RULA/REBA detection',
-                'Object Tracking: Track pergerakan objek'
+                'Auto Cycle: Deteksi siklus repetitif',
+                'Object Tracking: Lacak pergerakan tools/part',
+                'Motion Analysis: Analisis ergonomi & anomali',
+                'Video Intelligence: Tanya jawab dengan video'
             ],
-            features: ['Action Recognition', 'ML Data', 'Ergonomic Analysis']
+            features: ['AI Process Studio', 'Action Recognition', 'ML Data']
         },
         {
             id: 4,
             title: 'Analysis',
             icon: '📊',
             color: '#9C27B0',
-            description: 'Analisis data dan identifikasi improvement',
+            description: 'Analisis data & improvement',
             details: [
                 'OEE, Efficiency, Productivity metrics',
-                'Cycle Time Analysis & variability',
                 'Waste Elimination (7 Wastes)',
-                'Statistical Analysis (Cp/Cpk)'
+                'Statistical Analysis (Cp/Cpk)',
+                'Value Stream Mapping'
             ],
             features: ['Analysis Dashboard', 'Waste Elimination', 'Statistical Analysis']
         },
@@ -381,13 +381,14 @@ const WorkflowGuide = () => {
                                                                 'Auto Cycle Detection': '/',
 
                                                                 // Step 3: AI Analysis
-                                                                'Action Recognition': '/action-recognition',
-                                                                'ML Data': '/ml-data',
-                                                                'Ergonomic Analysis': '/',
-                                                                'Object Tracking': '/object-tracking',
+                                                                'AI Process Studio': '/ai-process',
+                                                                'Action Recognition': '/ai-process',
+                                                                'ML Data': '/ai-process',
+                                                                'Ergonomic Analysis': '/ai-process',
+                                                                'Object Tracking': '/ai-process',
 
                                                                 // Step 4: Analysis
-                                                                'Analysis Dashboard': '/analysis',
+                                                                'Analysis Dashboard': '/ai-process',
                                                                 'Waste Elimination': '/waste-elimination',
                                                                 'Statistical Analysis': '/statistical-analysis',
 
