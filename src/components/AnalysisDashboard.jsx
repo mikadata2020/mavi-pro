@@ -93,6 +93,21 @@ function AnalysisDashboard({ measurements = [], videoRef, onUpdateMeasurements }
         ? (measurements.reduce((sum, m) => sum + (m.rating || 0), 0) / measurements.filter(m => m.rating).length).toFixed(1)
         : 'N/A';
 
+    // Expose metrics to Mavi AI
+    React.useEffect(() => {
+        if (advancedMetrics) {
+            window.__maviMetrics = {
+                oee: advancedMetrics.oee?.oee,
+                efficiency: advancedMetrics.efficiency?.efficiency,
+                taktStatus: advancedMetrics.taktAnalysis?.status,
+                productivityIndex: advancedMetrics.summary?.productivityIndex
+            };
+        }
+        return () => {
+            delete window.__maviMetrics;
+        };
+    }, [advancedMetrics]);
+
     return (
         <div style={{ padding: '15px', backgroundColor: 'var(--bg-secondary)', height: '100%', overflowY: 'auto', position: 'relative' }}>
 

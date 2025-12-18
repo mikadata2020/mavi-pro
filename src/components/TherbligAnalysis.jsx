@@ -182,24 +182,28 @@ function TherbligAnalysis({ measurements = [] }) {
         }
     };
 
-    // Animation effect
+    // Expose workstation data to Mavi AI
     useEffect(() => {
-        if (!isAnimating || icons.length === 0) {
-            setAnimationProgress(0);
-            return;
-        }
+        const metrics = calculateEfficiencyScore(icons, workstationObjects);
+        const distance = calculateTotalDistance(icons);
+        const reach = analyzeReachZones(icons, workstationObjects);
 
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += 0.01;
-            if (progress >= 1) {
-                progress = 0; // Loop animation
+        window.__maviWorkstation = {
+            objects: workstationObjects,
+            icons: icons,
+            metrics: {
+                efficiencyScore: metrics,
+                totalDistance: distance,
+                reachAnalysis: reach
             }
-            setAnimationProgress(progress);
-        }, 50); // Update every 50ms
+        };
 
-        return () => clearInterval(interval);
-    }, [isAnimating, icons.length]);
+        return () => {
+            delete window.__maviWorkstation;
+        };
+    }, [icons, workstationObjects]);
+
+    // Animation effect
 
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '10px', gap: '10px', backgroundColor: 'var(--bg-primary)' }}>

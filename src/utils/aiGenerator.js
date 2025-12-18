@@ -61,6 +61,39 @@ export const generateManualContent = async (taskName, apiKey, model = null, imag
 };
 
 /**
+ * Analyzes a Value Stream Map for bottlenecks and waste.
+ * @param {object} flowData - { nodes, edges, metrics }
+ * @param {string} apiKey
+ * @returns {Promise<string>} AI analysis and recommendations
+ */
+export const analyzeVSM = async (flowData, apiKey, language = 'English') => {
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) throw new Error("API Key missing");
+
+    const prompt = `
+        You are a Lean Manufacturing Sensei. Analyze the following Value Stream Map (VSM) data.
+        
+        **VSM METRICS:**
+        - Total Cycle Time: ${flowData.metrics.totalCT}s
+        - Total Value-Added Time: ${flowData.metrics.totalVA}s
+        - Total Lead Time: ${flowData.metrics.totalLT}s
+        - Process Efficiency: ${flowData.metrics.efficiency}%
+        
+        **VSM STRUCTURE:**
+        Nodes: ${JSON.stringify(flowData.nodes.map(n => ({ type: n.type, name: n.data.name, ct: n.data.ct, inventory: n.data.amount })))}
+        
+        **INSTRUCTIONS:**
+        1. Identify the primary BOTTLENECK.
+        2. Identify sources of WASTE (Muda) such as high inventory or low VA/LT ratio.
+        3. Provide 3 specific LEAN IMPROVEMENT recommendations.
+        4. Format the response in clear Markdown.
+        5. Use **${language}**.
+    `;
+
+    return await callAIProvider(prompt, keyToUse, null, false);
+};
+
+/**
  * Improves existing content for grammar, clarity, and tone.
  * @param {object} content - { description, keyPoints, safety }
  * @param {string} apiKey - The Google Gemini API Key.
@@ -289,21 +322,68 @@ export const chatWithAI = async (userMessage, context = {}, chatHistory = [], ap
         throw new Error("API Key is missing. Please configure it in AI Settings.");
     }
 
-    // Build context summary from measurement data
+    // Build context summary from multi-module data
     let contextSummary = "";
+
+    // 1. Measurement Data
     if (context.elements && context.elements.length > 0) {
         const totalTime = context.elements.reduce((sum, el) => sum + (el.duration || 0), 0);
         const elementList = context.elements.map((el, i) =>
             `${i + 1}. ${el.elementName || 'Unnamed'} (${el.therblig || 'N/A'}) - ${(el.duration || 0).toFixed(2)}s`
         ).join('\n');
 
-        contextSummary = `
-Current Measurement Data:
+        contextSummary += `
+[Module: Time Study]
 - Project: ${context.projectName || 'Unnamed Project'}
 - Total Elements: ${context.elements.length}
 - Total Cycle Time: ${totalTime.toFixed(2)} seconds
 - Elements:
 ${elementList}
+`;
+    }
+
+    // 2. Workstation Layout Data (from TherbligAnalysis)
+    if (context.workstation) {
+        const { objects = [], metrics = {} } = context.workstation;
+        contextSummary += `
+[Module: Workstation Layout]
+- Objects in Digital Twin: ${objects.length} (${objects.map(o => o.name).join(', ')})
+- Total Travel Distance: ${metrics.totalDistance || 'N/A'} units
+- Efficiency Score: ${metrics.efficiencyScore || 'N/A'}
+- Reach Zone Analysis: ${metrics.reachAnalysis || 'N/A'}
+`;
+    }
+
+    // 3. Ergonomics Data (from ErgonomicAnalysis)
+    if (context.ergonomics) {
+        const { mode = 'RULA', scores = {}, riskLevel = 'N/A' } = context.ergonomics;
+        contextSummary += `
+[Module: Ergonomics]
+- Analysis Mode: ${mode}
+- Risk Level: ${riskLevel}
+- Specific Scores: ${Object.entries(scores).map(([k, v]) => `${k}: ${v}`).join(', ')}
+`;
+    }
+
+    // 4. Productivity Metrics (from AnalysisDashboard)
+    if (context.metrics) {
+        contextSummary += `
+[Module: Productivity Analytics]
+- OEE: ${context.metrics.oee || 'N/A'}%
+- Efficiency: ${context.metrics.efficiency || 'N/A'}%
+- Takt Status: ${context.metrics.taktStatus || 'N/A'}
+- Productivity Index: ${context.metrics.productivityIndex || 'N/A'}
+`;
+    }
+
+    // 5. VSM Data (from ValueStreamMap)
+    if (context.vsm) {
+        contextSummary += `
+[Module: Value Stream Map]
+- Total Lead Time: ${context.vsm.metrics?.totalLT || 'N/A'}s
+- Efficiency: ${context.vsm.metrics?.efficiency || 'N/A'}%
+- Bottleneck Candidate: ${context.vsm.bottleneck || 'N/A'}
+- Process Count: ${context.vsm.nodes?.filter(n => n.type === 'process').length || 0}
 `;
     }
 
@@ -470,10 +550,11 @@ const callGemini = async (prompt, apiKey, specificModel = null, expectJson = tru
     }
 
     // Always add efficient fallbacks if they aren't already the first choice
-    // Always add efficient fallbacks if they aren't already the first choice
-    if (!modelsToTry.includes('gemini-1.5-flash')) modelsToTry.push('gemini-1.5-flash');
-    if (!modelsToTry.includes('gemini-2.0-flash-exp')) modelsToTry.push('gemini-2.0-flash-exp'); // Try newer experimental if flash fails
-    if (!modelsToTry.includes('gemini-1.5-pro')) modelsToTry.push('gemini-1.5-pro'); // Try pro last
+    const fallbacks = ['gemini-1.5-flash-latest', 'gemini-1.5-flash-002', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-002', 'gemini-2.0-flash-exp'];
+
+    for (const fb of fallbacks) {
+        if (!modelsToTry.includes(fb)) modelsToTry.push(fb);
+    }
 
 
     let lastError = null;
@@ -628,7 +709,7 @@ export const chatWithVideo = async (userMessage, fileUri, chatHistory = [], apiK
 
     // Priority list of models to try
     const userModel = localStorage.getItem('gemini_model');
-    let models = ['gemini-1.5-flash-002', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    let models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash-002', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-002', 'gemini-1.5-flash'];
 
     // If user has a specific model setting, try that FIRST
     if (userModel) {
@@ -688,7 +769,7 @@ export const chatWithVideo = async (userMessage, fileUri, chatHistory = [], apiK
 const generateVideoContent = async (prompt, fileUri, apiKey, expectJson = true) => {
     const keyToUse = getStoredApiKey(apiKey);
     const userModel = localStorage.getItem('gemini_model');
-    let models = ['gemini-1.5-flash-002', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    let models = ['gemini-1.5-flash-latest', 'gemini-1.5-flash-002', 'gemini-1.5-pro-latest', 'gemini-1.5-pro-002', 'gemini-1.5-flash'];
 
     if (userModel) {
         const cleanUserModel = userModel.replace('models/', '');

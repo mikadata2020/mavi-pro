@@ -88,6 +88,22 @@ function ErgonomicAnalysis({ videoRef, onClose, onUpdate }) {
         }
     }, [isAnalyzing, analyzeFrame]);
 
+    // Expose ergonomic data to Mavi AI
+    useEffect(() => {
+        if (scores) {
+            window.__maviErgonomics = {
+                mode: analysisMode,
+                scores: scores.scores,
+                finalScore: scores.finalScore,
+                riskLevel: scores.riskLevel,
+                recommendation: scores.recommendation
+            };
+        }
+        return () => {
+            delete window.__maviErgonomics;
+        };
+    }, [scores, analysisMode]);
+
     // Update parent with analysis data
     useEffect(() => {
         if (onUpdate) {

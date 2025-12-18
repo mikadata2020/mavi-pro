@@ -26,6 +26,44 @@ function AIChatOverlay({
         }
     }, [visible, chatHistory]);
 
+    const getGlobalContext = () => {
+        const globalContext = { ...contextData };
+
+        // Proactively try to gather context from known places if not already in contextData
+        if (!globalContext.elements) {
+            try {
+                // Try to get from local storage if available
+                const storedProject = localStorage.getItem('current_project_data');
+                if (storedProject) {
+                    const parsed = JSON.parse(storedProject);
+                    globalContext.elements = parsed.measurements;
+                    globalContext.projectName = parsed.name;
+                }
+            } catch (e) {
+                console.warn('Failed to gather global context from storage', e);
+            }
+        }
+
+        // Gather metrics if available on window (Custom event or global var)
+        if (window.__maviMetrics) {
+            globalContext.metrics = window.__maviMetrics;
+        }
+
+        if (window.__maviWorkstation) {
+            globalContext.workstation = window.__maviWorkstation;
+        }
+
+        if (window.__maviErgonomics) {
+            globalContext.ergonomics = window.__maviErgonomics;
+        }
+
+        if (window.__maviVSM) {
+            globalContext.vsm = window.__maviVSM;
+        }
+
+        return globalContext;
+    };
+
     const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
 
@@ -42,7 +80,7 @@ function AIChatOverlay({
         try {
             // Prepare context
             const context = {
-                ...contextData,
+                ...getGlobalContext(),
                 systemPrompt
             };
 

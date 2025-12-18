@@ -20,6 +20,10 @@ import ProductionControlNode from './nodes/ProductionControlNode';
 import GenericNode from './nodes/GenericNode';
 import Sidebar from './Sidebar';
 import { useUndoRedo } from '../../hooks/useUndoRedo';
+import { analyzeVSM, getStoredApiKey } from '../../utils/aiGenerator';
+import ReactMarkdown from 'react-markdown';
+import { Brain, Sparkles, X } from 'lucide-react';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const nodeTypes = {
     process: ProcessNode,
@@ -29,6 +33,7 @@ const nodeTypes = {
 };
 
 const VSMCanvasContent = () => {
+    const { currentLanguage } = useLanguage();
     const reactFlowWrapper = useRef(null);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -44,6 +49,10 @@ const VSMCanvasContent = () => {
 
     // Metrics Logic
     const [metrics, setMetrics] = useState({ totalCT: 0, totalVA: 0, totalLT: 0, efficiency: 0 });
+
+    // AI Analysis State
+    const [aiAnalysis, setAiAnalysis] = useState(null);
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
 
     // Load Initial Data
     useEffect(() => {
@@ -109,6 +118,18 @@ const VSMCanvasContent = () => {
         const eff = lt > 0 ? (va / lt) * 100 : 0;
         setMetrics({ totalCT: ct, totalVA: va, totalLT: lt, efficiency: eff.toFixed(2) });
 
+        // Expose to Mavi Hub
+        window.__maviVSM = {
+            nodes,
+            edges,
+            metrics: { totalCT: ct, totalVA: va, totalLT: lt, efficiency: eff.toFixed(2) },
+            bottleneck: nodes.filter(n => n.type === 'process')
+                .sort((a, b) => Number(b.data.ct) - Number(a.data.ct))[0]?.data.name
+        };
+
+        return () => {
+            delete window.__maviVSM;
+        };
     }, [nodes, edges]);
 
     const recordHistory = useCallback(() => {
@@ -273,6 +294,21 @@ const VSMCanvasContent = () => {
         });
     };
 
+    const handleAIAnalysis = async () => {
+        setIsAnalyzing(true);
+        try {
+            const apiKey = getStoredApiKey();
+            const languageName = currentLanguage === 'id' ? 'Indonesian' : 'English';
+            const result = await analyzeVSM({ nodes, edges, metrics }, apiKey, languageName);
+            setAiAnalysis(result);
+        } catch (error) {
+            console.error('AI Analysis failed', error);
+            alert('AI Analysis failed: ' + error.message);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
     // --- Render Helpers ---
 
     return (
@@ -295,6 +331,9 @@ const VSMCanvasContent = () => {
                 </div>
 
                 <div style={toolbarGroupStyle}>
+                    <button style={{ ...btnStyle, backgroundColor: '#8a2be2' }} onClick={handleAIAnalysis} disabled={isAnalyzing}>
+                        {isAnalyzing ? '⌛ Analyzing...' : <><Brain size={16} /> AI Sensei Analysis</>}
+                    </button>
                     <button style={btnStyle} onClick={handleExport} title="Export as PNG">📷 Export PNG</button>
                     <button style={{ ...btnStyle, backgroundColor: '#c50f1f' }} onClick={() => { if (confirm('Clear Canvas?')) { setNodes([]); setEdges([]); pushToHistory({ nodes: [], edges: [] }); } }}>🗑️ Clear</button>
                 </div>
@@ -417,6 +456,42 @@ const VSMCanvasContent = () => {
                             )}
 
                             <button onClick={() => deleteNode(selectedNode.id)} style={{ width: '100%', padding: '8px', backgroundColor: '#333', color: '#c50f1f', border: '1px solid #c50f1f', borderRadius: '4px', cursor: 'pointer', marginTop: '20px' }}>Delete Node</button>
+                        </div>
+                    )}
+
+                    {/* AI Analysis Modal/Overlay */}
+                    {aiAnalysis && (
+                        <div style={{
+                            position: 'absolute', top: '70px', left: '50%', transform: 'translateX(-50%)',
+                            width: '450px', maxHeight: 'calc(100% - 150px)', backgroundColor: '#1e1e1e',
+                            color: 'white', borderRadius: '12px', border: '1px solid #8a2be2',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.8)', zIndex: 100, overflow: 'hidden',
+                            display: 'flex', flexDirection: 'column'
+                        }}>
+                            <div style={{
+                                padding: '15px', backgroundColor: '#8a2be2', display: 'flex',
+                                justifyContent: 'space-between', alignItems: 'center'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold' }}>
+                                    <Sparkles size={20} /> MAVi AI VSM Insights
+                                </div>
+                                <button onClick={() => setAiAnalysis(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div style={{ padding: '20px', overflowY: 'auto', fontSize: '0.9rem', lineHeight: '1.5' }} className="markdown-container">
+                                <ReactMarkdown>{aiAnalysis}</ReactMarkdown>
+                                <style>{`
+                                    .markdown-container h1, .markdown-container h2, .markdown-container h3 { color: #8a2be2; margin-top: 20px; }
+                                    .markdown-container ul { padding-left: 20px; }
+                                    .markdown-container li { margin-bottom: 8px; }
+                                `}</style>
+                            </div>
+                            <div style={{ padding: '15px', borderTop: '1px solid #333', textAlign: 'right' }}>
+                                <button onClick={() => setAiAnalysis(null)} style={{ padding: '6px 15px', backgroundColor: '#444', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer' }}>
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
