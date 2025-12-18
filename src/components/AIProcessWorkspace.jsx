@@ -104,8 +104,8 @@ const AIProcessWorkspace = ({
                             duration={videoState.duration}
                             currentTime={videoState.currentTime}
                             measurements={measurements}
-                            onUpdateMeasurements={onUpdateMeasurements}
-                            onSeek={seekTo}
+                            onApplyCycles={onUpdateMeasurements}
+                            onClose={() => setCurrentMode(null)}
                             isEmbedded={true}
                         />
                     </div>
@@ -215,7 +215,7 @@ const AIProcessWorkspace = ({
                                 { id: 'cycle', icon: <Activity size={16} />, label: 'Auto Cycle' },
                                 { id: 'object', icon: <Box size={16} />, label: 'Object Tracking' },
                                 { id: 'ml', icon: <Layers size={16} />, label: 'Motion Analysis' },
-                                { id: 'gemini', icon: <MessageSquare size={16} />, label: 'Video Intelligence' }
+                                { id: 'gemini', icon: <MessageSquare size={16} />, label: 'Video Intelligence (AI Elements)' }
                             ].map(mode => (
                                 <button
                                     key={mode.id}
@@ -313,6 +313,7 @@ const AIProcessWorkspace = ({
                                 videoState={videoState}
                                 measurements={measurements}
                                 onUpdateMeasurements={updateMeasurements}
+                                onAddMeasurement={addMeasurement}
                                 onSeek={seekTo}
                                 videoRef={videoRef}
                             />

@@ -3,7 +3,7 @@ import { getAllProjects } from '../utils/database';
 
 import { exportSWCSToPDF } from '../utils/swcsExport';
 
-function StandardWorkCombinationSheet() {
+function StandardWorkCombinationSheet({ currentProject }) {
     const [projects, setProjects] = useState([]);
     const [selectedProjectId, setSelectedProjectId] = useState('');
     const [selectedProject, setSelectedProject] = useState(null);
@@ -24,11 +24,22 @@ function StandardWorkCombinationSheet() {
         loadProjects();
     }, []);
 
+    // Sync with global currentProject if it changes
+    useEffect(() => {
+        if (currentProject && projects.length > 0) {
+            const project = projects.find(p => p.projectName === currentProject.projectName);
+            if (project) {
+                setSelectedProjectId(project.projectName);
+                setSelectedProject(project);
+            }
+        }
+    }, [currentProject, projects]);
+
     useEffect(() => {
         if (selectedProjectId && projects.length > 0) {
             const project = projects.find(p => p.projectName === selectedProjectId);
             setSelectedProject(project);
-        } else {
+        } else if (!selectedProjectId) {
             setSelectedProject(null);
         }
     }, [selectedProjectId, projects]);
@@ -72,7 +83,23 @@ function StandardWorkCombinationSheet() {
 
     const renderChart = () => {
         if (!selectedProject || !selectedProject.measurements || selectedProject.measurements.length === 0) {
-            return <div style={{ color: '#888', textAlign: 'center', padding: '20px' }}>Tidak ada data pengukuran untuk ditampilkan.</div>;
+            return (
+                <div style={{
+                    color: '#888',
+                    textAlign: 'center',
+                    padding: '60px 20px',
+                    background: 'rgba(255,255,255,0.02)',
+                    borderRadius: '8px',
+                    border: '1px dashed #444',
+                    margin: '20px'
+                }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '10px' }}>📊</div>
+                    <div style={{ fontWeight: 'bold', color: '#ccc' }}>Tidak ada data pengukuran</div>
+                    <p style={{ fontSize: '0.9rem', margin: '5px 0 0' }}>
+                        Silakan pilih proyek yang memiliki data pengukuran elemen kerja atau buka "AI Studio" untuk mulai menganalisis video.
+                    </p>
+                </div>
+            );
         }
 
         const measurements = selectedProject.measurements;

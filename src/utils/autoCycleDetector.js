@@ -78,8 +78,24 @@ class AutoCycleDetector {
             const originalTime = videoElement.currentTime;
             const wasPaused = videoElement.paused;
 
+            // Timeout safety - reject after 30 seconds of inactivity
+            let timeoutId = null;
+            const resetTimeout = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => {
+                    cleanup();
+                    reject(new Error('Analysis timed out. The video player may have frozen.'));
+                }, 30000);
+            };
+
+            const cleanup = () => {
+                if (timeoutId) clearTimeout(timeoutId);
+                videoElement.removeEventListener('seeked', onSeeked);
+            };
+
             const processFrame = () => {
                 if (currentTime >= duration) {
+                    cleanup();
                     // Restore original state
                     videoElement.currentTime = originalTime;
                     if (!wasPaused) {
@@ -89,6 +105,7 @@ class AutoCycleDetector {
                     return;
                 }
 
+                resetTimeout();
                 videoElement.currentTime = currentTime;
             };
 

@@ -867,3 +867,51 @@ export const generateElementsFromVideo = async (fileUri, apiKey) => {
 
     return await generateVideoContent(prompt, fileUri, apiKey, true);
 };
+
+/**
+ * Performs a Deep Kaizen Analysis on a video using Gemini.
+ * Identifies waste, provides specific recommendations, and finds ergonomic issues.
+ */
+export const generateKaizenAnalysis = async (fileUri, apiKey) => {
+    const prompt = `
+        You are a world-class Industrial Engineer and Kaizen Sensei. 
+        Analyze the provided video of a manufacturing or administrative process.
+        
+        Provide your analysis in the following JSON format:
+        {
+            "wasteSegments": [
+                {
+                    "startTime": 0.0,
+                    "endTime": 5.0,
+                    "type": "Idle / Waiting",
+                    "description": "Operator is waiting for the machine to finish cycle."
+                }
+            ],
+            "recommendations": [
+                {
+                    "title": "Parallel Processing",
+                    "description": "Adjust the workflow so the operator can prepare the next part during the machine cycle to eliminate waiting time.",
+                    "impact": "High",
+                    "timestamp": 12.5
+                }
+            ],
+            "ergonomics": [
+                {
+                    "issue": "Awkward Reach",
+                    "severity": "Medium",
+                    "description": "The operator reaches too high for the component bin.",
+                    "timestamp": 8.2
+                }
+            ],
+            "summary": "A brief overall summary of the performance (max 2 sentences)."
+        }
+        
+        CRITICAL: 
+        1. Identify the TOP 3 most significant waste segments with accurate timestamps (in seconds).
+        2. Provide at least 3 actionable Kaizen recommendations.
+        3. Look for ergonomic risks (RULA/REBA inspired).
+        4. Be professional and data-driven.
+    `;
+
+    return await generateVideoContent(prompt, fileUri, apiKey, true);
+};

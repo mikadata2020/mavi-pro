@@ -11,6 +11,7 @@ import {
     detectAnomalies
 } from '../utils/motionComparator';
 import { loadModelFromURL, loadModelFromFiles, predict } from '../utils/teachableMachine';
+import { THERBLIG_ACTIONS } from '../utils/actionClassifier';
 
 const MachineLearningData = ({ videoSrc, measurements, onUpdateMeasurements, externalVideoRef }) => {
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -18,6 +19,7 @@ const MachineLearningData = ({ videoSrc, measurements, onUpdateMeasurements, ext
     const [goldenCycle, setGoldenCycle] = useState(null);
     const [dataPoints, setDataPoints] = useState([]);
     const [anomalies, setAnomalies] = useState(0);
+    const [anomalyHistory, setAnomalyHistory] = useState([]);
     const [showHelp, setShowHelp] = useState(false);
 
     // Real ML states
@@ -76,10 +78,12 @@ const MachineLearningData = ({ videoSrc, measurements, onUpdateMeasurements, ext
                 if (result) {
                     setTmPrediction(result);
 
+                    const score = (result.accuracy * 100);
+
                     // Update graph with accuracy of best class
                     const newPoint = {
                         time: new Date().toLocaleTimeString(),
-                        score: (result.accuracy * 100).toFixed(1),
+                        score: score.toFixed(1),
                         threshold: 80
                     };
 
@@ -88,7 +92,16 @@ const MachineLearningData = ({ videoSrc, measurements, onUpdateMeasurements, ext
                         if (newData.length > 20) newData.shift();
                         return newData;
                     });
-                    setConsistencyScore((result.accuracy * 100).toFixed(0));
+                    setConsistencyScore(score.toFixed(0));
+
+                    // Anomaly detection for TM (score < 80%)
+                    if (score < 80) {
+                        setAnomalies(prev => prev + 1);
+                        setAnomalyHistory(prev => [...prev, {
+                            time: videoRef.current.currentTime,
+                            score: score.toFixed(1)
+                        }]);
+                    }
 
                     // Draw TM pose
                     const canvas = canvasRef.current;
@@ -159,6 +172,10 @@ const MachineLearningData = ({ videoSrc, measurements, onUpdateMeasurements, ext
 
                         if (comparison.isAnomaly) {
                             setAnomalies(prev => prev + 1);
+                            setAnomalyHistory(prev => [...prev, {
+                                time: videoRef.current.currentTime,
+                                score: comparison.score
+                            }]);
                         }
                     }
 
@@ -385,40 +402,66 @@ const MachineLearningData = ({ videoSrc, measurements, onUpdateMeasurements, ext
     };
 
     const handleExportAnomalies = () => {
-        if (anomalies === 0) {
-            alert("No anomalies detected to export.");
+        if (!anomalyHistory.length || !onUpdateMeasurements) {
+            alert("Tidak ada anomali yang terdeteksi untuk diekspor.");
             return;
         }
 
-        if (!onUpdateMeasurements) {
-            console.error("onUpdateMeasurements not provided");
-            return;
-        }
+        // Sort by time just in case
+        const sortedHistory = [...anomalyHistory].sort((a, b) => a.time - b.time);
 
-        // Create a measurement for each anomaly time range (simplified as purely data points for now)
-        // Since we don't track exact start/end of anomalies in state, we'll export the low score segments
-        const lowScorePoints = dataPoints.filter(dp => parseFloat(dp.score) < 80);
+        const clusters = [];
+        let currentCluster = null;
+        const GAP_THRESHOLD = 2000; // 2 seconds gap between detections to form a new cluster
 
-        if (lowScorePoints.length === 0) {
-            alert("No low score segments found.");
-            return;
-        }
+        sortedHistory.forEach(anomaly => {
+            if (!currentCluster) {
+                currentCluster = {
+                    startTime: anomaly.time,
+                    endTime: anomaly.time,
+                    minScore: parseFloat(anomaly.score),
+                    count: 1,
+                    videoTimestamp: anomaly.time // anomalyHistory[i].time is already the video current time per analyzeFrame
+                };
+            } else if (anomaly.time - currentCluster.endTime < 2.0) { // Using 2 seconds as gap
+                currentCluster.endTime = anomaly.time;
+                currentCluster.minScore = Math.min(currentCluster.minScore, parseFloat(anomaly.score));
+                currentCluster.count++;
+            } else {
+                clusters.push(currentCluster);
+                currentCluster = {
+                    startTime: anomaly.time,
+                    endTime: anomaly.time,
+                    minScore: parseFloat(anomaly.score),
+                    count: 1,
+                    videoTimestamp: anomaly.time
+                };
+            }
+        });
 
-        const newMeasurements = lowScorePoints.map((point, index) => ({
-            id: Date.now() + index,
-            elementName: `Anomaly Detected`,
-            startTime: videoRef.current ? videoRef.current.currentTime : 0, // Ideally we'd map dataPoint time to video time
-            duration: 1.0, // Default 1s
-            category: 'Waste', // Anomalies are waste/non-value added
-            description: `Consistency Score: ${point.score}%`,
-            color: '#ff4b4b'
-        }));
+        if (currentCluster) clusters.push(currentCluster);
 
-        // In a real implementation, we would cluster these points into continuous segments
-        // For now, let's just create one summary element if there are many, or distinct ones if few
+        // Convert clusters to measurements
+        const newMeasurements = clusters.map((cluster, idx) => {
+            const startStr = new Date().toLocaleTimeString(); // Approximation for label
+            const duration = Math.max(1.0, cluster.endTime - cluster.startTime);
+
+            return {
+                id: `anomaly-${Date.now()}-${idx}`,
+                elementName: `Anomaly Detected (${(cluster.minScore).toFixed(0)}% consistency)`,
+                category: 'Waste',
+                rating: 0,
+                cycle: 1,
+                startTime: cluster.startTime, // This is video time
+                endTime: cluster.startTime + duration,
+                duration: duration,
+                note: `Detected group of ${cluster.count} low-consistency frames.`
+            };
+        });
 
         onUpdateMeasurements([...measurements, ...newMeasurements]);
-        alert(`Exported ${newMeasurements.length} anomaly events to timeline.`);
+        alert(`${newMeasurements.length} anomali telah ditambahkan ke timeline sebagai kategori 'Waste'.`);
+        setAnomalyHistory([]); // Reset history after export
     };
 
     return (
@@ -542,7 +585,7 @@ const MachineLearningData = ({ videoSrc, measurements, onUpdateMeasurements, ext
                         borderRadius: '4px',
                         fontSize: '0.8rem',
                         color: isAnalyzing || isRecording ? '#00ff00' : '#666',
-                        border: `1px solid ${isAnalyzing || isRecording ? '#00ff00' : '#666'}`
+                        border: `1px solid ${isAnalyzing || isRecording ? '#00ff00' : '#666'} `
                     }}>
                         {isRecording ? 'RECORDING' : isAnalyzing ? 'LIVE INFERENCE' : 'IDLE'}
                     </div>

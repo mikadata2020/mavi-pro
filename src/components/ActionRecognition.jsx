@@ -91,14 +91,37 @@ function ActionRecognition({ videoSrc, onActionsDetected }) {
 
                 if (useTeachableMachine && tmModel) {
                     const result = await predict(tmModel, video);
-                    if (result) {
+
+                    // Confidence Threshold (Default 0.6)
+                    const TM_THRESHOLD = 0.6;
+
+                    if (result && result.accuracy >= TM_THRESHOLD) {
                         pose = result.pose;
+
+                        // Map TM class to code if it matches standard Therbligs
+                        let mappedCode = 'TM';
+                        const bestClassLower = result.bestClass.toLowerCase();
+
+                        Object.entries(THERBLIG_ACTIONS).forEach(([key, value]) => {
+                            if (bestClassLower.includes(key.toLowerCase()) || bestClassLower === value.code.toLowerCase()) {
+                                mappedCode = value.code;
+                            }
+                        });
+
                         // Map TM class to Action Result format
                         actionResult = {
                             action: result.bestClass,
-                            therblig: 'TM', // Placeholder or map if possible
+                            therblig: mappedCode,
                             confidence: result.accuracy,
-                            color: '#00d2ff' // Default color for TM
+                            color: mappedCode !== 'TM' ? THERBLIG_ACTIONS[Object.keys(THERBLIG_ACTIONS).find(k => THERBLIG_ACTIONS[k].code === mappedCode)].color : '#00d2ff'
+                        };
+                    } else {
+                        // Fallback to Idle if low confidence
+                        actionResult = {
+                            action: 'Idle',
+                            therblig: 'ID',
+                            confidence: result ? result.accuracy : 0,
+                            color: '#808080'
                         };
                     }
                 } else {

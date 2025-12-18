@@ -404,7 +404,7 @@ function AppContent() {
               <Route path="/analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AnalysisDashboard measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
               <Route path="/rearrangement" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><ElementRearrangement measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} /></div>} />
               <Route path="/cycle-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleTimeAnalysis /></div>} />
-              <Route path="/swcs" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardWorkCombinationSheet /></div>} />
+              <Route path="/swcs" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardWorkCombinationSheet currentProject={currentProject} /></div>} />
               <Route path="/aggregation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleAggregation measurements={measurements} /></div>} />
               <Route path="/standard-time" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardTime measurements={measurements} /></div>} />
               <Route path="/waste-elimination" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><WasteElimination measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />

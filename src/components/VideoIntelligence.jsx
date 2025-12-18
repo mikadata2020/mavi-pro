@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, MessageSquare, Video, Loader, Send, Trash2, Maximize2, Minimize2, Zap } from 'lucide-react';
-import { uploadFileToGemini, chatWithVideo, generateElementsFromVideo } from '../utils/aiGenerator';
+import { Upload, MessageSquare, Video, Loader, Send, Trash2, Maximize2, Minimize2, Zap, Sparkles, AlertTriangle, Lightbulb, Shield } from 'lucide-react';
+import { uploadFileToGemini, chatWithVideo, generateElementsFromVideo, generateKaizenAnalysis } from '../utils/aiGenerator';
 import { getStoredApiKey } from '../utils/aiGenerator';
 
 const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded = false, videoFile }) => {
@@ -11,6 +11,8 @@ const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded
     const [isTyping, setIsTyping] = useState(false);
     const [isExpanded, setIsExpanded] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [kaizenResults, setKaizenResults] = useState(null);
+    const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'kaizen'
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -85,10 +87,36 @@ const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded
             }
 
         } catch (error) {
-            console.error("Geneartion failed:", error);
+            console.error("Generation failed:", error);
             setChatHistory(prev => [...prev, {
                 role: 'system',
                 content: `❌ Error generating elements: ${error.message}`
+            }]);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleKaizenAnalysis = async () => {
+        if (!fileUri) return;
+
+        setIsGenerating(true);
+        setActiveTab('kaizen');
+        setChatHistory(prev => [...prev, { role: 'system', content: '🧠 Performing Deep Kaizen Analysis... Analyzing workstation layout and motion efficiency.' }]);
+
+        try {
+            const results = await generateKaizenAnalysis(fileUri, null);
+            setKaizenResults(results);
+
+            setChatHistory(prev => [...prev, {
+                role: 'system',
+                content: `✅ Kaizen Analysis Complete! Found ${results.wasteSegments?.length || 0} waste segments and ${results.recommendations?.length || 0} recommendations.`
+            }]);
+        } catch (error) {
+            console.error("Kaizen analysis failed:", error);
+            setChatHistory(prev => [...prev, {
+                role: 'system',
+                content: `❌ Error in Kaizen Analysis: ${error.message}`
             }]);
         } finally {
             setIsGenerating(false);
@@ -283,29 +311,181 @@ const VideoIntelligence = ({ videoRef, onClose, onUpdateMeasurements, isEmbedded
                                 {isGenerating ? <Loader size={14} className="spin" /> : <Zap size={14} />}
                                 Auto-Generate Elements
                             </button>
+                            <button
+                                onClick={handleKaizenAnalysis}
+                                disabled={isGenerating || isTyping}
+                                style={{
+                                    flex: 1,
+                                    padding: '8px',
+                                    backgroundColor: isGenerating ? '#444' : '#8b5cf6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: isGenerating ? 'not-allowed' : 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    fontWeight: '500',
+                                    fontSize: '0.85rem'
+                                }}
+                            >
+                                {isGenerating ? <Loader size={14} className="spin" /> : <Sparkles size={14} />}
+                                Generative Kaizen
+                            </button>
                         </div>
 
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            {chatHistory.map((msg, idx) => (
-                                <div key={idx} style={{
-                                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                    maxWidth: '85%',
-                                    backgroundColor: msg.role === 'user' ? '#A78BFA' : '#2d2d2d',
-                                    color: msg.role === 'user' ? '#000' : '#e0e0e0',
-                                    padding: '10px 14px',
-                                    borderRadius: '12px',
-                                    fontSize: '0.9rem',
-                                    lineHeight: '1.4'
-                                }}>
-                                    {msg.content}
+                        {/* Tabs */}
+                        <div style={{ display: 'flex', borderBottom: '1px solid #333' }}>
+                            <button
+                                onClick={() => setActiveTab('chat')}
+                                style={{
+                                    flex: 1, padding: '10px', background: 'none', border: 'none',
+                                    color: activeTab === 'chat' ? '#A78BFA' : '#888',
+                                    borderBottom: activeTab === 'chat' ? '2px solid #A78BFA' : 'none',
+                                    cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold'
+                                }}
+                            >
+                                AI Chat
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('kaizen')}
+                                style={{
+                                    flex: 1, padding: '10px', background: 'none', border: 'none',
+                                    color: activeTab === 'kaizen' ? '#A78BFA' : '#888',
+                                    borderBottom: activeTab === 'kaizen' ? '2px solid #A78BFA' : 'none',
+                                    cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold'
+                                }}
+                            >
+                                Kaizen Insights {kaizenResults && `(${kaizenResults.recommendations?.length || 0})`}
+                            </button>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                            {activeTab === 'chat' ? (
+                                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {chatHistory.map((msg, idx) => (
+                                        <div key={idx} style={{
+                                            alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                            maxWidth: '85%',
+                                            backgroundColor: msg.role === 'user' ? '#A78BFA' : '#2d2d2d',
+                                            color: msg.role === 'user' ? '#000' : '#e0e0e0',
+                                            padding: '10px 14px',
+                                            borderRadius: '12px',
+                                            fontSize: '0.9rem',
+                                            lineHeight: '1.4'
+                                        }}>
+                                            {msg.content}
+                                        </div>
+                                    ))}
+                                    {(isTyping || isGenerating) && (
+                                        <div style={{ alignSelf: 'flex-start', color: '#666', fontSize: '0.8rem', marginLeft: '10px' }}>
+                                            Gemini is analyzing video frames...
+                                        </div>
+                                    )}
+                                    <div ref={messagesEndRef} />
                                 </div>
-                            ))}
-                            {(isTyping || isGenerating) && (
-                                <div style={{ alignSelf: 'flex-start', color: '#666', fontSize: '0.8rem', marginLeft: '10px' }}>
-                                    Gemini is analyzing video frames...
+                            ) : (
+                                <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    {isGenerating && !kaizenResults && (
+                                        <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                                            <Loader size={30} className="spin" style={{ margin: '0 auto 15px' }} />
+                                            <p>Analyzing Muda, Mura, Muri...</p>
+                                        </div>
+                                    )}
+
+                                    {kaizenResults && (
+                                        <>
+                                            {/* Summary */}
+                                            <div style={{ background: 'rgba(139, 92, 246, 0.1)', padding: '15px', borderRadius: '8px', border: '1px solid rgba(139, 92, 246, 0.3)' }}>
+                                                <h4 style={{ margin: '0 0 8px 0', color: '#A78BFA', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <Lightbulb size={18} /> Executive Summary
+                                                </h4>
+                                                <p style={{ margin: 0, fontSize: '0.9rem', color: '#ccc', lineHeight: '1.5' }}>{kaizenResults.summary}</p>
+                                            </div>
+
+                                            {/* Waste Segments */}
+                                            <div>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#ff4b4b', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
+                                                    <AlertTriangle size={18} /> Identified Waste (Muda)
+                                                </h4>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                    {kaizenResults.wasteSegments?.map((w, i) => (
+                                                        <div key={i} style={{ background: '#2d2d2d', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ff4b4b' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                                                <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.9rem' }}>{w.type}</span>
+                                                                <button
+                                                                    onClick={() => videoRef.current && (videoRef.current.currentTime = w.startTime)}
+                                                                    style={{ background: '#444', border: 'none', borderRadius: '4px', color: '#ff4b4b', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer' }}
+                                                                >
+                                                                    {w.startTime.toFixed(1)}s - {w.endTime.toFixed(1)}s
+                                                                </button>
+                                                            </div>
+                                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#aaa' }}>{w.description}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Recommendations */}
+                                            <div>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#107c41', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
+                                                    <Zap size={18} /> Kaizen Recommendations
+                                                </h4>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                    {kaizenResults.recommendations?.map((r, i) => (
+                                                        <div key={i} style={{ background: '#2d2d2d', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #107c41' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                                                <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.9rem' }}>{r.title}</span>
+                                                                {r.timestamp && (
+                                                                    <button
+                                                                        onClick={() => videoRef.current && (videoRef.current.currentTime = r.timestamp)}
+                                                                        style={{ background: '#444', border: 'none', borderRadius: '4px', color: '#107c41', padding: '2px 8px', fontSize: '0.75rem', cursor: 'pointer' }}
+                                                                    >
+                                                                        @ {r.timestamp.toFixed(1)}s
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#aaa', marginBottom: '5px' }}>{r.description}</p>
+                                                            <span style={{ fontSize: '0.7rem', color: '#107c41', background: 'rgba(16, 124, 65, 0.1)', padding: '2px 6px', borderRadius: '10px' }}>
+                                                                Impact: {r.impact}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* Ergonomics */}
+                                            {kaizenResults.ergonomics?.length > 0 && (
+                                                <div>
+                                                    <h4 style={{ margin: '0 0 10px 0', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem' }}>
+                                                        <Shield size={18} /> Ergonomic Alerts
+                                                    </h4>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                        {kaizenResults.ergonomics.map((e, i) => (
+                                                            <div key={i} style={{ background: '#2d2d2d', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                                                                    <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.9rem' }}>{e.issue}</span>
+                                                                    <span style={{ fontSize: '0.75rem', color: e.severity === 'High' ? '#ff4b4b' : '#f59e0b' }}>{e.severity}</span>
+                                                                </div>
+                                                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#aaa' }}>{e.description}</p>
+                                                                {e.timestamp && (
+                                                                    <button
+                                                                        onClick={() => videoRef.current && (videoRef.current.currentTime = e.timestamp)}
+                                                                        style={{ marginTop: '8px', background: 'none', border: '1px solid #444', borderRadius: '4px', color: '#888', padding: '2px 8px', fontSize: '0.7rem', cursor: 'pointer' }}
+                                                                    >
+                                                                        View Moment ({e.timestamp.toFixed(1)}s)
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
                             )}
-                            <div ref={messagesEndRef} />
                         </div>
 
                         {/* Input Area */}

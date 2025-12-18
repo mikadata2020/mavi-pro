@@ -1,10 +1,42 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 
 function ProjectGanttChart({ measurements = [] }) {
     const [zoomLevel, setZoomLevel] = useState(100); // pixels per second
     const containerRef = useRef(null);
 
-    if (measurements.length === 0) {
+    // Memoize stats calculation and cleanup measurements
+    const stats = useMemo(() => {
+        if (!measurements || measurements.length === 0) {
+            return { totalDuration: 0, byCategory: {}, validMeasurements: [] };
+        }
+
+        // Ensure all numeric values are valid to avoid NaN crashes
+        const validMeasurements = measurements.map(m => {
+            const startTime = Number(m.startTime) || 0;
+            const duration = Number(m.duration) || 0;
+            const endTime = Number(m.endTime) || (startTime + duration);
+
+            return {
+                ...m,
+                startTime: Math.max(0, startTime),
+                endTime: Math.max(startTime, endTime),
+                duration: Math.max(0, duration)
+            };
+        });
+
+        const totalDuration = validMeasurements.length > 0
+            ? Math.max(...validMeasurements.map(m => m.endTime), 10)
+            : 10;
+
+        const byCategory = validMeasurements.reduce((acc, m) => {
+            acc[m.category] = (acc[m.category] || 0) + m.duration;
+            return acc;
+        }, {});
+
+        return { totalDuration, byCategory, validMeasurements };
+    }, [measurements]);
+
+    if (!measurements || measurements.length === 0) {
         return (
             <div style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
                 No measurements available to display.
@@ -12,8 +44,7 @@ function ProjectGanttChart({ measurements = [] }) {
         );
     }
 
-    // Calculate total duration for the timeline
-    const totalDuration = Math.max(...measurements.map(m => m.endTime), 0);
+    const { totalDuration, validMeasurements } = stats;
     const timelineWidth = totalDuration * zoomLevel + 100; // Extra space
 
     const getCategoryColor = (category) => {
@@ -75,7 +106,7 @@ function ProjectGanttChart({ measurements = [] }) {
                     </div>
 
                     {/* Data Rows */}
-                    {measurements.map((m, index) => {
+                    {validMeasurements.map((m, index) => {
                         const manualW = (m.manualTime || 0) * zoomLevel;
                         const autoW = (m.autoTime || 0) * zoomLevel;
                         const walkW = (m.walkTime || 0) * zoomLevel;
