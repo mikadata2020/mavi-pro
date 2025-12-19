@@ -915,3 +915,218 @@ export const generateKaizenAnalysis = async (fileUri, apiKey) => {
 
     return await generateVideoContent(prompt, fileUri, apiKey, true);
 };
+
+/**
+ * Automatically generates a full set of manual steps from a video using Gemini.
+ */
+export const generateFullManualFromVideo = async (fileUri, apiKey, language = 'English') => {
+    const prompt = `
+        You are an expert Industrial Engineer and Technical Writer.
+        Analyze the provided video of a process and create a comprehensive "Work Instruction Manual".
+        
+        Task:
+        1. Break the process into clear, logical steps.
+        2. For each step, provide:
+           - "title": A short, action-oriented title (e.g., "Mount Bracket to Chassis").
+           - "description": A clear instruction on how to perform the step.
+           - "startTime": The timestamp in the video where this step begins (in seconds).
+           - "endTime": The timestamp where the step ends.
+           - "bullets": An array of objects: { "type": "warning" | "note" | "caution", "text": "Specific advice" }
+        
+        Output format: JSON ARRAY of step objects.
+        
+        CRITICAL: 
+        - The entire response MUST be in ${language}.
+        - Ensure steps follow a logical sequence.
+        - Look for safety warnings or quality notes for each step.
+        - Return ONLY the JSON array.
+    `;
+
+    return await generateVideoContent(prompt, fileUri, apiKey, true);
+};
+
+/**
+ * Generates a complete VSM structure from a natural language prompt.
+ * @param {string} processDescription - User's description of the process
+ * @param {string} apiKey - The Google Gemini API Key
+ * @param {string} language - The target language ('Indonesian' or 'English')
+ * @returns {Promise<{nodes: Array, edges: Array}>} VSM structure with nodes and edges
+ */
+export const generateVSMFromPrompt = async (processDescription, apiKey, language = 'English') => {
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) {
+        throw new Error("API Key is missing. Please configure it in AI Settings.");
+    }
+
+    const prompt = `
+        You are an expert Lean Manufacturing Engineer specializing in Value Stream Mapping (VSM).
+        
+        **TASK:**
+        Convert the following process description into a COMPLETE VSM (Value Stream Map) with nodes and edges.
+        IMPORTANT: Include BOTH material flow AND information flow.
+        
+        **PROCESS DESCRIPTION:**
+        ${processDescription}
+        
+        **OUTPUT REQUIREMENTS:**
+        Return a JSON object with two arrays: "nodes" and "edges".
+        
+        **NODE TYPES:**
+        1. "process" - For manufacturing/assembly steps (has cycle time, operators, etc.)
+        2. "inventory" - For stock/buffer between processes (has amount, time equivalent)
+        3. "productionControl" - For scheduling/planning/MRP activities (ALWAYS add this for information flow)
+        4. "generic" - For suppliers, customers, kanban posts, or other entities
+        
+        **SYMBOL TYPES (for data.symbolType):**
+        Material Flow: "process", "inventory", "supplier", "customer", "supermarket", "fifo", "truck"
+        Information Flow: "production_control", "electronic_info", "manual_info", "kanban_post", "signal_kanban", "kanban_production", "kanban_withdrawal"
+        
+        **LAYOUT RULES:**
+        - Material flow (horizontal): Left to right, Y = 300
+        - Information flow (top): Y = 100-150 for production control and information nodes
+        - Start X position: 100
+        - Spacing: 200px horizontal between nodes
+        - Production Control should be positioned at top-center (Y = 100)
+        
+        **EDGE TYPES:**
+        - Material flow edges: type "smoothstep", connect processes/inventory horizontally
+        - Information flow edges: type "step" or "straight", connect production control to processes
+        - Use "markerEnd": { "type": "arrowclosed" } for all edges
+        
+        **JSON SCHEMA:**
+        {
+            "nodes": [
+                {
+                    "id": "node-0",
+                    "type": "generic",
+                    "position": { "x": 100, "y": 300 },
+                    "data": {
+                        "name": "Supplier Name",
+                        "symbolType": "supplier"
+                    }
+                },
+                {
+                    "id": "node-pc",
+                    "type": "productionControl",
+                    "position": { "x": 600, "y": 100 },
+                    "data": {
+                        "name": "Production Control / MRP",
+                        "symbolType": "production_control"
+                    }
+                },
+                {
+                    "id": "node-1",
+                    "type": "process",
+                    "position": { "x": 300, "y": 300 },
+                    "data": {
+                        "name": "Process Name",
+                        "ct": 30,
+                        "co": 0,
+                        "uptime": 95,
+                        "yield": 98,
+                        "va": 25,
+                        "operators": 1,
+                        "processType": "normal",
+                        "symbolType": "process"
+                    }
+                },
+                {
+                    "id": "node-2",
+                    "type": "inventory",
+                    "position": { "x": 500, "y": 300 },
+                    "data": {
+                        "name": "WIP Inventory",
+                        "amount": 100,
+                        "unit": "pcs",
+                        "time": 3600,
+                        "symbolType": "inventory"
+                    }
+                }
+            ],
+            "edges": [
+                {
+                    "id": "edge-0-1",
+                    "source": "node-0",
+                    "target": "node-1",
+                    "type": "smoothstep",
+                    "markerEnd": { "type": "arrowclosed" }
+                },
+                {
+                    "id": "edge-pc-1",
+                    "source": "node-pc",
+                    "target": "node-1",
+                    "type": "step",
+                    "animated": true,
+                    "style": { "stroke": "#ff6b35", "strokeWidth": 2, "strokeDasharray": "5,5" },
+                    "markerEnd": { "type": "arrowclosed" }
+                }
+            ]
+        }
+        
+        **CRITICAL INSTRUCTIONS:**
+        1. ALWAYS create a "productionControl" node at the top (Y = 100) for information flow
+        2. Connect production control to supplier with information edge (electronic or manual)
+        3. Connect production control to each process with information edges (scheduling/kanban)
+        4. Extract cycle times (ct) from description (in seconds). If not specified, use reasonable estimates.
+        5. Create inventory nodes when mentioned (e.g., "inventory of 100 units", "buffer stock").
+        6. Connect all material flow nodes sequentially with "smoothstep" edges.
+        7. Information flow edges should use "step" type and have dashed style.
+        8. Use "generic" type for suppliers/customers.
+        9. Set reasonable defaults: uptime (95%), yield (98%), operators (1).
+        10. Calculate VA (value-added time) as 80-90% of CT if not specified.
+        11. Position nodes with proper spacing for readability.
+        12. Return ONLY valid JSON, no markdown formatting or explanations.
+        13. All text fields (names, descriptions) MUST be in ${language}.
+        14. For kanban systems, add kanban_post nodes and connect with signal edges.
+        
+        **INFORMATION FLOW EXAMPLES:**
+        - Production Control → Supplier: Weekly forecast (electronic_info)
+        - Production Control → Process: Daily schedule (manual_info or kanban)
+        - Process → Kanban Post: Pull signal (signal_kanban)
+        
+        **COMPLETE EXAMPLE:**
+        
+        Input (Indonesian): "Proses dimulai dari supplier ABC dengan forecast mingguan. Production control mengirim jadwal harian ke cutting (30 detik, 2 operator). Ada inventory 100 unit. Assembly 45 detik dengan kanban. QC 20 detik. Kirim ke customer XYZ."
+        
+        Output: 
+        {
+            "nodes": [
+                {"id": "node-0", "type": "generic", "position": {"x": 100, "y": 300}, "data": {"name": "Supplier ABC", "symbolType": "supplier"}},
+                {"id": "node-pc", "type": "productionControl", "position": {"x": 700, "y": 100}, "data": {"name": "Production Control", "symbolType": "production_control"}},
+                {"id": "node-1", "type": "process", "position": {"x": 300, "y": 300}, "data": {"name": "Cutting", "ct": 30, "va": 25, "operators": 2, "uptime": 95, "yield": 98, "co": 0, "processType": "normal", "symbolType": "process"}},
+                {"id": "node-2", "type": "inventory", "position": {"x": 500, "y": 300}, "data": {"name": "WIP", "amount": 100, "unit": "pcs", "time": 3600, "symbolType": "inventory"}},
+                {"id": "node-3", "type": "process", "position": {"x": 700, "y": 300}, "data": {"name": "Assembly", "ct": 45, "va": 40, "operators": 1, "uptime": 95, "yield": 98, "co": 0, "processType": "normal", "symbolType": "process"}},
+                {"id": "node-4", "type": "process", "position": {"x": 900, "y": 300}, "data": {"name": "QC", "ct": 20, "va": 18, "operators": 1, "uptime": 95, "yield": 98, "co": 0, "processType": "normal", "symbolType": "process"}},
+                {"id": "node-5", "type": "generic", "position": {"x": 1100, "y": 300}, "data": {"name": "Customer XYZ", "symbolType": "customer"}}
+            ],
+            "edges": [
+                {"id": "edge-0-1", "source": "node-0", "target": "node-1", "type": "smoothstep", "markerEnd": {"type": "arrowclosed"}},
+                {"id": "edge-1-2", "source": "node-1", "target": "node-2", "type": "smoothstep", "markerEnd": {"type": "arrowclosed"}},
+                {"id": "edge-2-3", "source": "node-2", "target": "node-3", "type": "smoothstep", "markerEnd": {"type": "arrowclosed"}},
+                {"id": "edge-3-4", "source": "node-3", "target": "node-4", "type": "smoothstep", "markerEnd": {"type": "arrowclosed"}},
+                {"id": "edge-4-5", "source": "node-4", "target": "node-5", "type": "smoothstep", "markerEnd": {"type": "arrowclosed"}},
+                {"id": "edge-pc-0", "source": "node-pc", "target": "node-0", "type": "step", "animated": true, "style": {"stroke": "#ff6b35", "strokeDasharray": "5,5"}, "label": "Forecast Mingguan", "markerEnd": {"type": "arrowclosed"}},
+                {"id": "edge-pc-1", "source": "node-pc", "target": "node-1", "type": "step", "animated": true, "style": {"stroke": "#ff6b35", "strokeDasharray": "5,5"}, "label": "Jadwal Harian", "markerEnd": {"type": "arrowclosed"}},
+                {"id": "edge-pc-3", "source": "node-pc", "target": "node-3", "type": "step", "animated": true, "style": {"stroke": "#ff6b35", "strokeDasharray": "5,5"}, "label": "Kanban", "markerEnd": {"type": "arrowclosed"}}
+            ]
+        }
+        
+        Now process the user's description and return the COMPLETE VSM JSON structure with BOTH material and information flows.
+    `;
+        
+       
+
+    console.log('Generating VSM from prompt...');
+    const result = await callAIProvider(prompt, keyToUse, null, true);
+
+    // Validate the result
+    if (!result.nodes || !Array.isArray(result.nodes)) {
+        throw new Error("Invalid AI response: missing or invalid 'nodes' array");
+    }
+    if (!result.edges || !Array.isArray(result.edges)) {
+        throw new Error("Invalid AI response: missing or invalid 'edges' array");
+    }
+
+    console.log('VSM generated successfully:', result);
+    return result;
+};

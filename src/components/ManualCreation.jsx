@@ -6,8 +6,15 @@ import { helpContent } from '../utils/helpContent.jsx';
 import GuideHeader from './manual/GuideHeader';
 import StepList from './manual/StepList';
 import StepEditor from './manual/StepEditor';
-import { generateManualContent, improveManualContent } from '../utils/aiGenerator';
+import {
+    generateManualContent,
+    improveManualContent,
+    uploadFileToGemini,
+    generateFullManualFromVideo,
+    getStoredApiKey
+} from '../utils/aiGenerator';
 import VoiceCommandRecognizer from '../utils/voiceCommandRecognizer';
+import AIChatOverlay from './features/AIChatOverlay';
 import jsPDF from 'jspdf';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, ImageRun } from 'docx';
 import { saveAs } from 'file-saver';
@@ -16,7 +23,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import QRCode from 'qrcode';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
-import { FileSpreadsheet, FileText, Upload } from 'lucide-react';
+import { FileSpreadsheet, FileText, Upload, Sparkles, MessageSquare, Cpu, Loader2 } from 'lucide-react';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -26,6 +33,17 @@ function ManualCreation() {
     const [selectedProject, setSelectedProject] = useState(null);
     const [videoSrc, setVideoSrc] = useState(null);
     const videoRef = useRef(null);
+
+    const DEFAULT_HEADER_ORDER = [
+        { id: 'documentNumber', label: 'Doc Number' },
+        { id: 'revisionDate', label: 'Revision Date' },
+        { id: 'version', label: 'Version' },
+        { id: 'effectiveDate', label: 'Effective Date' },
+        { id: 'status', label: 'Status' },
+        { id: 'difficulty', label: 'Difficulty' },
+        { id: 'author', label: 'Author' },
+        { id: 'timeRequired', label: 'Time Required' }
+    ];
 
     const [guide, setGuide] = useState({
         id: generateId(),
@@ -39,6 +57,7 @@ function ManualCreation() {
         author: '',
         revisionDate: new Date().toISOString().split('T')[0],
         effectiveDate: '',
+        headerOrder: DEFAULT_HEADER_ORDER,
         steps: []
     });
 
@@ -49,6 +68,13 @@ function ManualCreation() {
     const [generationLanguage, setGenerationLanguage] = useState('English');
     const [layoutTemplate, setLayoutTemplate] = useState('standard'); // standard, compact, one-per-page
     const [isVoiceListening, setIsVoiceListening] = useState(false);
+
+    // Advanced AI State
+    const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
+    const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+    const [geminiVideoUri, setGeminiVideoUri] = useState(null);
+    const [isFullAIAnalyzing, setIsFullAIAnalyzing] = useState(false);
+    const [rawVideoFile, setRawVideoFile] = useState(null);
     const [voiceRecognizer] = useState(() => {
         if (VoiceCommandRecognizer.isSupported()) {
             const recognizer = new VoiceCommandRecognizer();
@@ -78,6 +104,7 @@ function ManualCreation() {
             setSelectedProject(project);
             if (project.videoBlob) {
                 setVideoSrc(URL.createObjectURL(project.videoBlob));
+                setRawVideoFile(new File([project.videoBlob], 'source_video.mp4', { type: project.videoBlob.type || 'video/mp4' }));
             }
 
             if (project.measurements) {
@@ -114,6 +141,7 @@ function ManualCreation() {
                 author: '',
                 revisionDate: new Date().toISOString().split('T')[0],
                 effectiveDate: '',
+                headerOrder: DEFAULT_HEADER_ORDER,
                 steps: []
             });
             setActiveStepId(null);
@@ -137,20 +165,13 @@ function ManualCreation() {
 
         try {
             const manualData = {
+                ...guide, // spread everything to catch custom fields
                 title: guide.title,
-                documentNumber: guide.documentNumber,
-                version: guide.version,
-                status: guide.status,
-                author: guide.author,
-                summary: guide.summary,
-                difficulty: guide.difficulty,
-                timeRequired: guide.timeRequired,
-                category: 'Work Instruction', // Default
+                category: 'Work Instruction',
                 type: 'manual',
                 steps: guide.steps,
-                content: guide.steps, // Fallback
-                effectiveDate: guide.effectiveDate,
-                revisionDate: guide.revisionDate
+                content: guide.steps,
+                updatedAt: new Date().toISOString()
             };
 
             // Check if this manual already exists in KB (by ID match or Title match loosely?)
@@ -199,6 +220,7 @@ function ManualCreation() {
             author: manual.author || '',
             revisionDate: manual.updatedAt ? new Date(manual.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
             effectiveDate: manual.effectiveDate || '',
+            headerOrder: manual.headerOrder || DEFAULT_HEADER_ORDER,
             steps: manual.steps || manual.content || []
         });
 
@@ -275,6 +297,64 @@ function ManualCreation() {
             alert('Failed to generate content: ' + error.message);
         } finally {
             setIsAiLoading(false);
+        }
+    };
+
+    const handleFullVideoAI = async () => {
+        if (!rawVideoFile && !videoSrc) {
+            alert("Please upload a video first.");
+            return;
+        }
+
+        const apiKey = getStoredApiKey();
+        if (!apiKey) {
+            alert("AI API Key missing. Please configure in Settings.");
+            return;
+        }
+
+        setIsFullAIAnalyzing(true);
+        try {
+            let videoUri = geminiVideoUri;
+
+            // 1. Upload to Gemini if not already uploaded
+            if (!videoUri && rawVideoFile) {
+                setIsUploadingVideo(true);
+                videoUri = await uploadFileToGemini(rawVideoFile, apiKey);
+                setGeminiVideoUri(videoUri);
+                setIsUploadingVideo(false);
+            }
+
+            if (!videoUri) {
+                throw new Error("Could not prepare video for AI analysis. Try uploading a local file.");
+            }
+
+            // 2. Analyze Full Video
+            const steps = await generateFullManualFromVideo(videoUri, apiKey, generationLanguage);
+
+            if (steps && Array.isArray(steps)) {
+                const formattedSteps = steps.map(s => ({
+                    id: generateId(),
+                    title: s.title || 'New Step',
+                    instructions: `<p>${s.description || ''}</p>`,
+                    startTime: s.startTime || 0,
+                    endTime: s.endTime || 0,
+                    bullets: Array.isArray(s.bullets) ? s.bullets : [],
+                    media: { type: 'video', url: null } // We link to the main video
+                }));
+
+                if (confirm(`AI found ${formattedSteps.length} steps. Overwrite current steps?`)) {
+                    setGuide(prev => ({ ...prev, steps: formattedSteps }));
+                    if (formattedSteps.length > 0) setActiveStepId(formattedSteps[0].id);
+                } else if (confirm(`Append ${formattedSteps.length} steps instead?`)) {
+                    setGuide(prev => ({ ...prev, steps: [...prev.steps, ...formattedSteps] }));
+                }
+            }
+        } catch (error) {
+            console.error('Full Video AI Error:', error);
+            alert('Failed to analyze video: ' + error.message);
+        } finally {
+            setIsFullAIAnalyzing(false);
+            setIsUploadingVideo(false);
         }
     };
 
@@ -483,14 +563,23 @@ function ManualCreation() {
                 doc.text(value2 || '-', x2 + labelWidth + 2, y + 4);
             };
 
-            drawMetaRow('Doc Number', guide.documentNumber, 'Revision Date', guide.revisionDate, yPos);
-            yPos += cellHeight;
-            drawMetaRow('Version', guide.version, 'Effective Date', guide.effectiveDate, yPos);
-            yPos += cellHeight;
-            drawMetaRow('Status', guide.status, 'Difficulty', guide.difficulty, yPos);
-            yPos += cellHeight;
-            drawMetaRow('Author', guide.author, 'Time Required', guide.timeRequired, yPos);
-            yPos += cellHeight;
+            // Dynamic Metadata Rows based on headerOrder
+            const fields = guide.headerOrder || DEFAULT_HEADER_ORDER;
+            for (let i = 0; i < fields.length; i += 2) {
+                const field1 = fields[i];
+                const field2 = fields[i + 1];
+
+                if (field1 && field2) {
+                    const val1 = guide[field1.id] || '';
+                    const val2 = guide[field2.id] || '';
+                    drawMetaRow(field1.label, val1, field2.label, val2, yPos);
+                    yPos += cellHeight;
+                } else if (field1) {
+                    const val1 = guide[field1.id] || '';
+                    drawMetaRow(field1.label, val1, '', '', yPos);
+                    yPos += cellHeight;
+                }
+            }
 
             // Description (full width)
             doc.setFillColor(245, 245, 245);
@@ -1000,376 +1089,329 @@ function ManualCreation() {
             </div>
 
             {/* Main Content Area */}
-            {
-                selectedProject ? (
-                    <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                        {/* Left: Steps Editor / Preview */}
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px' }}>
-                            {isPreviewMode ? (
-                                <div style={{
-                                    backgroundColor: 'white',
-                                    color: '#000',
-                                    minHeight: '100%',
-                                    padding: '40px',
-                                    borderRadius: '4px',
-                                    boxShadow: '0 0 10px rgba(0,0,0,0.5)'
-                                }}>
-                                    {/* Preview Content */}
-                                    <div style={{ marginBottom: '40px', borderBottom: '1px solid #eee', paddingBottom: '20px' }}>
-                                        <h1 style={{ color: '#0078d4', margin: '0 0 10px 0' }}>{guide.title || 'Work Instructions'}</h1>
-                                        <div style={{ color: '#666', fontSize: '0.9rem' }}>
-                                            {guide.author && <span>Author: {guide.author} | </span>}
-                                            {guide.revisionDate && <span>Updated: {guide.revisionDate} | </span>}
-                                            {guide.documentNumber && <span>Doc #: {guide.documentNumber}</span>}
-                                        </div>
-                                        {guide.id && (
-                                            <div style={{ marginTop: '10px' }}>
-                                                <QRCodeSVG value={`${window.location.origin}/#/manual/${guide.id}`} size={100} />
-                                                <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '5px' }}>Scan for public view</div>
-                                            </div>
-                                        )}
+            {selectedProject ? (
+                <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                    {/* Left: Steps Editor / Preview */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px' }}>
+                        {isPreviewMode ? (
+                            <div style={{ backgroundColor: 'white', color: '#000', minHeight: '100%', padding: '40px', borderRadius: '4px', boxShadow: '0 0 10px rgba(0,0,0,0.5)' }}>
+                                {/* Preview Content */}
+                                <div style={{ marginBottom: '40px', borderBottom: '1px solid #eee', paddingBottom: '20px' }}>
+                                    <h1 style={{ color: '#0078d4', margin: '0 0 10px 0' }}>{guide.title || 'Work Instructions'}</h1>
+                                    <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                                        {guide.author && <span>Author: {guide.author} | </span>}
+                                        {guide.revisionDate && <span>Updated: {guide.revisionDate} | </span>}
+                                        {guide.documentNumber && <span>Doc #: {guide.documentNumber}</span>}
                                     </div>
+                                    {guide.id && (
+                                        <div style={{ marginTop: '10px' }}>
+                                            <QRCodeSVG value={`${window.location.origin}/#/manual/${guide.id}`} size={100} />
+                                            <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '5px' }}>Scan for public view</div>
+                                        </div>
+                                    )}
+                                </div>
 
-                                    {
-                                        layoutTemplate === 'compact' ? (
-                                            // Compact Table Layout
-                                            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
-                                                <thead>
-                                                    <tr style={{ backgroundColor: '#0078d4', color: 'white' }}>
-                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '5%' }}>#</th>
-                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '20%' }}>Step</th>
-                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '30%' }}>Image</th>
-                                                        <th style={{ padding: '10px', border: '1px solid #ddd', width: '45%' }}>Instructions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {guide.steps.map((step, idx) => (
-                                                        <tr key={step.id}>
-                                                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>{idx + 1}</td>
-                                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{step.title}</td>
-                                                            <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
-                                                                {step.media && step.media.url && (
-                                                                    <img src={step.media.url} alt={step.title} style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '4px' }} />
-                                                                )}
-                                                            </td>
-                                                            <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '13px' }}>
-                                                                {step.instructions && <div dangerouslySetInnerHTML={{ __html: step.instructions }} />}
-                                                                {step.bullets && step.bullets.length > 0 && (
-                                                                    <div style={{ marginTop: '8px' }}>
-                                                                        {step.bullets.map((b, i) => (
-                                                                            <div key={i} style={{ fontSize: '12px', marginBottom: '4px', color: b.type === 'warning' ? '#ff9800' : b.type === 'caution' ? '#d13438' : '#0078d4' }}>
-                                                                                <strong>{b.type.toUpperCase()}:</strong> {b.text}
-                                                                            </div>
-                                                                        ))}
+                                {layoutTemplate === 'compact' ? (
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+                                        <thead>
+                                            <tr style={{ backgroundColor: '#0078d4', color: 'white' }}>
+                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '5%' }}>#</th>
+                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '20%' }}>Step</th>
+                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '30%' }}>Image</th>
+                                                <th style={{ padding: '10px', border: '1px solid #ddd', width: '45%' }}>Instructions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {guide.steps.map((step, idx) => (
+                                                <tr key={step.id}>
+                                                    <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center', fontWeight: 'bold' }}>{idx + 1}</td>
+                                                    <td style={{ padding: '10px', border: '1px solid #ddd', fontWeight: 'bold' }}>{step.title}</td>
+                                                    <td style={{ padding: '10px', border: '1px solid #ddd', textAlign: 'center' }}>
+                                                        {step.media && step.media.url && <img src={step.media.url} alt={step.title} style={{ maxWidth: '100%', maxHeight: '150px', borderRadius: '4px' }} />}
+                                                    </td>
+                                                    <td style={{ padding: '10px', border: '1px solid #ddd', fontSize: '13px' }}>
+                                                        {step.instructions && <div dangerouslySetInnerHTML={{ __html: step.instructions }} />}
+                                                        {step.bullets && step.bullets.length > 0 && (
+                                                            <div style={{ marginTop: '8px' }}>
+                                                                {step.bullets.map((b, i) => (
+                                                                    <div key={i} style={{ fontSize: '12px', marginBottom: '4px', color: b.type === 'warning' ? '#ff9800' : b.type === 'caution' ? '#d13438' : '#0078d4' }}>
+                                                                        <strong>{b.type.toUpperCase()}:</strong> {b.text}
                                                                     </div>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        ) : layoutTemplate === 'one-per-page' ? (
-                                            // One Step Per Page Layout
-                                            guide.steps.map((step, idx) => (
-                                                <div key={step.id} style={{ marginBottom: '50px', pageBreakAfter: 'always', minHeight: '600px' }}>
-                                                    <h2 style={{ color: '#0078d4', marginBottom: '30px', fontSize: '2rem', textAlign: 'center' }}>
-                                                        Step {idx + 1}: {step.title}
-                                                    </h2>
-
-                                                    {step.media && step.media.url && (
-                                                        <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                                                            <img
-                                                                src={step.media.url}
-                                                                alt={step.title}
-                                                                style={{
-                                                                    maxWidth: '80%',
-                                                                    maxHeight: '400px',
-                                                                    borderRadius: '8px',
-                                                                    border: '2px solid #0078d4',
-                                                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                                                                }}
-                                                            />
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : layoutTemplate === 'one-per-page' ? (
+                                    guide.steps.map((step, idx) => (
+                                        <div key={step.id} style={{ marginBottom: '50px', pageBreakAfter: 'always', minHeight: '600px' }}>
+                                            <h2 style={{ color: '#0078d4', marginBottom: '30px', fontSize: '2rem', textAlign: 'center' }}>Step {idx + 1}: {step.title}</h2>
+                                            {step.media && step.media.url && (
+                                                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                                                    <img src={step.media.url} alt={step.title} style={{ maxWidth: '80%', maxHeight: '400px', borderRadius: '8px', border: '2px solid #0078d4', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }} />
+                                                </div>
+                                            )}
+                                            {step.instructions && <div style={{ lineHeight: '1.8', marginBottom: '20px', fontSize: '16px', padding: '20px', backgroundColor: '#f9f9f9', borderRadius: '8px' }} dangerouslySetInnerHTML={{ __html: step.instructions }} />}
+                                            {step.bullets && step.bullets.length > 0 && (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
+                                                    {step.bullets.map((b, i) => (
+                                                        <div key={i} style={{ padding: '15px', borderLeft: `6px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`, backgroundColor: '#f9f9f9', borderRadius: '0 8px 8px 0', fontSize: '14px' }}>
+                                                            <strong>{b.type.toUpperCase()}:</strong> {b.text}
                                                         </div>
-                                                    )}
-
-                                                    {step.instructions && (
-                                                        <div
-                                                            style={{
-                                                                lineHeight: '1.8',
-                                                                marginBottom: '20px',
-                                                                fontSize: '16px',
-                                                                padding: '20px',
-                                                                backgroundColor: '#f9f9f9',
-                                                                borderRadius: '8px'
-                                                            }}
-                                                            dangerouslySetInnerHTML={{ __html: step.instructions }}
-                                                        />
-                                                    )}
-
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                ) : (
+                                    guide.steps.map((step, idx) => (
+                                        <div key={step.id} style={{ marginBottom: '50px', pageBreakInside: 'avoid' }}>
+                                            <h3 style={{ color: '#0078d4', marginBottom: '20px' }}>Step {idx + 1}: {step.title}</h3>
+                                            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+                                                {step.media && step.media.url && (
+                                                    <div style={{ flex: '0 0 45%' }}>
+                                                        <img src={step.media.url} alt={step.title} style={{ width: '100%', borderRadius: '4px', border: '1px solid #ddd', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} />
+                                                    </div>
+                                                )}
+                                                <div style={{ flex: 1 }}>
+                                                    {step.instructions && <div style={{ lineHeight: '1.6', marginBottom: '15px', fontSize: '14px' }} dangerouslySetInnerHTML={{ __html: step.instructions }} />}
                                                     {step.bullets && step.bullets.length > 0 && (
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '20px' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                             {step.bullets.map((b, i) => (
-                                                                <div key={i} style={{
-                                                                    padding: '15px',
-                                                                    borderLeft: `6px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`,
-                                                                    backgroundColor: '#f9f9f9',
-                                                                    borderRadius: '0 8px 8px 0',
-                                                                    fontSize: '14px'
-                                                                }}>
-                                                                    <strong style={{ color: b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888' }}>
-                                                                        {b.type.toUpperCase()}:
-                                                                    </strong> {b.text}
+                                                                <div key={i} style={{ padding: '10px', borderLeft: `4px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`, backgroundColor: '#f9f9f9', display: 'flex', gap: '10px', alignItems: 'flex-start', borderRadius: '0 4px 4px 0' }}>
+                                                                    <strong style={{ minWidth: '70px', color: b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888', fontSize: '12px' }}>{b.type.toUpperCase()}:</strong>
+                                                                    <span style={{ fontSize: '13px' }}>{b.text}</span>
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     )}
                                                 </div>
-                                            ))
-                                        ) : (
-                                            // Standard Layout (current)
-                                            guide.steps.map((step, idx) => (
-                                                <div key={step.id} style={{ marginBottom: '50px', pageBreakInside: 'avoid' }}>
-                                                    <h3 style={{ color: '#0078d4', marginBottom: '20px' }}>Step {idx + 1}: {step.title}</h3>
-
-                                                    {/* Side-by-side layout */}
-                                                    <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-                                                        {/* Left: Image */}
-                                                        {step.media && step.media.url && (
-                                                            <div style={{ flex: '0 0 45%' }}>
-                                                                <img
-                                                                    src={step.media.url}
-                                                                    alt={step.title}
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        borderRadius: '4px',
-                                                                        border: '1px solid #ddd',
-                                                                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                        )}
-
-                                                        {/* Right: Instructions & Alerts */}
-                                                        <div style={{ flex: 1 }}>
-                                                            {step.instructions && (
-                                                                <div
-                                                                    style={{
-                                                                        lineHeight: '1.6',
-                                                                        marginBottom: '15px',
-                                                                        fontSize: '14px'
-                                                                    }}
-                                                                    dangerouslySetInnerHTML={{ __html: step.instructions }}
-                                                                />
-                                                            )}
-
-                                                            {step.bullets && step.bullets.length > 0 && (
-                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                    {step.bullets.map((b, i) => (
-                                                                        <div key={i} style={{
-                                                                            padding: '10px',
-                                                                            borderLeft: `4px solid ${b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888'}`,
-                                                                            backgroundColor: '#f9f9f9',
-                                                                            display: 'flex',
-                                                                            gap: '10px',
-                                                                            alignItems: 'flex-start',
-                                                                            borderRadius: '0 4px 4px 0'
-                                                                        }}>
-                                                                            <strong style={{
-                                                                                minWidth: '70px',
-                                                                                color: b.type === 'note' ? '#0078d4' : b.type === 'warning' ? '#ffaa00' : b.type === 'caution' ? '#d13438' : '#888',
-                                                                                fontSize: '12px'
-                                                                            }}>
-                                                                                {b.type.toUpperCase()}:
-                                                                            </strong>
-                                                                            <span style={{ fontSize: '13px' }}>{b.text}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )
-                                    }
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                                    {/* Left: Step List */}
-                                    <div style={{ width: '250px', borderRight: '1px solid #333', overflowY: 'auto' }}>
-                                        <StepList
-                                            steps={guide.steps}
-                                            activeStepId={activeStepId}
-                                            onStepSelect={handleStepSelect}
-                                            onAddStep={handleAddStep}
-                                            onDeleteStep={handleDeleteStep}
-                                        />
-                                    </div>
-
-                                    {/* Center: Editor */}
-                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px' }}>
-                                        <GuideHeader headerInfo={guide} onChange={(info) => setGuide(prev => ({ ...prev, ...info }))} />
-                                        <StepEditor
-                                            step={activeStep}
-                                            onChange={handleStepChange}
-                                            onCaptureImage={handleCaptureFrame}
-                                            onAiImprove={handleAiImprove}
-                                            onAiGenerate={handleAiGenerate}
-                                            onAiGenerateFromVideo={handleVideoAiGenerate}
-                                            isAiLoading={isAiLoading}
-                                            onVoiceDictate={handleVoiceDictate}
-                                            isVoiceListening={isVoiceListening}
-                                        />
-                                    </div>
-                                </div>
-                            )
-                            }
-                        </div >
-
-                        {/* Right: Video Source */}
-                        {
-                            !isPreviewMode && (
-                                <div style={{ width: '300px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #333' }}>
-                                    <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        Source Video
-                                        <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: '#0078d4' }}>
-                                            <Upload size={14} />
-                                            Upload
-                                            <input
-                                                type="file"
-                                                accept="video/*"
-                                                style={{ display: 'none' }}
-                                                onChange={(e) => {
-                                                    const file = e.target.files[0];
-                                                    if (file) {
-                                                        const url = URL.createObjectURL(file);
-                                                        setVideoSrc(url);
-                                                    }
-                                                }}
-                                            />
-                                        </label>
-                                    </div>
-                                    <div style={{ flex: 1, padding: '10px', display: 'flex', flexDirection: 'column' }}>
-                                        {videoSrc ? (
-                                            <video
-                                                ref={videoRef}
-                                                src={videoSrc}
-                                                controls
-                                                style={{ width: '100%', borderRadius: '4px', backgroundColor: '#000' }}
-                                            />
-                                        ) : (
-                                            <div style={{ color: '#888', textAlign: 'center', marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                                                <div>No video loaded</div>
-                                                <label className="btn" style={{ padding: '8px 16px', backgroundColor: '#333', color: 'white', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <Upload size={16} />
-                                                    Upload Video
-                                                    <input
-                                                        type="file"
-                                                        accept="video/*"
-                                                        style={{ display: 'none' }}
-                                                        onChange={(e) => {
-                                                            const file = e.target.files[0];
-                                                            if (file) {
-                                                                const url = URL.createObjectURL(file);
-                                                                setVideoSrc(url);
-                                                            }
-                                                        }}
-                                                    />
-                                                </label>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        }
-                    </div >
-                ) : (
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
-                        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📘</div>
-                        <h2>No Manual Selected</h2>
-                        <p style={{ marginBottom: '30px' }}>Select a project to generate steps from video analysis, or create a manual from scratch.</p>
-                        <div style={{ display: 'flex', gap: '15px' }}>
-                            <select
-                                value={selectedProjectId}
-                                onChange={(e) => setSelectedProjectId(e.target.value)}
-                                style={{ padding: '10px', borderRadius: '4px', backgroundColor: '#333', color: 'white', border: '1px solid #555' }}
-                            >
-                                <option value="">-- Select Project --</option>
-                                {projects.map(p => (
-                                    <option key={p.projectName} value={p.projectName}>{p.projectName}</option>
-                                ))}
-                            </select>
-                            <button
-                                onClick={() => {
-                                    // Create scratch manual
-                                    setSelectedProject({ projectName: 'New Manual' }); // Dummy project to enable UI
-                                    setGuide(prev => ({ ...prev, title: 'New Manual', steps: [] }));
-                                }}
-                                style={{ padding: '10px 20px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                            >
-                                + Create from Scratch
-                            </button>
-                            <button
-                                onClick={handleLoadManualsList}
-                                style={{ padding: '10px 20px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                            >
-                                📂 Open Saved Manual
-                            </button>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* Open Manual Dialog */}
-            {
-                showOpenDialog && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1100,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                        <div style={{
-                            backgroundColor: '#252526', width: '500px', maxHeight: '80vh',
-                            borderRadius: '8px', display: 'flex', flexDirection: 'column',
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
-                        }}>
-                            <div style={{ padding: '15px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <h3 style={{ margin: 0 }}>📂 Open Saved Manual</h3>
-                                <button onClick={() => setShowOpenDialog(false)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.2rem', cursor: 'pointer' }}>×</button>
-                            </div>
-                            <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
-                                {savedManuals.length === 0 ? (
-                                    <p style={{ color: '#888', textAlign: 'center' }}>No saved manuals found.</p>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                        {savedManuals.map(m => (
-                                            <div
-                                                key={m.id}
-                                                onClick={() => handleOpenManual(m)}
-                                                style={{
-                                                    padding: '12px',
-                                                    backgroundColor: '#333',
-                                                    borderRadius: '6px',
-                                                    cursor: 'pointer',
-                                                    border: '1px solid #444',
-                                                    transition: 'background 0.2s'
-                                                }}
-                                                onMouseEnter={(e) => e.target.style.backgroundColor = '#444'}
-                                                onMouseLeave={(e) => e.target.style.backgroundColor = '#333'}
-                                            >
-                                                <div style={{ fontWeight: 'bold' }}>{m.title}</div>
-                                                <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
-                                                    Ver: {m.version} | Updated: {new Date(m.updatedAt || m.createdAt).toLocaleDateString()}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    ))
                                 )}
                             </div>
-                        </div>
+                        ) : (
+                            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                                <div style={{ width: '250px', borderRight: '1px solid #333', overflowY: 'auto' }}>
+                                    <StepList steps={guide.steps} activeStepId={activeStepId} onStepSelect={handleStepSelect} onAddStep={handleAddStep} onDeleteStep={handleDeleteStep} />
+                                </div>
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px' }}>
+                                    <GuideHeader headerInfo={guide} onChange={(info) => setGuide(prev => ({ ...prev, ...info }))} />
+                                    <StepEditor step={activeStep} onChange={handleStepChange} onCaptureImage={handleCaptureFrame} onAiImprove={handleAiImprove} onAiGenerate={handleAiGenerate} onAiGenerateFromVideo={handleVideoAiGenerate} isAiLoading={isAiLoading} onVoiceDictate={handleVoiceDictate} isVoiceListening={isVoiceListening} />
+                                </div>
+                            </div>
+                        )}
                     </div>
-                )
-            }
+                            }
+                </div >
+
+                        {/* Right: Video Source */}
+            {
+                !isPreviewMode && (
+                    <div style={{ width: '300px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #333' }}>
+                        <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            Source Video
+                            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: '#0078d4' }}>
+                                <Upload size={14} />
+                                Upload
+                                <input
+                                    type="file"
+                                    accept="video/*"
+                                    style={{ display: 'none' }}
+                                    onChange={(e) => {
+                                        const file = e.target.files[0];
+                                        if (file) {
+                                            const url = URL.createObjectURL(file);
+                                            setVideoSrc(url);
+                                            setRawVideoFile(file);
+                                            setGeminiVideoUri(null); // Reset URI for new file
+                                        }
+                                    }}
+                                />
+                            </label>
+                        </div>
+                        <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <button
+                                onClick={handleFullVideoAI}
+                                disabled={isFullAIAnalyzing || isUploadingVideo}
+                                style={{
+                                    backgroundColor: '#0078d4',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    padding: '10px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '10px',
+                                    cursor: (isFullAIAnalyzing || isUploadingVideo) ? 'not-allowed' : 'pointer',
+                                    fontWeight: 'bold',
+                                    opacity: (isFullAIAnalyzing || isUploadingVideo) ? 0.7 : 1,
+                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                }}
+                            >
+                                {isFullAIAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+                                {isFullAIAnalyzing ? 'Analyzing Video...' : isUploadingVideo ? 'Uploading to AI...' : 'Analyze Full Video'}
+                            </button>
+
+                            <button
+                                onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
+                                style={{
+                                    backgroundColor: isAIPanelOpen ? '#2d2d2d' : '#333',
+                                    color: 'white',
+                                    border: '1px solid #444',
+                                    borderRadius: '4px',
+                                    padding: '8px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                <MessageSquare size={16} />
+                                {isAIPanelOpen ? 'Hide Mavi Chat' : 'Open Mavi Chat'}
+                            </button>
+                        </div>
+
+                        {videoSrc ? (
+                            <video
+                                ref={videoRef}
+                                src={videoSrc}
+                                controls
+                                style={{ width: '100%', borderRadius: '4px', backgroundColor: '#000' }}
+                            />
+                        ) : (
+                            <div style={{ color: '#888', textAlign: 'center', marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                <div>No video loaded</div>
+                                <label className="btn" style={{ padding: '8px 16px', backgroundColor: '#333', color: 'white', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Upload size={16} />
+                                    Upload Video
+                                    <input
+                                        type="file"
+                                        accept="video/*"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const file = e.target.files[0];
+                                            if (file) {
+                                                const url = URL.createObjectURL(file);
+                                                setVideoSrc(url);
+                                            }
+                                        }}
+                                    />
+                                </label>
+                            </div>
+                        )}
+                    </div>
+                                </div>
+    )
+}
+        </div >
+    ) : (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📘</div>
+        <h2>No Manual Selected</h2>
+        <p style={{ marginBottom: '30px' }}>Select a project to generate steps from video analysis, or create a manual from scratch.</p>
+        <div style={{ display: 'flex', gap: '15px' }}>
+            <select
+                value={selectedProjectId}
+                onChange={(e) => setSelectedProjectId(e.target.value)}
+                style={{ padding: '10px', borderRadius: '4px', backgroundColor: '#333', color: 'white', border: '1px solid #555' }}
+            >
+                <option value="">-- Select Project --</option>
+                {projects.map(p => (
+                    <option key={p.projectName} value={p.projectName}>{p.projectName}</option>
+                ))}
+            </select>
+            <button
+                onClick={() => {
+                    // Create scratch manual
+                    setSelectedProject({ projectName: 'New Manual' }); // Dummy project to enable UI
+                    setGuide(prev => ({ ...prev, title: 'New Manual', steps: [] }));
+                }}
+                style={{ padding: '10px 20px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+                + Create from Scratch
+            </button>
+            <button
+                onClick={handleLoadManualsList}
+                style={{ padding: '10px 20px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            >
+                📂 Open Saved Manual
+            </button>
+        </div>
+    </div>
+)
+}
+
+{/* Open Manual Dialog */ }
+{
+    showOpenDialog && (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+            <div style={{
+                backgroundColor: '#252526', width: '500px', maxHeight: '80vh',
+                borderRadius: '8px', display: 'flex', flexDirection: 'column',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+            }}>
+                <div style={{ padding: '15px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0 }}>📂 Open Saved Manual</h3>
+                    <button onClick={() => setShowOpenDialog(false)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.2rem', cursor: 'pointer' }}>×</button>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+                    {savedManuals.length === 0 ? (
+                        <p style={{ color: '#888', textAlign: 'center' }}>No saved manuals found.</p>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {savedManuals.map(m => (
+                                <div
+                                    key={m.id}
+                                    onClick={() => handleOpenManual(m)}
+                                    style={{
+                                        padding: '12px',
+                                        backgroundColor: '#333',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        border: '1px solid #444',
+                                        transition: 'background 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.backgroundColor = '#444'}
+                                    onMouseLeave={(e) => e.target.style.backgroundColor = '#333'}
+                                >
+                                    <div style={{ fontWeight: 'bold' }}>{m.title}</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+                                        Ver: {m.version} | Updated: {new Date(m.updatedAt || m.createdAt).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+{/* AIChatOverlay Integration */ }
+<AIChatOverlay
+    visible={isAIPanelOpen}
+    onClose={() => setIsAIPanelOpen(false)}
+    title="Mavi manual AI"
+    subtitle="Video Context Assistant"
+    contextData={{
+        videoUri: geminiVideoUri,
+        guide: guide,
+        activeStepId: activeStepId
+    }}
+/>
         </div >
     );
 }

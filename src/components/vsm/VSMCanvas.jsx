@@ -19,10 +19,11 @@ import InventoryNode from './nodes/InventoryNode';
 import ProductionControlNode from './nodes/ProductionControlNode';
 import GenericNode from './nodes/GenericNode';
 import Sidebar from './Sidebar';
+import AIVSMGeneratorModal from './AIVSMGeneratorModal';
 import { useUndoRedo } from '../../hooks/useUndoRedo';
-import { analyzeVSM, getStoredApiKey } from '../../utils/aiGenerator';
+import { analyzeVSM, getStoredApiKey, generateVSMFromPrompt } from '../../utils/aiGenerator';
 import ReactMarkdown from 'react-markdown';
-import { Brain, Sparkles, X } from 'lucide-react';
+import { Brain, Sparkles, X, Wand2 } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 const nodeTypes = {
@@ -53,6 +54,10 @@ const VSMCanvasContent = () => {
     // AI Analysis State
     const [aiAnalysis, setAiAnalysis] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+    // AI VSM Generator State
+    const [showGenerateModal, setShowGenerateModal] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Load Initial Data
     useEffect(() => {
@@ -309,6 +314,91 @@ const VSMCanvasContent = () => {
         }
     };
 
+    const handleGenerateFromPrompt = async ({ prompt, language, mode }) => {
+        setShowGenerateModal(false);
+        setIsGenerating(true);
+        try {
+            const apiKey = getStoredApiKey();
+            if (!apiKey) {
+                throw new Error(currentLanguage === 'id'
+                    ? 'API Key tidak ditemukan. Silakan konfigurasi di AI Settings.'
+                    : 'API Key not found. Please configure it in AI Settings.');
+            }
+
+            console.log('Generating VSM from prompt:', { prompt, language, mode });
+            const result = await generateVSMFromPrompt(prompt, apiKey, language);
+
+            // Validate result
+            if (!result.nodes || !Array.isArray(result.nodes) || result.nodes.length === 0) {
+                throw new Error(currentLanguage === 'id'
+                    ? 'AI tidak menghasilkan node VSM. Coba deskripsi yang lebih detail.'
+                    : 'AI did not generate VSM nodes. Try a more detailed description.');
+            }
+            if (!result.edges || !Array.isArray(result.edges)) {
+                throw new Error(currentLanguage === 'id'
+                    ? 'AI tidak menghasilkan koneksi VSM yang valid.'
+                    : 'AI did not generate valid VSM connections.');
+            }
+
+            // Apply to canvas
+            if (mode === 'replace') {
+                // Replace entire canvas
+                setNodes(result.nodes);
+                setEdges(result.edges);
+                pushToHistory({ nodes: result.nodes, edges: result.edges });
+            } else {
+                // Merge with existing - offset new nodes to the right
+                const maxX = nodes.length > 0
+                    ? Math.max(...nodes.map(n => n.position.x))
+                    : 0;
+                const offsetX = maxX + 300; // 300px spacing
+
+                const offsetNodes = result.nodes.map(node => ({
+                    ...node,
+                    id: `${node.id}-${Date.now()}`, // Ensure unique IDs
+                    position: {
+                        x: node.position.x + offsetX,
+                        y: node.position.y
+                    }
+                }));
+
+                // Update edge IDs to match new node IDs
+                const nodeIdMap = {};
+                result.nodes.forEach((oldNode, idx) => {
+                    nodeIdMap[oldNode.id] = offsetNodes[idx].id;
+                });
+
+                const offsetEdges = result.edges.map(edge => ({
+                    ...edge,
+                    id: `${edge.id}-${Date.now()}`,
+                    source: nodeIdMap[edge.source] || edge.source,
+                    target: nodeIdMap[edge.target] || edge.target
+                }));
+
+                const newNodes = [...nodes, ...offsetNodes];
+                const newEdges = [...edges, ...offsetEdges];
+                setNodes(newNodes);
+                setEdges(newEdges);
+                pushToHistory({ nodes: newNodes, edges: newEdges });
+            }
+
+            // Show success message
+            const successMsg = currentLanguage === 'id'
+                ? `✅ VSM berhasil dibuat! ${result.nodes.length} node dan ${result.edges.length} koneksi ditambahkan.`
+                : `✅ VSM generated successfully! ${result.nodes.length} nodes and ${result.edges.length} connections added.`;
+            alert(successMsg);
+
+        } catch (error) {
+            console.error('VSM Generation Error:', error);
+            const errorMsg = currentLanguage === 'id'
+                ? `❌ Gagal membuat VSM: ${error.message}\n\nTips:\n- Pastikan API Key sudah dikonfigurasi\n- Gunakan deskripsi yang lebih detail\n- Sertakan cycle time dan informasi proses`
+                : `❌ Failed to generate VSM: ${error.message}\n\nTips:\n- Ensure API Key is configured\n- Use more detailed description\n- Include cycle times and process information`;
+            alert(errorMsg);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     // --- Render Helpers ---
 
     return (
@@ -331,8 +421,16 @@ const VSMCanvasContent = () => {
                 </div>
 
                 <div style={toolbarGroupStyle}>
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#ff6b35' }}
+                        onClick={() => setShowGenerateModal(true)}
+                        disabled={isGenerating}
+                        title={currentLanguage === 'id' ? 'Generate VSM dari Deskripsi' : 'Generate VSM from Description'}
+                    >
+                        {isGenerating ? '⌛ Generating...' : <><Wand2 size={16} /> AI Generate</>}
+                    </button>
                     <button style={{ ...btnStyle, backgroundColor: '#8a2be2' }} onClick={handleAIAnalysis} disabled={isAnalyzing}>
-                        {isAnalyzing ? '⌛ Analyzing...' : <><Brain size={16} /> AI Sensei Analysis</>}
+                        {isAnalyzing ? '⌛ Analyzing...' : <><Brain size={16} /> AI Analysis</>}
                     </button>
                     <button style={btnStyle} onClick={handleExport} title="Export as PNG">📷 Export PNG</button>
                     <button style={{ ...btnStyle, backgroundColor: '#c50f1f' }} onClick={() => { if (confirm('Clear Canvas?')) { setNodes([]); setEdges([]); pushToHistory({ nodes: [], edges: [] }); } }}>🗑️ Clear</button>
@@ -494,6 +592,15 @@ const VSMCanvasContent = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* AI VSM Generator Modal */}
+                    <AIVSMGeneratorModal
+                        isOpen={showGenerateModal}
+                        onClose={() => setShowGenerateModal(false)}
+                        onGenerate={handleGenerateFromPrompt}
+                        currentLanguage={currentLanguage}
+                        existingNodesCount={nodes.length}
+                    />
                 </div>
             </div>
         </div>
