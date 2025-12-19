@@ -13,18 +13,24 @@ export const VSMSymbols = {
     FIFO: 'fifo',
     SAFETY_STOCK: 'safety_stock',
     TRUCK: 'truck',
-    RAW_MATERIAL: 'raw_material', // New
+    RAW_MATERIAL: 'raw_material',
+    PUSH_ARROW: 'push_arrow', // NEW: Push system arrow
+    FINISHED_GOODS: 'finished_goods', // NEW: Finished goods to customer
 
     // Information Flow
-    PRODUCTION_CONTROL: 'production_control', // New
+    PRODUCTION_CONTROL: 'production_control',
     ELECTRONIC_INFO: 'electronic_info',
     MANUAL_INFO: 'manual_info',
     KANBAN_POST: 'kanban_post',
-    SIGNAL_KANBAN: 'signal_kanban', // New
-    KANBAN_PRODUCTION: 'kanban_production', // New
-    KANBAN_WITHDRAWAL: 'kanban_withdrawal', // New
-    EYE_OBSERVATION: 'eye_observation', // New (Go See)
+    SIGNAL_KANBAN: 'signal_kanban',
+    KANBAN_PRODUCTION: 'kanban_production',
+    KANBAN_WITHDRAWAL: 'kanban_withdrawal',
+    EYE_OBSERVATION: 'eye_observation', // Go See
+    HEIJUNKA_BOX: 'heijunka_box', // NEW: Load leveling box
     BUFFER: 'buffer',
+
+    // Timeline & Metrics
+    TIMELINE: 'timeline', // NEW: Lead time timeline
 
     // Custom
     CUSTOM: 'custom',
@@ -52,8 +58,11 @@ export const INITIAL_DATA = {
     },
     inventory: { amount: 0, unit: 'pcs', time: 0 },
     supplier: { name: 'Supplier' },
-    customer: { name: 'Customer' },
+    customer: { name: 'Customer', demand: 0, taktTime: 0 }, // Enhanced
     kaizen_burst: { name: 'Problem/Idea' },
-    production_control: { name: 'Production Control' }, // New
+    production_control: { name: 'Production Control' },
+    heijunka_box: { name: 'Heijunka Box', description: 'Load Leveling' }, // NEW
+    timeline: { name: 'Timeline', leadTime: 0, vaTime: 0 }, // NEW
+    finished_goods: { name: 'Finished Goods', amount: 0 }, // NEW
     custom: { name: 'Custom Item', description: '' }
 };

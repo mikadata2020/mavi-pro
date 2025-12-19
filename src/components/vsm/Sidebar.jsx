@@ -76,7 +76,10 @@ const Sidebar = ({ customLibrary, onAddCustom }) => {
                 <div style={sectionTitleStyle}>Material Flow</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.SUPPLIER)} draggable>
-                        🏭 Factory
+                        🏭 Supplier
+                    </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.CUSTOMER)} draggable>
+                        🏢 Customer
                     </div>
                     <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'inventory', VSMSymbols.INVENTORY)} draggable>
                         ⚠️ Inventory
@@ -96,6 +99,12 @@ const Sidebar = ({ customLibrary, onAddCustom }) => {
                     <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.RAW_MATERIAL)} draggable>
                         📦 Raw Mat.
                     </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.FINISHED_GOODS)} draggable>
+                        ✅ Finished
+                    </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.PUSH_ARROW)} draggable>
+                        ➡️ Push
+                    </div>
                 </div>
 
                 {/* INFORMATION FLOW */}
@@ -103,6 +112,12 @@ const Sidebar = ({ customLibrary, onAddCustom }) => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <div style={{ ...blockBtnStyle, gridColumn: 'span 2' }} onDragStart={(event) => onDragStart(event, 'productionControl', VSMSymbols.PRODUCTION_CONTROL)} draggable>
                         🏢 Production Control
+                    </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.HEIJUNKA_BOX)} draggable>
+                        📊 Heijunka
+                    </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.KANBAN_POST)} draggable>
+                        📮 Kanban Post
                     </div>
                     <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.KANBAN_PRODUCTION)} draggable>
                         🟩 Prod. Kanban
@@ -115,6 +130,14 @@ const Sidebar = ({ customLibrary, onAddCustom }) => {
                     </div>
                     <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.EYE_OBSERVATION)} draggable>
                         👁️ Go See
+                    </div>
+                </div>
+
+                {/* TIMELINE & ANALYSIS */}
+                <div style={sectionTitleStyle}>Timeline & Metrics</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                    <div style={{ ...blockBtnStyle, gridColumn: 'span 1' }} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.TIMELINE)} draggable>
+                        ⏱️ Timeline
                     </div>
                 </div>
 

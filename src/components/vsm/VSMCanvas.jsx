@@ -23,7 +23,7 @@ import AIVSMGeneratorModal from './AIVSMGeneratorModal';
 import { useUndoRedo } from '../../hooks/useUndoRedo';
 import { analyzeVSM, getStoredApiKey, generateVSMFromPrompt } from '../../utils/aiGenerator';
 import ReactMarkdown from 'react-markdown';
-import { Brain, Sparkles, X, Wand2 } from 'lucide-react';
+import { Brain, Sparkles, X, Wand2, HelpCircle } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 const nodeTypes = {
@@ -36,6 +36,7 @@ const nodeTypes = {
 const VSMCanvasContent = () => {
     const { currentLanguage } = useLanguage();
     const reactFlowWrapper = useRef(null);
+    const fileInputRef = useRef(null);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNode, setSelectedNode] = useState(null);
@@ -58,6 +59,9 @@ const VSMCanvasContent = () => {
     // AI VSM Generator State
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+
+    // Help Modal State
+    const [showHelpModal, setShowHelpModal] = useState(false);
 
     // Load Initial Data
     useEffect(() => {
@@ -399,6 +403,154 @@ const VSMCanvasContent = () => {
         }
     };
 
+    // --- Save/Load Functions ---
+
+    const handleSaveToFile = () => {
+        try {
+            const vsmData = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                nodes,
+                edges,
+                customLibrary,
+                metadata: {
+                    totalNodes: nodes.length,
+                    totalEdges: edges.length,
+                    metrics
+                }
+            };
+
+            const dataStr = JSON.stringify(vsmData, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `vsm-${new Date().toISOString().split('T')[0]}.mavi-vsm`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            const successMsg = currentLanguage === 'id'
+                ? '✅ VSM berhasil disimpan!'
+                : '✅ VSM saved successfully!';
+            alert(successMsg);
+        } catch (error) {
+            console.error('Save failed:', error);
+            const errorMsg = currentLanguage === 'id'
+                ? '❌ Gagal menyimpan VSM: ' + error.message
+                : '❌ Failed to save VSM: ' + error.message;
+            alert(errorMsg);
+        }
+    };
+
+    const handleLoadFromFile = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const content = e.target?.result;
+                if (typeof content !== 'string') {
+                    throw new Error('Invalid file content');
+                }
+
+                const vsmData = JSON.parse(content);
+
+                // Validate structure
+                if (!vsmData.nodes || !Array.isArray(vsmData.nodes)) {
+                    throw new Error(currentLanguage === 'id'
+                        ? 'File tidak valid: nodes tidak ditemukan'
+                        : 'Invalid file: nodes not found');
+                }
+                if (!vsmData.edges || !Array.isArray(vsmData.edges)) {
+                    throw new Error(currentLanguage === 'id'
+                        ? 'File tidak valid: edges tidak ditemukan'
+                        : 'Invalid file: edges not found');
+                }
+
+                // Ask user: replace or merge?
+                const shouldReplace = confirm(
+                    currentLanguage === 'id'
+                        ? `Load ${vsmData.nodes.length} nodes dan ${vsmData.edges.length} edges?\n\nOK = Replace canvas\nCancel = Merge dengan yang ada`
+                        : `Load ${vsmData.nodes.length} nodes and ${vsmData.edges.length} edges?\n\nOK = Replace canvas\nCancel = Merge with existing`
+                );
+
+                if (shouldReplace) {
+                    // Replace mode
+                    setNodes(vsmData.nodes);
+                    setEdges(vsmData.edges);
+                    if (vsmData.customLibrary) {
+                        setCustomLibrary(vsmData.customLibrary);
+                        localStorage.setItem('vsm_custom_icons', JSON.stringify(vsmData.customLibrary));
+                    }
+                    pushToHistory({ nodes: vsmData.nodes, edges: vsmData.edges });
+                } else {
+                    // Merge mode - offset loaded nodes
+                    const maxX = nodes.length > 0 ? Math.max(...nodes.map(n => n.position.x)) : 0;
+                    const offsetX = maxX + 300;
+
+                    const offsetNodes = vsmData.nodes.map(node => ({
+                        ...node,
+                        id: `${node.id}-${Date.now()}`,
+                        position: {
+                            x: node.position.x + offsetX,
+                            y: node.position.y
+                        }
+                    }));
+
+                    const nodeIdMap = {};
+                    vsmData.nodes.forEach((oldNode, idx) => {
+                        nodeIdMap[oldNode.id] = offsetNodes[idx].id;
+                    });
+
+                    const offsetEdges = vsmData.edges.map(edge => ({
+                        ...edge,
+                        id: `${edge.id}-${Date.now()}`,
+                        source: nodeIdMap[edge.source] || edge.source,
+                        target: nodeIdMap[edge.target] || edge.target
+                    }));
+
+                    const newNodes = [...nodes, ...offsetNodes];
+                    const newEdges = [...edges, ...offsetEdges];
+                    setNodes(newNodes);
+                    setEdges(newEdges);
+                    pushToHistory({ nodes: newNodes, edges: newEdges });
+
+                    if (vsmData.customLibrary) {
+                        const mergedLibrary = [...customLibrary, ...vsmData.customLibrary];
+                        setCustomLibrary(mergedLibrary);
+                        localStorage.setItem('vsm_custom_icons', JSON.stringify(mergedLibrary));
+                    }
+                }
+
+                const successMsg = currentLanguage === 'id'
+                    ? '✅ VSM berhasil dimuat!'
+                    : '✅ VSM loaded successfully!';
+                alert(successMsg);
+
+            } catch (error) {
+                console.error('Load failed:', error);
+                const errorMsg = currentLanguage === 'id'
+                    ? '❌ Gagal memuat VSM: ' + error.message
+                    : '❌ Failed to load VSM: ' + error.message;
+                alert(errorMsg);
+            }
+        };
+
+        reader.onerror = () => {
+            const errorMsg = currentLanguage === 'id'
+                ? '❌ Gagal membaca file'
+                : '❌ Failed to read file';
+            alert(errorMsg);
+        };
+
+        reader.readAsText(file);
+        // Reset input so same file can be loaded again
+        event.target.value = '';
+    };
+
     // --- Render Helpers ---
 
     return (
@@ -422,6 +574,30 @@ const VSMCanvasContent = () => {
 
                 <div style={toolbarGroupStyle}>
                     <button
+                        style={{ ...btnStyle, backgroundColor: '#0078d4' }}
+                        onClick={handleSaveToFile}
+                        title={currentLanguage === 'id' ? 'Simpan VSM ke File' : 'Save VSM to File'}
+                    >
+                        💾 {currentLanguage === 'id' ? 'Simpan' : 'Save'}
+                    </button>
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#107c10' }}
+                        onClick={() => fileInputRef.current?.click()}
+                        title={currentLanguage === 'id' ? 'Buka VSM dari File' : 'Load VSM from File'}
+                    >
+                        📂 {currentLanguage === 'id' ? 'Buka' : 'Load'}
+                    </button>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".mavi-vsm,.json"
+                        onChange={handleLoadFromFile}
+                        style={{ display: 'none' }}
+                    />
+                </div>
+
+                <div style={toolbarGroupStyle}>
+                    <button
                         style={{ ...btnStyle, backgroundColor: '#ff6b35' }}
                         onClick={() => setShowGenerateModal(true)}
                         disabled={isGenerating}
@@ -436,8 +612,17 @@ const VSMCanvasContent = () => {
                     <button style={{ ...btnStyle, backgroundColor: '#c50f1f' }} onClick={() => { if (confirm('Clear Canvas?')) { setNodes([]); setEdges([]); pushToHistory({ nodes: [], edges: [] }); } }}>🗑️ Clear</button>
                 </div>
 
-                <div style={{ marginLeft: 'auto', fontSize: '0.8rem', color: '#aaa' }}>
-                    {nodes.length} Nodes | {edges.length} Connections
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
+                        {nodes.length} Nodes | {edges.length} Connections
+                    </div>
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#0078d4' }}
+                        onClick={() => setShowHelpModal(true)}
+                        title={currentLanguage === 'id' ? 'Bantuan & Panduan' : 'Help & Guide'}
+                    >
+                        <HelpCircle size={16} /> {currentLanguage === 'id' ? 'Bantuan' : 'Help'}
+                    </button>
                 </div>
             </div>
 
@@ -601,6 +786,195 @@ const VSMCanvasContent = () => {
                         currentLanguage={currentLanguage}
                         existingNodesCount={nodes.length}
                     />
+
+                    {/* Help Modal */}
+                    {showHelpModal && (
+                        <div style={{
+                            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 200,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '20px'
+                        }}>
+                            <div style={{
+                                width: '90%', maxWidth: '900px', maxHeight: '90vh',
+                                backgroundColor: '#1e1e1e', borderRadius: '12px',
+                                border: '1px solid #0078d4', boxShadow: '0 10px 40px rgba(0,0,0,0.9)',
+                                display: 'flex', flexDirection: 'column', overflow: 'hidden'
+                            }}>
+                                {/* Header */}
+                                <div style={{
+                                    padding: '20px', backgroundColor: '#0078d4',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 'bold', fontSize: '1.2rem', color: 'white' }}>
+                                        <HelpCircle size={24} />
+                                        {currentLanguage === 'id' ? 'Panduan VSM' : 'VSM Guide'}
+                                    </div>
+                                    <button onClick={() => setShowHelpModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+                                        <X size={24} />
+                                    </button>
+                                </div>
+
+                                {/* Content */}
+                                <div style={{ padding: '30px', overflowY: 'auto', color: 'white', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                                    {currentLanguage === 'id' ? (
+                                        <>
+                                            <h2 style={{ color: '#0078d4', marginTop: 0 }}>🎯 Cara Menggunakan VSM</h2>
+
+                                            <h3 style={{ color: '#4fc3f7', marginTop: '25px' }}>1. Menambah Simbol</h3>
+                                            <ul>
+                                                <li>Drag simbol dari <strong>VSM Toolbox</strong> (sidebar kiri)</li>
+                                                <li>Drop ke canvas untuk menambahkan</li>
+                                                <li>Klik simbol untuk edit properties</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>2. Menghubungkan Proses</h3>
+                                            <ul>
+                                                <li>Drag dari titik connection satu node ke node lain</li>
+                                                <li>Otomatis membuat arrow connection</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>3. Keyboard Shortcuts</h3>
+                                            <ul>
+                                                <li><kbd>Ctrl + Z</kbd> - Undo</li>
+                                                <li><kbd>Ctrl + Y</kbd> - Redo</li>
+                                                <li><kbd>Delete</kbd> - Hapus node yang dipilih</li>
+                                                <li><kbd>Mouse Wheel</kbd> - Zoom in/out</li>
+                                                <li><kbd>Space + Drag</kbd> - Pan canvas</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>4. Fitur Save/Load</h3>
+                                            <ul>
+                                                <li><strong>💾 Simpan</strong> - Download VSM sebagai file .mavi-vsm</li>
+                                                <li><strong>📂 Buka</strong> - Load VSM dari file</li>
+                                                <li>Pilih mode: Replace (ganti semua) atau Merge (gabung)</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>5. AI Generate VSM</h3>
+                                            <ul>
+                                                <li>Klik <strong>🪄 AI Generate</strong></li>
+                                                <li>Tulis deskripsi proses produksi Anda</li>
+                                                <li>Sertakan: Cycle Time, Uptime, Operators, Inventory</li>
+                                                <li>AI akan membuat VSM otomatis!</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>📊 Referensi Simbol</h3>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                                                <div><strong>Process Data:</strong></div>
+                                                <div>🏭 Process Box, 👤 Operator, 💥 Kaizen</div>
+
+                                                <div><strong>Material Flow:</strong></div>
+                                                <div>🏭 Supplier, 🏢 Customer, ⚠️ Inventory, 🛒 Supermarket, 🔄 FIFO, ✅ Finished, ➡️ Push</div>
+
+                                                <div><strong>Information:</strong></div>
+                                                <div>🏢 Control, 📊 Heijunka, 📮 Kanban Post, 🟩 Prod Kanban, 🟧 W-Draw, 👁️ Go See</div>
+
+                                                <div><strong>Timeline:</strong></div>
+                                                <div>⏱️ Timeline</div>
+                                            </div>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>💡 Contoh Prompt AI</h3>
+                                            <div style={{ backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '8px', marginTop: '10px', fontSize: '0.85rem' }}>
+                                                <code>
+                                                    Buatkan VSM untuk produksi PCB:<br /><br />
+                                                    CUSTOMER: demand 500 unit/hari<br /><br />
+                                                    PROSES:<br />
+                                                    1. Screen Printing: CT=45s, CO=30min, Uptime=95%, Operators=2<br />
+                                                    &nbsp;&nbsp;&nbsp;Inventory: 500 pcs (6 jam)<br /><br />
+                                                    2. Component Placement: CT=60s, CO=45min, Uptime=90%, Operators=1<br />
+                                                    &nbsp;&nbsp;&nbsp;Supermarket: 300 pcs dengan kanban<br /><br />
+                                                    INFORMATION: Production Control dengan Heijunka Box
+                                                </code>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h2 style={{ color: '#0078d4', marginTop: 0 }}>🎯 How to Use VSM</h2>
+
+                                            <h3 style={{ color: '#4fc3f7', marginTop: '25px' }}>1. Adding Symbols</h3>
+                                            <ul>
+                                                <li>Drag symbols from <strong>VSM Toolbox</strong> (left sidebar)</li>
+                                                <li>Drop onto canvas to add</li>
+                                                <li>Click symbol to edit properties</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>2. Connecting Processes</h3>
+                                            <ul>
+                                                <li>Drag from connection point of one node to another</li>
+                                                <li>Automatically creates arrow connection</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>3. Keyboard Shortcuts</h3>
+                                            <ul>
+                                                <li><kbd>Ctrl + Z</kbd> - Undo</li>
+                                                <li><kbd>Ctrl + Y</kbd> - Redo</li>
+                                                <li><kbd>Delete</kbd> - Delete selected node</li>
+                                                <li><kbd>Mouse Wheel</kbd> - Zoom in/out</li>
+                                                <li><kbd>Space + Drag</kbd> - Pan canvas</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>4. Save/Load Features</h3>
+                                            <ul>
+                                                <li><strong>💾 Save</strong> - Download VSM as .mavi-vsm file</li>
+                                                <li><strong>📂 Load</strong> - Load VSM from file</li>
+                                                <li>Choose mode: Replace (clear all) or Merge (combine)</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>5. AI Generate VSM</h3>
+                                            <ul>
+                                                <li>Click <strong>🪄 AI Generate</strong></li>
+                                                <li>Describe your production process</li>
+                                                <li>Include: Cycle Time, Uptime, Operators, Inventory</li>
+                                                <li>AI will create VSM automatically!</li>
+                                            </ul>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>📊 Symbol Reference</h3>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                                                <div><strong>Process Data:</strong></div>
+                                                <div>🏭 Process Box, 👤 Operator, 💥 Kaizen</div>
+
+                                                <div><strong>Material Flow:</strong></div>
+                                                <div>🏭 Supplier, 🏢 Customer, ⚠️ Inventory, 🛒 Supermarket, 🔄 FIFO, ✅ Finished, ➡️ Push</div>
+
+                                                <div><strong>Information:</strong></div>
+                                                <div>🏢 Control, 📊 Heijunka, 📮 Kanban Post, 🟩 Prod Kanban, 🟧 W-Draw, 👁️ Go See</div>
+
+                                                <div><strong>Timeline:</strong></div>
+                                                <div>⏱️ Timeline</div>
+                                            </div>
+
+                                            <h3 style={{ color: '#4fc3f7' }}>💡 AI Prompt Example</h3>
+                                            <div style={{ backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '8px', marginTop: '10px', fontSize: '0.85rem' }}>
+                                                <code>
+                                                    Create VSM for PCB manufacturing:<br /><br />
+                                                    CUSTOMER: demand 500 units/day<br /><br />
+                                                    PROCESSES:<br />
+                                                    1. Screen Printing: CT=45s, CO=30min, Uptime=95%, Operators=2<br />
+                                                    &nbsp;&nbsp;&nbsp;Inventory: 500 pcs (6 hours)<br /><br />
+                                                    2. Component Placement: CT=60s, CO=45min, Uptime=90%, Operators=1<br />
+                                                    &nbsp;&nbsp;&nbsp;Supermarket: 300 pcs with kanban<br /><br />
+                                                    INFORMATION: Production Control with Heijunka Box
+                                                </code>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Footer */}
+                                <div style={{ padding: '15px 30px', borderTop: '1px solid #333', textAlign: 'right', backgroundColor: '#252526' }}>
+                                    <button
+                                        onClick={() => setShowHelpModal(false)}
+                                        style={{
+                                            padding: '8px 20px', backgroundColor: '#0078d4', border: 'none',
+                                            color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold'
+                                        }}
+                                    >
+                                        {currentLanguage === 'id' ? 'Tutup' : 'Close'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
