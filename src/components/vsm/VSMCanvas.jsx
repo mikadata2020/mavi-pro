@@ -21,9 +21,9 @@ import GenericNode from './nodes/GenericNode';
 import Sidebar from './Sidebar';
 import AIVSMGeneratorModal from './AIVSMGeneratorModal';
 import { useUndoRedo } from '../../hooks/useUndoRedo';
-import { analyzeVSM, getStoredApiKey, generateVSMFromPrompt } from '../../utils/aiGenerator';
+import { analyzeVSM, getStoredApiKey, generateVSMFromPrompt, generateVSMFromImage, validateApiKey } from '../../utils/aiGenerator';
 import ReactMarkdown from 'react-markdown';
-import { Brain, Sparkles, X, Wand2, HelpCircle } from 'lucide-react';
+import { Brain, Sparkles, X, Wand2, HelpCircle, ImagePlus } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 const nodeTypes = {
@@ -37,6 +37,7 @@ const VSMCanvasContent = () => {
     const { currentLanguage } = useLanguage();
     const reactFlowWrapper = useRef(null);
     const fileInputRef = useRef(null);
+    const imageInputRef = useRef(null);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNode, setSelectedNode] = useState(null);
@@ -59,9 +60,129 @@ const VSMCanvasContent = () => {
     // AI VSM Generator State
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash');
+    const [availableModels, setAvailableModels] = useState([]);
 
     // Help Modal State
     const [showHelpModal, setShowHelpModal] = useState(false);
+
+    // Fetch Available Models
+    useEffect(() => {
+        const fetchModels = async () => {
+            try {
+                const apiKey = getStoredApiKey();
+                // If we have an API key, try to fetch models
+                if (apiKey) {
+                    const models = await validateApiKey(apiKey);
+                    if (models && models.length > 0) {
+                        setAvailableModels(models);
+
+                        // Auto-select a safe default if current selection is not valid or just to be safe
+                        // Prefer gemini-1.5-flash variants, then pro, then anything else
+                        const preferred = models.find(m => m.includes('1.5-flash')) ||
+                            models.find(m => m.includes('flash')) ||
+                            models[0];
+
+                        if (preferred) {
+                            setSelectedModel(preferred);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Failed to fetch models in VSM Canvas", err);
+                // Fallback models are already in the UI if we don't overwrite availableModels with empty?
+                // Actually if fetch fails, availableModels stays empty.
+                // We should initialize availableModels with default list or handle empty list in UI.
+            }
+        };
+        fetchModels();
+    }, []);
+
+    // ... (rest of the component state and effects)
+
+    // ... (rest of the component state and effects)
+
+    const handleUploadImage = async (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setIsGenerating(true);
+        try {
+            const apiKey = getStoredApiKey();
+            if (!apiKey) {
+                throw new Error("API Key not found");
+            }
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const imageData = e.target.result;
+                    const language = currentLanguage === 'id' ? 'Indonesian' : 'English';
+
+                    const result = await generateVSMFromImage(imageData, apiKey, language, selectedModel);
+
+                    // Ask user: replace or merge?
+                    const shouldReplace = confirm(
+                        currentLanguage === 'id'
+                            ? `VSM berhasil dikenali! ${result.nodes.length} nodes & ${result.edges.length} connections.\n\nOK = Replace Canvas\nCancel = Merge (Add to existing)`
+                            : `VSM recognized! ${result.nodes.length} nodes & ${result.edges.length} connections.\n\nOK = Replace Canvas\nCancel = Merge (Add to existing)`
+                    );
+
+                    if (shouldReplace) {
+                        setNodes(result.nodes);
+                        setEdges(result.edges);
+                        pushToHistory({ nodes: result.nodes, edges: result.edges });
+                    } else {
+                        // Merge logic (offset by max X)
+                        const maxX = nodes.length > 0 ? Math.max(...nodes.map(n => n.position.x)) : 0;
+                        const offsetX = maxX + 400;
+
+                        const offsetNodes = result.nodes.map(node => ({
+                            ...node,
+                            id: `${node.id}-${Date.now()}`,
+                            position: {
+                                x: node.position.x + offsetX,
+                                y: node.position.y
+                            }
+                        }));
+
+                        const nodeIdMap = {};
+                        result.nodes.forEach((oldNode, idx) => {
+                            nodeIdMap[oldNode.id] = offsetNodes[idx].id;
+                        });
+
+                        const offsetEdges = result.edges.map(edge => ({
+                            ...edge,
+                            id: `${edge.id}-${Date.now()}`,
+                            source: nodeIdMap[edge.source] || edge.source,
+                            target: nodeIdMap[edge.target] || edge.target
+                        }));
+
+                        const newNodes = [...nodes, ...offsetNodes];
+                        const newEdges = [...edges, ...offsetEdges];
+                        setNodes(newNodes);
+                        setEdges(newEdges);
+                        pushToHistory({ nodes: newNodes, edges: newEdges });
+                    }
+
+                    alert(currentLanguage === 'id' ? '✅ Image berhasil diproses!' : '✅ Image processed successfully!');
+
+                } catch (err) {
+                    console.error('Image Processing Error:', err);
+                    alert(currentLanguage === 'id' ? '❌ Gagal memproses gambar: ' + err.message : '❌ Failed to process image: ' + err.message);
+                } finally {
+                    setIsGenerating(false);
+                    event.target.value = ''; // Reset input
+                }
+            };
+            reader.readAsDataURL(file);
+
+        } catch (error) {
+            console.error(error);
+            alert(error.message);
+            setIsGenerating(false);
+        }
+    };
 
     // Load Initial Data
     useEffect(() => {
@@ -597,6 +718,34 @@ const VSMCanvasContent = () => {
                 </div>
 
                 <div style={toolbarGroupStyle}>
+                    <select
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        style={{
+                            padding: '5px',
+                            backgroundColor: '#444',
+                            color: 'white',
+                            border: '1px solid #555',
+                            borderRadius: '4px',
+                            marginRight: '5px',
+                            cursor: 'pointer',
+                            maxWidth: '150px'
+                        }}
+                        title="Select AI Model"
+                    >
+                        {availableModels.length > 0 ? (
+                            availableModels.map(model => (
+                                <option key={model} value={model}>{model}</option>
+                            ))
+                        ) : (
+                            <>
+                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                            </>
+                        )}
+                    </select>
+
                     <button
                         style={{ ...btnStyle, backgroundColor: '#ff6b35' }}
                         onClick={() => setShowGenerateModal(true)}
@@ -605,6 +754,23 @@ const VSMCanvasContent = () => {
                     >
                         {isGenerating ? '⌛ Generating...' : <><Wand2 size={16} /> AI Generate</>}
                     </button>
+
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#d13438' }}
+                        onClick={() => imageInputRef.current?.click()}
+                        disabled={isGenerating}
+                        title={currentLanguage === 'id' ? 'Upload Gambar Hand-Drawn VSM' : 'Upload Hand-Drawn VSM Image'}
+                    >
+                        {isGenerating ? '⌛ Processing...' : <><ImagePlus size={16} /> Draw Upload</>}
+                    </button>
+                    <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleUploadImage}
+                        style={{ display: 'none' }}
+                    />
+
                     <button style={{ ...btnStyle, backgroundColor: '#8a2be2' }} onClick={handleAIAnalysis} disabled={isAnalyzing}>
                         {isAnalyzing ? '⌛ Analyzing...' : <><Brain size={16} /> AI Analysis</>}
                     </button>
@@ -625,6 +791,8 @@ const VSMCanvasContent = () => {
                     </button>
                 </div>
             </div>
+
+
 
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                 <Sidebar customLibrary={customLibrary} onAddCustom={addCustomIcon} />
@@ -977,7 +1145,7 @@ const VSMCanvasContent = () => {
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

@@ -1113,8 +1113,8 @@ export const generateVSMFromPrompt = async (processDescription, apiKey, language
         
         Now process the user's description and return the COMPLETE VSM JSON structure with BOTH material and information flows.
     `;
-        
-       
+
+
 
     console.log('Generating VSM from prompt...');
     const result = await callAIProvider(prompt, keyToUse, null, true);
@@ -1128,5 +1128,139 @@ export const generateVSMFromPrompt = async (processDescription, apiKey, language
     }
 
     console.log('VSM generated successfully:', result);
+    return result;
+};
+
+/**
+ * Generates a VSM structure from a hand-drawn image using Gemini Vision.
+ * @param {string} imageData - Base64 encoded image data
+ * @param {string} apiKey - The Google Gemini API Key
+ * @param {string} language - The target language ('Indonesian' or 'English')
+ * @returns {Promise<{nodes: Array, edges: Array}>} VSM structure with nodes and edges
+ */
+export const generateVSMFromImage = async (imageData, apiKey, language = 'English', specificModel = null) => {
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) {
+        throw new Error("API Key is missing. Please configure it in AI Settings.");
+    }
+
+    const prompt = `
+        You are an expert Lean Manufacturing Engineer and Computer Vision specialist.
+        
+        **TASK:**
+        Analyze this hand-drawn Value Stream Map (VSM) diagram image and convert it into a digital VSM structure.
+        
+        **RECOGNITION GUIDELINES:**
+        Look for these common VSM symbols in the hand-drawn image:
+        
+        1. **Process Boxes** - Rectangular boxes, usually containing process names and metrics (CT, operators, etc.)
+        2. **Inventory Triangles** - Triangle shapes (▽) representing inventory/WIP between processes
+        3. **Supplier/Customer Icons** - Factory-like shapes or house shapes at start/end
+        4. **Arrows** - Solid arrows for material flow, dashed arrows for information flow
+        5. **Production Control** - Box at top (often with "PPC", "MRP", "Production Control" label)
+        6. **Information Flow** - Zigzag/lightning bolt lines or dashed lines connecting to production control
+        7. **Trucks** - Truck icons for shipping/delivery
+        8. **Timeline** - Stepped line at bottom showing lead times and cycle times
+        9. **Kanban/Supermarket** - Shelving symbols or kanban card shapes
+        10. **FIFO Lane** - Arrow with "FIFO" text
+        
+        **EXTRACTION RULES:**
+        1. Read all TEXT from the image (process names, metrics, labels)
+        2. Identify the FLOW direction (usually left to right for material, top to bottom for information)
+        3. Extract CYCLE TIMES (CT) if visible (look for numbers with "s", "sec", "min", or just numbers)
+        4. Extract INVENTORY amounts if visible (look for numbers near triangles)
+        5. Identify CONNECTIONS between elements
+        
+        **OUTPUT FORMAT:**
+        Return a JSON object with "nodes" and "edges" arrays.
+        
+        **NODE TYPES:**
+        - "process" - For process boxes with metrics
+        - "inventory" - For inventory triangles
+        - "productionControl" - For production control/MRP
+        - "generic" - For suppliers, customers, trucks, other symbols
+        
+        **LAYOUT:**
+        - Material flow nodes: Y = 300, spaced 200px apart starting at X = 100
+        - Production Control: Y = 100, centered (X = 600)
+        - Information flow uses dashed animated edges
+        
+        **JSON SCHEMA:**
+        {
+            "nodes": [
+                {
+                    "id": "node-0",
+                    "type": "generic",
+                    "position": { "x": 100, "y": 300 },
+                    "data": {
+                        "name": "Supplier Name",
+                        "symbolType": "supplier"
+                    }
+                },
+                {
+                    "id": "node-1",
+                    "type": "process",
+                    "position": { "x": 300, "y": 300 },
+                    "data": {
+                        "name": "Process Name",
+                        "ct": 30,
+                        "co": 0,
+                        "uptime": 95,
+                        "yield": 98,
+                        "va": 25,
+                        "operators": 1,
+                        "processType": "normal",
+                        "symbolType": "process"
+                    }
+                },
+                {
+                    "id": "node-2",
+                    "type": "inventory",
+                    "position": { "x": 500, "y": 300 },
+                    "data": {
+                        "name": "WIP",
+                        "amount": 100,
+                        "unit": "pcs",
+                        "time": 3600,
+                        "symbolType": "inventory"
+                    }
+                }
+            ],
+            "edges": [
+                {
+                    "id": "edge-0-1",
+                    "source": "node-0",
+                    "target": "node-1",
+                    "type": "smoothstep",
+                    "markerEnd": { "type": "arrowclosed" }
+                }
+            ]
+        }
+        
+        **CRITICAL:**
+        1. Extract ALL visible elements from the hand-drawn diagram
+        2. Preserve the LEFT-TO-RIGHT sequence of processes
+        3. If text is unclear, make reasonable guesses based on context
+        4. If cycle times are not visible, set reasonable defaults (30-60 seconds)
+        5. All text output MUST be in ${language}
+        6. Return ONLY valid JSON, no markdown or explanations
+        7. Always add Production Control node if there are information flow arrows
+        8. Connect processes sequentially with material flow edges
+        9. Add information flow edges (dashed, animated) from Production Control
+    `;
+
+    console.log(`Processing hand-drawn VSM image with model: ${specificModel || 'default'}...`);
+
+    const result = await callGemini(prompt, keyToUse, specificModel, true, imageData);
+
+    // Validate the result
+    if (!result.nodes || !Array.isArray(result.nodes)) {
+        throw new Error("Invalid AI response: missing or invalid 'nodes' array");
+    }
+    if (!result.edges || !Array.isArray(result.edges)) {
+        throw new Error("Invalid AI response: missing or invalid 'edges' array");
+    }
+
+    console.log('Hand-drawn VSM processed successfully:', result);
     return result;
 };
