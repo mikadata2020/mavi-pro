@@ -264,10 +264,12 @@ const VSMCanvasContent = () => {
             const demand = Number(customerNode.data.demand || 0);
             const availableSec = Number(customerNode.data.availableTime || 480) * 60;
             const shifts = Number(customerNode.data.shifts || 1);
+            const daysPerMonth = Number(customerNode.data.daysPerMonth || 20);
             const packSize = Number(customerNode.data.packSize || 1);
+
             if (demand > 0) {
-                globalTakt = (availableSec * shifts) / demand;
-                avgDailyDemand = demand / shifts; // Simplified to per shift if we use shift as day unit here
+                globalTakt = (availableSec * shifts * daysPerMonth) / demand;
+                avgDailyDemand = demand / daysPerMonth;
 
                 // Add pitch calculation
                 const pitch = globalTakt * packSize;

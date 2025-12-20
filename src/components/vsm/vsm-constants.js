@@ -67,6 +67,7 @@ export const INITIAL_DATA = {
         unit: 'pcs',
         availableTime: 480, // min/shift
         shifts: 1,
+        daysPerMonth: 20, // NEW: Working days per month
         packSize: 1, // Standard pack for Pitch calculation
         taktTime: 0
     }, // Enhanced
