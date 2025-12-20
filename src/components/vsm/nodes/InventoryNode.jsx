@@ -41,7 +41,7 @@ const InventoryNode = ({ data, selected }) => {
                 borderRadius: '4px'
             }}>
                 {data.amount} {data.unit}<br />
-                {data.time ? `${data.time}s` : ''}
+                {data.calculatedLT ? `${data.calculatedLT} days` : (data.time ? `${data.time}s` : '')}
             </div>
 
             <Handle type="source" position={Position.Right} id="r" style={{ background: '#555' }} />

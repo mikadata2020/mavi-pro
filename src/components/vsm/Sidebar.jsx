@@ -131,6 +131,15 @@ const Sidebar = ({ customLibrary, onAddCustom }) => {
                     <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.EYE_OBSERVATION)} draggable>
                         👁️ Go See
                     </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.ELECTRONIC_INFO)} draggable>
+                        ⚡ Electronic Info
+                    </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.MANUAL_INFO)} draggable>
+                        📄 Manual Info
+                    </div>
+                    <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'generic', VSMSymbols.BUFFER)} draggable>
+                        🛡️ Buffer
+                    </div>
                 </div>
 
                 {/* TIMELINE & ANALYSIS */}

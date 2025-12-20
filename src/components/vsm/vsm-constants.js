@@ -58,7 +58,14 @@ export const INITIAL_DATA = {
     },
     inventory: { amount: 0, unit: 'pcs', time: 0 },
     supplier: { name: 'Supplier' },
-    customer: { name: 'Customer', demand: 0, taktTime: 0 }, // Enhanced
+    customer: {
+        name: 'Customer',
+        demand: 1000,
+        unit: 'pcs',
+        availableTime: 480, // min/shift
+        shifts: 1,
+        taktTime: 0
+    }, // Enhanced
     kaizen_burst: { name: 'Problem/Idea' },
     production_control: { name: 'Production Control' },
     heijunka_box: { name: 'Heijunka Box', description: 'Load Leveling' }, // NEW

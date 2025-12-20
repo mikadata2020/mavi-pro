@@ -18,6 +18,13 @@ const ProcessNode = ({ data, selected }) => {
         labelExtra = <div style={{ position: 'absolute', top: '-18px', color: '#aaa', fontSize: '0.6rem', width: '100%', textAlign: 'center' }}>OUTSIDE</div>;
     }
 
+    // Bottleneck detection
+    const isBottleneck = data.globalTakt > 0 && Number(data.ct) > Number(data.globalTakt);
+    if (isBottleneck) {
+        borderStyle = '3px solid #ff4444';
+        bgStyle = '#441111';
+    }
+
     return (
         <div style={{ position: 'relative' }}>
             {/* Input Handles */}
@@ -25,6 +32,9 @@ const ProcessNode = ({ data, selected }) => {
             <Handle type="target" position={Position.Left} id="l" style={{ background: '#555' }} />
 
             {labelExtra}
+            {isBottleneck && (
+                <div style={{ position: 'absolute', top: '-18px', right: '0', color: '#ff4444', fontSize: '0.6rem', fontWeight: 'bold' }}>⚠️ BOTTLENECK</div>
+            )}
 
             {/* Main Box */}
             <div style={{
@@ -37,7 +47,7 @@ const ProcessNode = ({ data, selected }) => {
                 justifyContent: 'center',
                 color: 'white',
                 fontSize: '0.8rem',
-                boxShadow: selected ? '0 0 0 2px #0078d4' : 'none'
+                boxShadow: selected ? '0 0 0 2px #0078d4' : (isBottleneck ? '0 0 10px rgba(255, 68, 68, 0.5)' : 'none')
             }}>
                 {data.name}
             </div>
@@ -58,6 +68,33 @@ const ProcessNode = ({ data, selected }) => {
                 <div style={dataRowStyle}><span style={labelStyle}>Yield (%)</span><span style={valStyle}>{data.yield || 100}</span></div>
                 <div style={dataRowStyle}><span style={labelStyle}>VA Time (s)</span><span style={valStyle}>{data.va || data.ct}</span></div>
                 <div style={dataRowStyle}><span style={labelStyle}>Operators</span><span style={valStyle}>{data.operators || 1}</span></div>
+
+                {/* DEEP ANALYTICS: Capacity */}
+                {data.ct > 0 && (
+                    <div style={{ ...dataRowStyle, backgroundColor: '#1a1a1a', borderTop: '1px solid #555' }}>
+                        <span style={labelStyle}>Cap/Hr (pcs)</span>
+                        <span style={{ ...valStyle, color: '#4fc3f7' }}>
+                            {Math.floor((3600 * (Number(data.uptime || 100) / 100) * (Number(data.yield || 100) / 100)) / Number(data.ct))}
+                        </span>
+                    </div>
+                )}
+
+                {/* DEEP ANALYTICS: Utilization Bar */}
+                {data.globalTakt > 0 && (
+                    <div style={{ padding: '4px', borderTop: '1px solid #444' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.5rem', marginBottom: '2px' }}>
+                            <span>Utilisasi</span>
+                            <span>{Math.round((Number(data.ct) / (Number(data.globalTakt) * Number(data.operators || 1))) * 100)}%</span>
+                        </div>
+                        <div style={{ height: '4px', width: '100%', backgroundColor: '#333', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{
+                                height: '100%',
+                                width: `${Math.min(100, (Number(data.ct) / (Number(data.globalTakt) * Number(data.operators || 1))) * 100)}%`,
+                                backgroundColor: isBottleneck ? '#ff4444' : '#4caf50'
+                            }}></div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Output Handles */}

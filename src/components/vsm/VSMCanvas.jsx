@@ -18,6 +18,8 @@ import ProcessNode from './nodes/ProcessNode';
 import InventoryNode from './nodes/InventoryNode';
 import ProductionControlNode from './nodes/ProductionControlNode';
 import GenericNode from './nodes/GenericNode';
+import InformationEdge from './edges/InformationEdge';
+import MaterialEdge from './edges/MaterialEdge';
 import Sidebar from './Sidebar';
 import AIVSMGeneratorModal from './AIVSMGeneratorModal';
 import { useUndoRedo } from '../../hooks/useUndoRedo';
@@ -33,6 +35,11 @@ const nodeTypes = {
     generic: GenericNode,
 };
 
+const edgeTypes = {
+    information: InformationEdge,
+    material: MaterialEdge,
+};
+
 const VSMCanvasContent = () => {
     const { currentLanguage } = useLanguage();
     const reactFlowWrapper = useRef(null);
@@ -41,6 +48,7 @@ const VSMCanvasContent = () => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNode, setSelectedNode] = useState(null);
+    const [selectedEdge, setSelectedEdge] = useState(null);
     const [customLibrary, setCustomLibrary] = useState([]);
     const { screenToFlowPosition, getNodes, setNodes: setReactFlowNodes } = useReactFlow();
 
@@ -231,29 +239,80 @@ const VSMCanvasContent = () => {
         const flow = { nodes, edges };
         localStorage.setItem('vsm_flow_data', JSON.stringify(flow));
 
+        // 1. Identify Customer for Demand/Takt calculation
+        const customerNode = nodes.find(n => n.data?.symbolType === VSMSymbols.CUSTOMER);
+        let globalTakt = 0;
+        let avgDailyDemand = 0;
+
+        if (customerNode) {
+            const demand = Number(customerNode.data.demand || 0);
+            const availableSec = Number(customerNode.data.availableTime || 480) * 60;
+            const shifts = Number(customerNode.data.shifts || 1);
+            if (demand > 0) {
+                globalTakt = (availableSec * shifts) / demand;
+                avgDailyDemand = demand / shifts; // Simplified to per shift if we use shift as day unit here
+            }
+        }
+
         // Calculate Metrics
         let ct = 0, va = 0, invTime = 0;
-        nodes.forEach(node => {
+        const updatedNodes = nodes.map(node => {
+            let newNode = { ...node };
+            let hasChanged = false;
+
             if (node.type === 'process') {
                 const nodeCT = Number(node.data.ct || 0);
                 const nodeVA = Number(node.data.va || nodeCT);
                 ct += nodeCT;
                 va += nodeVA;
+
+                // Sync global takt to process nodes for visual feedback
+                if (node.data.globalTakt !== globalTakt) {
+                    newNode.data = { ...node.data, globalTakt };
+                    hasChanged = true;
+                }
             }
-            if (node.type === 'inventory') {
-                invTime += Number(node.data.time || 0);
+
+            if (node.type === 'inventory' || node.data?.symbolType === VSMSymbols.FINISHED_GOODS) {
+                // Little's Law: LT = Inventory / Demand
+                if (avgDailyDemand > 0) {
+                    const qty = Number(node.data.amount || 0);
+                    const calculatedDays = (qty / (avgDailyDemand || 1)).toFixed(2);
+                    if (node.data.calculatedLT !== calculatedDays) {
+                        newNode.data = { ...node.data, calculatedLT: calculatedDays };
+                        hasChanged = true;
+                    }
+                    invTime += Number(calculatedDays) * 86400; // Store as seconds for total calculation
+                } else {
+                    invTime += Number(node.data.time || 0);
+                }
             }
+
+            return newNode;
         });
+
+        // Batch update nodes if calculated fields changed
+        const anyChanged = updatedNodes.some((n, i) => n.data !== nodes[i].data);
+        if (anyChanged) {
+            setNodes(updatedNodes);
+        }
+
         const lt = invTime + ct;
         const eff = lt > 0 ? (va / lt) * 100 : 0;
-        setMetrics({ totalCT: ct, totalVA: va, totalLT: lt, efficiency: eff.toFixed(2) });
+        setMetrics({
+            totalCT: ct,
+            totalVA: va,
+            totalLT: lt,
+            efficiency: eff.toFixed(2),
+            taktTime: globalTakt.toFixed(1)
+        });
 
         // Expose to Mavi Hub
         window.__maviVSM = {
-            nodes,
+            nodes: updatedNodes,
             edges,
-            metrics: { totalCT: ct, totalVA: va, totalLT: lt, efficiency: eff.toFixed(2) },
-            bottleneck: nodes.filter(n => n.type === 'process')
+            metrics: { totalCT: ct, totalVA: va, totalLT: lt, efficiency: eff.toFixed(2), taktTime: globalTakt.toFixed(1) },
+            bottleneck: updatedNodes.filter(n => n.type === 'process')
                 .sort((a, b) => Number(b.data.ct) - Number(a.data.ct))[0]?.data.name
         };
 
@@ -830,6 +889,7 @@ const VSMCanvasContent = () => {
                         <MetricBox label="Total Cycle Time" value={`${metrics.totalCT}s`} />
                         <MetricBox label="Total VA Time" value={`${metrics.totalVA}s`} color="#4caf50" />
                         <MetricBox label="Total Lead Time" value={`${metrics.totalLT}s`} color="#ff9900" />
+                        <MetricBox label="Takt Time" value={`${metrics.taktTime}s`} color="#ff4444" />
                         <MetricBox label="Efficiency" value={`${metrics.efficiency}%`} color="#00bfff" />
                     </div>
 
@@ -903,6 +963,18 @@ const VSMCanvasContent = () => {
                                     <PropertyField label="Amount" field="amount" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Unit" field="unit" type="text" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Time Eq. (sec)" field="time" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                </>
+                            )}
+
+                            {selectedNode.data.symbolType === VSMSymbols.CUSTOMER && (
+                                <>
+                                    <PropertyField label="Avail. Time (min/shift)" field="availableTime" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                    <PropertyField label="Demand (pcs/shift)" field="demand" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                    <PropertyField label="Shifts" field="shifts" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                    <div style={{ padding: '8px', backgroundColor: '#333', borderRadius: '4px', marginTop: '10px' }}>
+                                        <div style={{ fontSize: '0.7rem', color: '#aaa' }}>Calculated Takt Time</div>
+                                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ff4444' }}>{metrics.taktTime}s</div>
+                                    </div>
                                 </>
                             )}
 
