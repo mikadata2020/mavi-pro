@@ -10,6 +10,7 @@ export const translations = {
         },
         header: {
             video: 'Video',
+            aiProcess: 'Proses AI',
             analysis: 'Analisis',
             rearrange: 'Susun Ulang',
             cycleAnalysis: 'Analisis Cycle',
@@ -24,7 +25,19 @@ export const translations = {
             screenshot: 'Tangkap Screenshot',
             exportData: 'Export Data (JSON)',
             sessions: 'Kelola Sesi',
-            workflowGuide: 'Panduan Alur Kerja'
+            workflowGuide: 'Panduan Alur Kerja',
+            statisticalAnalysis: 'Analisis Statistik',
+            yamazumi: 'Grafik Yamazumi',
+            manualCreation: 'Pembuatan Manual',
+            valueStreamMap: 'Value Stream Map',
+            multiCamera: 'Fusi 3D Multi-Kamera',
+            vrTraining: 'Mode Pelatihan VR',
+            knowledgeBase: 'Knowledge Base',
+            broadcast: 'Broadcast',
+            actionRecognition: 'Pengenalan Aksi',
+            cycleSegmentation: 'Segmentasi Cycle',
+            files: 'File Explorer',
+            diagnostics: 'Diagnostik Sistem'
         },
         common: {
             save: 'Simpan',
@@ -88,6 +101,7 @@ export const translations = {
         },
         header: {
             video: 'Video',
+            aiProcess: 'AI Process',
             analysis: 'Analysis',
             rearrange: 'Rearrange',
             cycleAnalysis: 'Cycle Analysis',
@@ -102,7 +116,19 @@ export const translations = {
             screenshot: 'Capture Screenshot',
             exportData: 'Export Data (JSON)',
             sessions: 'Manage Sessions',
-            workflowGuide: 'Workflow Guide'
+            workflowGuide: 'Workflow Guide',
+            statisticalAnalysis: 'Statistical Analysis',
+            yamazumi: 'Yamazumi Chart',
+            manualCreation: 'Manual Creation',
+            valueStreamMap: 'Value Stream Map',
+            multiCamera: 'Multi-Camera 3D Fusion',
+            vrTraining: 'VR Training Mode',
+            knowledgeBase: 'Knowledge Base',
+            broadcast: 'Broadcast',
+            actionRecognition: 'Action Recognition',
+            cycleSegmentation: 'Cycle Segmentation',
+            files: 'File Explorer',
+            diagnostics: 'System Diagnostics'
         },
         common: {
             save: 'Save',

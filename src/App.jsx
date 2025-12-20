@@ -102,14 +102,24 @@ function AppContent() {
   const [watchRoomId, setWatchRoomId] = useState(null);
   const videoRef = useRef(null);
   const [streamHandler] = useState(() => new StreamHandler());
-  const [remoteCursor, setRemoteCursor] = useState({ x: null, y: null, label: null });
+  const [remoteCursors, setRemoteCursors] = useState({});
   const [lastDrawingAction, setLastDrawingAction] = useState(null);
 
   // Global broadcast/chat state
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isWebcamOn, setIsWebcamOn] = useState(false);
+  const [connectedPeers, setConnectedPeers] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const broadcastManagerRef = useRef(null);
+
+  const handleToggleWebcam = () => broadcastManagerRef.current?.toggleWebcam();
+  const handleToggleRecording = () => {
+    if (isRecording) broadcastManagerRef.current?.stopRecording();
+    else broadcastManagerRef.current?.startRecording();
+  };
+  const handleTakeScreenshot = () => broadcastManagerRef.current?.takeScreenshot();
 
   // State for QR code manual viewing
   const [qrManualId, setQrManualId] = useState(null);
@@ -262,13 +272,16 @@ function AppContent() {
     return () => clearTimeout(saveTimer);
   }, [measurements, currentProject]);
 
-  const handleRemoteInteraction = (data) => {
+  const handleRemoteInteraction = (data, peerId) => {
     if (data.type === 'cursor') {
-      setRemoteCursor({ x: data.x, y: data.y, label: 'Remote Viewer' });
-    } else if (data.type === 'draw' || data.type === 'start' || data.type === 'end') {
+      setRemoteCursors(prev => ({
+        ...prev,
+        [peerId]: { x: data.x, y: data.y, name: data.userName || peerId.substring(0, 4) }
+      }));
+    } else if (data.type === 'draw' || data.type === 'start' || data.type === 'end' || data.type === 'clear') {
       setLastDrawingAction(data);
     } else if (data.type === 'click') {
-      console.log('Remote click at', data.x, data.y);
+      console.log('Remote click from', peerId, 'at', data.x, data.y);
     }
   };
 
@@ -327,7 +340,7 @@ function AppContent() {
 
   return (
     <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <CollaborationOverlay cursor={remoteCursor} lastDrawingAction={lastDrawingAction} />
+      <CollaborationOverlay remoteCursors={remoteCursors} lastDrawingAction={lastDrawingAction} />
 
       <BroadcastControls
         isBroadcasting={isBroadcasting}
@@ -337,6 +350,12 @@ function AppContent() {
         onSendMessage={handleSendMessage}
         onStopBroadcast={handleStopBroadcast}
         userName={user?.email || "Host"}
+        isRecording={isRecording}
+        onToggleRecording={handleToggleRecording}
+        isWebcamOn={isWebcamOn}
+        onToggleWebcam={handleToggleWebcam}
+        onTakeScreenshot={handleTakeScreenshot}
+        connectedPeers={connectedPeers}
       />
 
       <button
@@ -439,6 +458,12 @@ function AppContent() {
                       setIsMuted={setIsMuted}
                       chatMessages={chatMessages}
                       setChatMessages={setChatMessages}
+                      isRecording={isRecording}
+                      setIsRecording={setIsRecording}
+                      isWebcamOn={isWebcamOn}
+                      setIsWebcamOn={setIsWebcamOn}
+                      connectedPeers={connectedPeers}
+                      setConnectedPeers={setConnectedPeers}
                     />
                   </div>
                 </div>

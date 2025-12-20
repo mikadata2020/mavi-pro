@@ -5,27 +5,26 @@ import { useLanguage } from '../i18n/LanguageContext';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 
 const MENU_ITEMS = [
-    { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' }, // Moved to top
+    { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' },
     { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
-    { path: '/ai-process', icon: '🧠', title: 'AI Proces', labelKey: 'header.aiProcess' },
+    { path: '/ai-process', icon: '🧠', title: 'AI Process', labelKey: 'header.aiProcess' },
     { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange' },
     { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste' },
     { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis' },
-    { path: '/statistical-analysis', icon: '📉', title: 'Statistical Analysis' },
+    { path: '/statistical-analysis', icon: '📉', labelKey: 'header.statisticalAnalysis', title: 'Statistical Analysis' },
     { path: '/best-worst', icon: '🏆', labelKey: 'header.bestWorst' },
-    { path: '/yamazumi', icon: '🏔️', title: 'Yamazumi Chart' },
-    { path: '/manual-creation', icon: '📘', title: 'Manual Creation' },
-    { path: '/value-stream-map', icon: '🏭', title: 'Value Stream Map' },
+    { path: '/yamazumi', icon: '🏔️', labelKey: 'header.yamazumi', title: 'Yamazumi Chart' },
+    { path: '/manual-creation', icon: '📘', labelKey: 'header.manualCreation', title: 'Manual Creation' },
+    { path: '/value-stream-map', icon: '🏭', labelKey: 'header.valueStreamMap', title: 'Value Stream Map' },
     { path: '/comparison', icon: '🎥', labelKey: 'header.comparison' },
-    { path: '/multi-camera', icon: '📹', title: 'Multi-Camera 3D Fusion' },
-    { path: '/vr-training', icon: '🥽', title: 'VR Training Mode' },
-    { path: '/knowledge-base', icon: '📚', title: 'Knowledge Base' },
-    { path: '/broadcast', icon: '📡', title: 'Broadcast' },
-    { path: '/action-recognition', icon: '🤖', title: 'Action Recognition' },
-    { path: '/cycle-segmentation', icon: '🔄', title: 'Cycle Segmentation' },
-    // { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide' }, // Moved
-    { path: '/files', icon: '📂', title: 'File Explorer' },
-    { path: '/diagnostics', icon: '🩺', title: 'System Diagnostics' },
+    { path: '/multi-camera', icon: '📹', labelKey: 'header.multiCamera', title: 'Multi-Camera 3D Fusion' },
+    { path: '/vr-training', icon: '🥽', labelKey: 'header.vrTraining', title: 'VR Training Mode' },
+    { path: '/knowledge-base', icon: '📚', labelKey: 'header.knowledgeBase', title: 'Knowledge Base' },
+    { path: '/broadcast', icon: '📡', labelKey: 'header.broadcast', title: 'Broadcast' },
+    { path: '/action-recognition', icon: '🤖', labelKey: 'header.actionRecognition', title: 'Action Recognition' },
+    { path: '/cycle-segmentation', icon: '🔄', labelKey: 'header.cycleSegmentation', title: 'Cycle Segmentation' },
+    { path: '/files', icon: '📂', labelKey: 'header.files', title: 'File Explorer' },
+    { path: '/diagnostics', icon: '🩺', labelKey: 'header.diagnostics', title: 'System Diagnostics' },
     { path: '/help', icon: '❓', labelKey: 'header.help' },
 ];
 

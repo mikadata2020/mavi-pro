@@ -1206,92 +1206,15 @@ function ManualCreation() {
                             </div>
                         )}
                     </div>
-                            }
-                </div >
 
-                        {/* Right: Video Source */}
-            {
-                !isPreviewMode && (
-                    <div style={{ width: '300px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #333' }}>
-                        <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            Source Video
-                            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: '#0078d4' }}>
-                                <Upload size={14} />
-                                Upload
-                                <input
-                                    type="file"
-                                    accept="video/*"
-                                    style={{ display: 'none' }}
-                                    onChange={(e) => {
-                                        const file = e.target.files[0];
-                                        if (file) {
-                                            const url = URL.createObjectURL(file);
-                                            setVideoSrc(url);
-                                            setRawVideoFile(file);
-                                            setGeminiVideoUri(null); // Reset URI for new file
-                                        }
-                                    }}
-                                />
-                            </label>
-                        </div>
-                        <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <button
-                                onClick={handleFullVideoAI}
-                                disabled={isFullAIAnalyzing || isUploadingVideo}
-                                style={{
-                                    backgroundColor: '#0078d4',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    padding: '10px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '10px',
-                                    cursor: (isFullAIAnalyzing || isUploadingVideo) ? 'not-allowed' : 'pointer',
-                                    fontWeight: 'bold',
-                                    opacity: (isFullAIAnalyzing || isUploadingVideo) ? 0.7 : 1,
-                                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                                }}
-                            >
-                                {isFullAIAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
-                                {isFullAIAnalyzing ? 'Analyzing Video...' : isUploadingVideo ? 'Uploading to AI...' : 'Analyze Full Video'}
-                            </button>
-
-                            <button
-                                onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
-                                style={{
-                                    backgroundColor: isAIPanelOpen ? '#2d2d2d' : '#333',
-                                    color: 'white',
-                                    border: '1px solid #444',
-                                    borderRadius: '4px',
-                                    padding: '8px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '8px',
-                                    cursor: 'pointer',
-                                    fontSize: '0.9rem'
-                                }}
-                            >
-                                <MessageSquare size={16} />
-                                {isAIPanelOpen ? 'Hide Mavi Chat' : 'Open Mavi Chat'}
-                            </button>
-                        </div>
-
-                        {videoSrc ? (
-                            <video
-                                ref={videoRef}
-                                src={videoSrc}
-                                controls
-                                style={{ width: '100%', borderRadius: '4px', backgroundColor: '#000' }}
-                            />
-                        ) : (
-                            <div style={{ color: '#888', textAlign: 'center', marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                                <div>No video loaded</div>
-                                <label className="btn" style={{ padding: '8px 16px', backgroundColor: '#333', color: 'white', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Upload size={16} />
-                                    Upload Video
+                    {/* Right: Video Source */}
+                    {!isPreviewMode && (
+                        <div style={{ width: '300px', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #333' }}>
+                            <div style={{ padding: '10px', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#ccc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                Source Video
+                                <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', color: '#0078d4' }}>
+                                    <Upload size={14} />
+                                    Upload
                                     <input
                                         type="file"
                                         accept="video/*"
@@ -1301,117 +1224,189 @@ function ManualCreation() {
                                             if (file) {
                                                 const url = URL.createObjectURL(file);
                                                 setVideoSrc(url);
+                                                setRawVideoFile(file);
+                                                setGeminiVideoUri(null); // Reset URI for new file
                                             }
                                         }}
                                     />
                                 </label>
                             </div>
-                        )}
-                    </div>
-                                </div>
-    )
-}
-        </div >
-    ) : (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
-        <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📘</div>
-        <h2>No Manual Selected</h2>
-        <p style={{ marginBottom: '30px' }}>Select a project to generate steps from video analysis, or create a manual from scratch.</p>
-        <div style={{ display: 'flex', gap: '15px' }}>
-            <select
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                style={{ padding: '10px', borderRadius: '4px', backgroundColor: '#333', color: 'white', border: '1px solid #555' }}
-            >
-                <option value="">-- Select Project --</option>
-                {projects.map(p => (
-                    <option key={p.projectName} value={p.projectName}>{p.projectName}</option>
-                ))}
-            </select>
-            <button
-                onClick={() => {
-                    // Create scratch manual
-                    setSelectedProject({ projectName: 'New Manual' }); // Dummy project to enable UI
-                    setGuide(prev => ({ ...prev, title: 'New Manual', steps: [] }));
-                }}
-                style={{ padding: '10px 20px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-            >
-                + Create from Scratch
-            </button>
-            <button
-                onClick={handleLoadManualsList}
-                style={{ padding: '10px 20px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-            >
-                📂 Open Saved Manual
-            </button>
-        </div>
-    </div>
-)
-}
-
-{/* Open Manual Dialog */ }
-{
-    showOpenDialog && (
-        <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1100,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-            <div style={{
-                backgroundColor: '#252526', width: '500px', maxHeight: '80vh',
-                borderRadius: '8px', display: 'flex', flexDirection: 'column',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
-            }}>
-                <div style={{ padding: '15px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0 }}>📂 Open Saved Manual</h3>
-                    <button onClick={() => setShowOpenDialog(false)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.2rem', cursor: 'pointer' }}>×</button>
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
-                    {savedManuals.length === 0 ? (
-                        <p style={{ color: '#888', textAlign: 'center' }}>No saved manuals found.</p>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            {savedManuals.map(m => (
-                                <div
-                                    key={m.id}
-                                    onClick={() => handleOpenManual(m)}
+                            <div style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <button
+                                    onClick={handleFullVideoAI}
+                                    disabled={isFullAIAnalyzing || isUploadingVideo}
                                     style={{
-                                        padding: '12px',
-                                        backgroundColor: '#333',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        border: '1px solid #444',
-                                        transition: 'background 0.2s'
+                                        backgroundColor: '#0078d4',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        padding: '10px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '10px',
+                                        cursor: (isFullAIAnalyzing || isUploadingVideo) ? 'not-allowed' : 'pointer',
+                                        fontWeight: 'bold',
+                                        opacity: (isFullAIAnalyzing || isUploadingVideo) ? 0.7 : 1,
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                                     }}
-                                    onMouseEnter={(e) => e.target.style.backgroundColor = '#444'}
-                                    onMouseLeave={(e) => e.target.style.backgroundColor = '#333'}
                                 >
-                                    <div style={{ fontWeight: 'bold' }}>{m.title}</div>
-                                    <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
-                                        Ver: {m.version} | Updated: {new Date(m.updatedAt || m.createdAt).toLocaleDateString()}
-                                    </div>
+                                    {isFullAIAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+                                    {isFullAIAnalyzing ? 'Analyzing Video...' : isUploadingVideo ? 'Uploading to AI...' : 'Analyze Full Video'}
+                                </button>
+
+                                <button
+                                    onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
+                                    style={{
+                                        backgroundColor: isAIPanelOpen ? '#2d2d2d' : '#333',
+                                        color: 'white',
+                                        border: '1px solid #444',
+                                        borderRadius: '4px',
+                                        padding: '8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.9rem'
+                                    }}
+                                >
+                                    <MessageSquare size={16} />
+                                    {isAIPanelOpen ? 'Hide Mavi Chat' : 'Open Mavi Chat'}
+                                </button>
+                            </div>
+
+                            {videoSrc ? (
+                                <video
+                                    ref={videoRef}
+                                    src={videoSrc}
+                                    controls
+                                    style={{ width: '100%', borderRadius: '4px', backgroundColor: '#000' }}
+                                />
+                            ) : (
+                                <div style={{ color: '#888', textAlign: 'center', marginTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                    <div>No video loaded</div>
+                                    <label className="btn" style={{ padding: '8px 16px', backgroundColor: '#333', color: 'white', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Upload size={16} />
+                                        Upload Video
+                                        <input
+                                            type="file"
+                                            accept="video/*"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => {
+                                                const file = e.target.files[0];
+                                                if (file) {
+                                                    const url = URL.createObjectURL(file);
+                                                    setVideoSrc(url);
+                                                }
+                                            }}
+                                        />
+                                    </label>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
-    )
-}
+            ) : (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                    <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📘</div>
+                    <h2>No Manual Selected</h2>
+                    <p style={{ marginBottom: '30px' }}>Select a project to generate steps from video analysis, or create a manual from scratch.</p>
+                    <div style={{ display: 'flex', gap: '15px' }}>
+                        <select
+                            value={selectedProjectId}
+                            onChange={(e) => setSelectedProjectId(e.target.value)}
+                            style={{ padding: '10px', borderRadius: '4px', backgroundColor: '#333', color: 'white', border: '1px solid #555' }}
+                        >
+                            <option value="">-- Select Project --</option>
+                            {projects.map(p => (
+                                <option key={p.projectName} value={p.projectName}>{p.projectName}</option>
+                            ))}
+                        </select>
+                        <button
+                            onClick={() => {
+                                // Create scratch manual
+                                setSelectedProject({ projectName: 'New Manual' }); // Dummy project to enable UI
+                                setGuide(prev => ({ ...prev, title: 'New Manual', steps: [] }));
+                            }}
+                            style={{ padding: '10px 20px', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                            + Create from Scratch
+                        </button>
+                        <button
+                            onClick={handleLoadManualsList}
+                            style={{ padding: '10px 20px', backgroundColor: '#17a2b8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                            📂 Open Saved Manual
+                        </button>
+                    </div>
+                </div>
+            )
+            }
 
-{/* AIChatOverlay Integration */ }
-<AIChatOverlay
-    visible={isAIPanelOpen}
-    onClose={() => setIsAIPanelOpen(false)}
-    title="Mavi manual AI"
-    subtitle="Video Context Assistant"
-    contextData={{
-        videoUri: geminiVideoUri,
-        guide: guide,
-        activeStepId: activeStepId
-    }}
-/>
+            {/* Open Manual Dialog */}
+            {
+                showOpenDialog && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1100,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <div style={{
+                            backgroundColor: '#252526', width: '500px', maxHeight: '80vh',
+                            borderRadius: '8px', display: 'flex', flexDirection: 'column',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+                        }}>
+                            <div style={{ padding: '15px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0 }}>📂 Open Saved Manual</h3>
+                                <button onClick={() => setShowOpenDialog(false)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.2rem', cursor: 'pointer' }}>×</button>
+                            </div>
+                            <div style={{ flex: 1, overflowY: 'auto', padding: '15px' }}>
+                                {savedManuals.length === 0 ? (
+                                    <p style={{ color: '#888', textAlign: 'center' }}>No saved manuals found.</p>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                        {savedManuals.map(m => (
+                                            <div
+                                                key={m.id}
+                                                onClick={() => handleOpenManual(m)}
+                                                style={{
+                                                    padding: '12px',
+                                                    backgroundColor: '#333',
+                                                    borderRadius: '6px',
+                                                    cursor: 'pointer',
+                                                    border: '1px solid #444',
+                                                    transition: 'background 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.target.style.backgroundColor = '#444'}
+                                                onMouseLeave={(e) => e.target.style.backgroundColor = '#333'}
+                                            >
+                                                <div style={{ fontWeight: 'bold' }}>{m.title}</div>
+                                                <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>
+                                                    Ver: {m.version} | Updated: {new Date(m.updatedAt || m.createdAt).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* AIChatOverlay Integration */}
+            <AIChatOverlay
+                visible={isAIPanelOpen}
+                onClose={() => setIsAIPanelOpen(false)}
+                title="Mavi manual AI"
+                subtitle="Video Context Assistant"
+                contextData={{
+                    videoUri: geminiVideoUri,
+                    guide: guide,
+                    activeStepId: activeStepId
+                }}
+            />
         </div >
     );
 }

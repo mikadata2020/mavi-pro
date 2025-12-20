@@ -6,133 +6,127 @@ function BroadcastViewer({ roomId, onClose }) {
     const [status, setStatus] = useState('Connecting...');
     const [error, setError] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
+    const [isMuted, setIsMuted] = useState(true);
+    const [drawingMode, setDrawingMode] = useState(false);
+    const [tool, setTool] = useState('pen'); // pen, eraser, rect, arrow
+    const [color, setColor] = useState('#FF0000');
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [stats, setStats] = useState({ fps: 0, bitrate: 0 });
+
     const videoRef = useRef(null);
     const peerRef = useRef(null);
     const connRef = useRef(null);
+    const localAudioStreamRef = useRef(null);
+    const canvasRef = useRef(null);
+    const isDrawing = useRef(false);
+    const lastPoint = useRef(null);
+    const startPoint = useRef(null);
 
     useEffect(() => {
-        const connectToStream = () => {
+        const joinBroadcast = async () => {
             try {
-                const peer = new Peer({
-                    debug: 2
-                });
-
-                peer.on('open', (id) => {
-                    console.log('[BroadcastViewer] Viewer Peer ID:', id);
-                    setStatus('Connected to server. Joining room...');
-
-                    // Connect to the host peer
-                    const conn = peer.connect(roomId);
-                    connRef.current = conn;
-
-                    conn.on('open', () => {
-                        console.log('[BroadcastViewer] Data connection open');
-                        setStatus('Connected to Host. Waiting for stream...');
-                    });
-
-                    // Handle incoming data (chat messages from host)
-                    conn.on('data', (data) => {
-                        console.log('[BroadcastViewer] Received data:', data);
-                        if (data.type === 'chat') {
-                            setChatMessages(prev => [...prev, {
-                                sender: 'Host',
-                                message: data.message,
-                                timestamp: data.timestamp
-                            }]);
-                        }
-                    });
-
-                    conn.on('error', (err) => {
-                        console.error('[BroadcastViewer] Connection error:', err);
-                        setError('Connection failed: ' + err);
-                    });
-
-                    // Initiate call to receive stream
-                    // We send a dummy stream because PeerJS requires it for bidirectional calls,
-                    // but we only care about receiving.
-                    // Some browsers might need a valid stream, so we try to get one or use a canvas stream.
-                    const canvas = document.createElement('canvas');
-                    const dummyStream = canvas.captureStream(1);
-
-                    console.log('[BroadcastViewer] Calling host:', roomId);
-                    const call = peer.call(roomId, dummyStream);
-
-                    call.on('stream', (remoteStream) => {
-                        console.log('[BroadcastViewer] Stream received!', remoteStream);
-                        setStatus('Stream received! Playing...');
-                        if (videoRef.current) {
-                            videoRef.current.srcObject = remoteStream;
-                            videoRef.current.play().catch(e => {
-                                console.error('[BroadcastViewer] Auto-play failed', e);
-                                setStatus('Click play to watch');
-                            });
-                        }
-                    });
-
-                    call.on('error', (err) => {
-                        console.error('[BroadcastViewer] Call error:', err);
-                        setError('Call failed: ' + err.type);
-                    });
-
-                    call.on('close', () => {
-                        console.log('[BroadcastViewer] Call closed');
-                        setStatus('Stream ended by host.');
-                    });
-                });
-
-                peer.on('error', (err) => {
-                    console.error('[BroadcastViewer] Peer error:', err);
-                    setError('Connection error: ' + err.type);
-                });
-
+                const peer = new Peer({ debug: 2 });
                 peerRef.current = peer;
 
+                peer.on('open', (id) => {
+                    setStatus('Joining room...');
+                    const conn = peer.connect(roomId, {
+                        metadata: { userName: `User_${id.substring(0, 4)}` }
+                    });
+                    connRef.current = conn;
+
+                    conn.on('open', () => setStatus('Connected to Host'));
+                    conn.on('data', (data) => {
+                        if (data.type === 'text' || data.type === 'file') {
+                            const newMsg = { ...data };
+                            if (data.type === 'file' && data.file) {
+                                newMsg.url = URL.createObjectURL(new Blob([data.file]));
+                            }
+                            setChatMessages(prev => [...prev, newMsg]);
+                        }
+                    });
+
+                    // Request Mic for Two-Way Audio
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(stream => {
+                            localAudioStreamRef.current = stream;
+                            const call = peer.call(roomId, stream);
+                            setupCall(call);
+                        })
+                        .catch(err => {
+                            console.warn('Mic access denied, joining without audio', err);
+                            const canvas = document.createElement('canvas');
+                            const call = peer.call(roomId, canvas.captureStream(1));
+                            setupCall(call);
+                        });
+                });
+
+                peer.on('error', (err) => setError('Peer connection error: ' + err.type));
             } catch (err) {
-                console.error('[BroadcastViewer] Setup error:', err);
                 setError(err.message);
             }
         };
 
-        if (roomId) {
-            connectToStream();
-        }
+        let statsInterval;
 
+        const setupCall = (call) => {
+            call.on('stream', (remoteStream) => {
+                setStatus('Receiving stream...');
+                if (videoRef.current) {
+                    videoRef.current.srcObject = remoteStream;
+                    videoRef.current.play()
+                        .then(() => setIsPlaying(true))
+                        .catch(() => setStatus('Click "Join" to watch'));
+                }
+
+                // Monitor Stats
+                const pc = call.peerConnection;
+                if (statsInterval) clearInterval(statsInterval);
+                statsInterval = setInterval(async () => {
+                    if (!pc || pc.connectionState === 'closed') return;
+                    try {
+                        const stats = await pc.getStats();
+                        stats.forEach(report => {
+                            if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                                setStats({
+                                    fps: Math.round(report.framesPerSecond || 0),
+                                    bitrate: Math.round((report.bytesReceived * 8) / 2000) || 0 // bits to Kbps over ~2s
+                                });
+                            }
+                        });
+                    } catch (err) {
+                        console.warn('Stats error:', err);
+                    }
+                }, 2000);
+            });
+        };
+
+        if (roomId) joinBroadcast();
         return () => {
-            if (peerRef.current) {
-                peerRef.current.destroy();
-            }
+            peerRef.current?.destroy();
+            if (statsInterval) clearInterval(statsInterval);
         };
     }, [roomId]);
-
-    const canvasRef = useRef(null);
-    const isDrawing = useRef(false);
-    const lastPoint = useRef(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
         if (canvas) {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-
             const handleResize = () => {
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
             };
-
             window.addEventListener('resize', handleResize);
             return () => window.removeEventListener('resize', handleResize);
         }
     }, []);
 
-    const sendDrawData = (type, x, y, color) => {
-        const conn = peerRef.current?.connections[roomId]?.[0];
-        if (conn && conn.open) {
-            conn.send({
+    const sendDrawData = (action, x, y) => {
+        if (connRef.current?.open) {
+            connRef.current.send({
                 type: 'draw',
-                action: type,
-                x,
-                y,
-                color,
+                action, x, y, tool, color,
                 timestamp: Date.now()
             });
         }
@@ -141,305 +135,124 @@ function BroadcastViewer({ roomId, onClose }) {
     const handleMouseDown = (e) => {
         if (!drawingMode) return;
         isDrawing.current = true;
-
-        const rect = canvasRef.current.getBoundingClientRect();
+        const rect = videoRef.current.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
-
+        startPoint.current = { x, y };
         lastPoint.current = { x, y };
-        sendDrawData('start', x, y, color);
-
-        // Draw locally
-        const ctx = canvasRef.current.getContext('2d');
-        ctx.beginPath();
-        ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
+        sendDrawData('start', x, y);
     };
 
     const handleMouseMove = (e) => {
-        if (!peerRef.current || !videoRef.current) return;
-
+        if (!videoRef.current) return;
         const rect = videoRef.current.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
 
-        // Send cursor position
-        const conn = peerRef.current.connections[roomId]?.[0];
-        if (conn && conn.open) {
-            conn.send({
-                type: 'cursor',
-                x,
-                y,
-                timestamp: Date.now()
-            });
+        // Send mouse position for cursor sync
+        if (connRef.current?.open) {
+            connRef.current.send({ type: 'cursor', x, y });
         }
 
-        // Handle drawing
-        if (drawingMode && isDrawing.current && canvasRef.current) {
-            const canvasRect = canvasRef.current.getBoundingClientRect();
+        if (drawingMode && isDrawing.current) {
             const ctx = canvasRef.current.getContext('2d');
+            const canvasRect = canvasRef.current.getBoundingClientRect();
+            const curX = e.clientX - canvasRect.left;
+            const curY = e.clientY - canvasRect.top;
 
-            ctx.lineTo(e.clientX - canvasRect.left, e.clientY - canvasRect.top);
-            ctx.stroke();
-
-            sendDrawData('draw', x, y, color);
-            lastPoint.current = { x, y };
+            if (tool === 'pen' || tool === 'eraser') {
+                ctx.beginPath();
+                ctx.moveTo(lastPoint.current.x * canvasRect.width, lastPoint.current.y * canvasRect.height);
+                ctx.lineTo(curX, curY);
+                ctx.strokeStyle = tool === 'eraser' ? '#000' : color;
+                ctx.lineWidth = tool === 'eraser' ? 20 : 3;
+                ctx.stroke();
+                sendDrawData('draw', x, y);
+                lastPoint.current = { x, y };
+            }
         }
     };
 
-    const handleMouseUp = () => {
-        if (isDrawing.current) {
-            isDrawing.current = false;
-            sendDrawData('end', 0, 0, color);
-        }
-    };
-
-    const handleClick = (e) => {
-        if (drawingMode) return; // Don't click if drawing
-        if (!peerRef.current || !videoRef.current) return;
-
+    const handleMouseUp = (e) => {
+        if (!isDrawing.current) return;
+        isDrawing.current = false;
         const rect = videoRef.current.getBoundingClientRect();
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
-
-        const conn = peerRef.current.connections[roomId]?.[0];
-        if (conn && conn.open) {
-            conn.send({
-                type: 'click',
-                x,
-                y,
-                timestamp: Date.now()
-            });
-        }
+        sendDrawData('end', x, y);
     };
 
-    const sendChatMessage = (message) => {
-        if (!connRef.current || !connRef.current.open) return;
-
-        const chatData = {
-            type: 'chat',
-            message,
-            timestamp: Date.now()
-        };
-
-        // Add to local chat
-        setChatMessages(prev => [...prev, {
-            sender: 'You',
-            message,
-            timestamp: chatData.timestamp
-        }]);
-
-        // Send to host
-        connRef.current.send(chatData);
-    };
-
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [drawingMode, setDrawingMode] = useState(false);
-    const [color, setColor] = useState('#FF0000');
-
-    // ... (keep existing useEffect)
-
-    const handlePlay = () => {
-        if (videoRef.current) {
-            videoRef.current.play()
-                .then(() => {
-                    setIsPlaying(true);
-                    setStatus('Playing');
-                })
-                .catch(e => {
-                    console.error('Play failed:', e);
-                    setError('Playback failed: ' + e.message);
-                });
+    const toggleMute = () => {
+        if (localAudioStreamRef.current) {
+            localAudioStreamRef.current.getAudioTracks().forEach(t => t.enabled = isMuted);
+            setIsMuted(!isMuted);
         }
     };
 
     return (
-        <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: '#000',
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center'
-        }}>
-            {error ? (
-                <div style={{ color: '#ff6b6b', padding: '20px', textAlign: 'center' }}>
-                    <h2>⚠️ Error</h2>
-                    <p>{error}</p>
-                    <button
-                        onClick={() => window.location.href = '/'}
-                        style={{
-                            padding: '10px 20px',
-                            backgroundColor: '#444',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            marginTop: '20px'
-                        }}
-                    >
-                        Go Back
-                    </button>
-                </div>
-            ) : (
-                <>
-                    <div
-                        style={{ position: 'relative', width: '100%', height: '100%' }}
-                        onMouseMove={handleMouseMove}
-                        onMouseDown={handleMouseDown}
-                        onMouseUp={handleMouseUp}
-                        onMouseLeave={handleMouseUp}
-                        onClick={handleClick}
-                    >
-                        <video
-                            ref={videoRef}
-                            style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'contain'
-                            }}
-                            controls={false}
-                            playsInline
-                            muted
-                            onPlay={() => setIsPlaying(true)}
-                        />
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'contain' }} playsInline muted />
+                <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: drawingMode ? 'auto' : 'none' }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} />
 
-                        {/* Play Overlay */}
-                        {!isPlaying && (
-                            <div style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                backgroundColor: 'rgba(0,0,0,0.5)',
-                                zIndex: 10
-                            }}>
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handlePlay();
-                                    }}
-                                    style={{
-                                        padding: '20px 40px',
-                                        fontSize: '1.5rem',
-                                        backgroundColor: '#0078d4',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '8px',
-                                        cursor: 'pointer',
-                                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                                    }}
-                                >
-                                    ▶ Click to Start Watching
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Drawing Canvas */}
-                        <canvas
-                            ref={canvasRef}
-                            style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '100%',
-                                height: '100%',
-                                pointerEvents: drawingMode ? 'auto' : 'none'
-                            }}
-                        />
-
-                        {/* Drawing Tools */}
-                        <div style={{
-                            position: 'absolute',
-                            bottom: '20px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            display: 'flex',
-                            gap: '10px',
-                            padding: '10px',
-                            backgroundColor: 'rgba(0,0,0,0.7)',
-                            borderRadius: '8px',
-                            pointerEvents: 'auto',
-                            zIndex: 20
-                        }}>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setDrawingMode(!drawingMode); }}
-                                style={{
-                                    padding: '8px',
-                                    backgroundColor: drawingMode ? '#0078d4' : '#444',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                ✏️ Draw
-                            </button>
-                            {drawingMode && (
-                                <input
-                                    type="color"
-                                    value={color}
-                                    onChange={(e) => setColor(e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{ width: '40px', height: '30px', border: 'none', padding: 0 }}
-                                />
-                            )}
-                        </div>
-                    </div>
-
-                    <div style={{
-                        position: 'absolute',
-                        top: '20px',
-                        left: '20px',
-                        backgroundColor: 'rgba(0,0,0,0.5)',
-                        padding: '10px',
-                        borderRadius: '4px',
-                        color: 'white',
-                        pointerEvents: 'none',
-                        zIndex: 20
-                    }}>
+                {/* Status Overlays */}
+                <div style={{ position: 'absolute', top: 20, left: 20, display: 'flex', gap: '10px' }}>
+                    <div style={{ padding: '6px 12px', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: '20px', color: 'white', fontSize: '0.8rem' }}>
                         {status}
                     </div>
+                    {stats.fps > 0 && (
+                        <div style={{ padding: '6px 12px', backgroundColor: 'rgba(16, 124, 16, 0.6)', borderRadius: '20px', color: 'white', fontSize: '0.8rem' }}>
+                            🟢 {stats.fps} FPS | {stats.bitrate} KB/s
+                        </div>
+                    )}
+                </div>
 
-                    <button
-                        onClick={() => window.location.href = '/'}
-                        style={{
-                            position: 'absolute',
-                            top: '20px',
-                            right: '20px',
-                            padding: '10px 20px',
-                            backgroundColor: 'rgba(255, 0, 0, 0.7)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            zIndex: 10000
-                        }}
-                    >
-                        Exit Viewer
+                <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: '10px' }}>
+                    <button onClick={toggleMute} style={{ padding: '10px', backgroundColor: isMuted ? '#c50f1f' : '#107c10', border: 'none', borderRadius: '50%', cursor: 'pointer', color: 'white' }}>
+                        {isMuted ? '🔇' : '🎤'}
                     </button>
+                    <button onClick={onClose} style={{ padding: '10px 20px', backgroundColor: '#c50f1f', border: 'none', borderRadius: '4px', color: 'white', fontWeight: 'bold' }}>
+                        Exit
+                    </button>
+                </div>
 
-                    {/* Chat Box */}
-                    <ChatBox
-                        messages={chatMessages}
-                        onSendMessage={sendChatMessage}
-                        userName="You"
-                    />
-                </>
-            )
-            }
-        </div >
+                {/* Toolbar */}
+                <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '15px', padding: '10px', backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: '12px', border: '1px solid #444' }}>
+                    <button onClick={() => setDrawingMode(!drawingMode)} style={{ padding: '8px 15px', backgroundColor: drawingMode ? '#0078d4' : '#444', border: 'none', borderRadius: '4px', color: 'white' }}>
+                        ✏️ Annotate
+                    </button>
+                    {drawingMode && (
+                        <>
+                            <select value={tool} onChange={(e) => setTool(e.target.value)} style={{ backgroundColor: '#2d2d2d', color: 'white', border: '1px solid #444', borderRadius: '4px' }}>
+                                <option value="pen">Pen</option>
+                                <option value="eraser">Eraser</option>
+                                <option value="rect">Rectangle</option>
+                                <option value="arrow">Arrow</option>
+                            </select>
+                            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ width: '30px', height: '30px', padding: 0, border: 'none' }} />
+                        </>
+                    )}
+                </div>
+
+                {!isPlaying && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+                        <button onClick={() => { videoRef.current?.play(); setIsPlaying(true); }} style={{ padding: '20px 40px', fontSize: '1.2rem', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                            ▶ Join Broadcast
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            <ChatBox
+                messages={chatMessages}
+                onSendMessage={(data) => connRef.current?.send({
+                    ...data,
+                    timestamp: Date.now(),
+                    sender: `Viewer ${peerRef.current?.id?.substring(0, 4) || '...'}`
+                })}
+                userName={`Viewer ${peerRef.current?.id?.substring(0, 4) || '...'}`}
+            />
+        </div>
     );
 }
 
