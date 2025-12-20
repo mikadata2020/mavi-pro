@@ -13,6 +13,8 @@ export const VSMSymbols = {
     FIFO: 'fifo',
     SAFETY_STOCK: 'safety_stock',
     TRUCK: 'truck',
+    SEA: 'sea',
+    AIR: 'air',
     RAW_MATERIAL: 'raw_material',
     PUSH_ARROW: 'push_arrow', // NEW: Push system arrow
     FINISHED_GOODS: 'finished_goods', // NEW: Finished goods to customer
@@ -50,9 +52,10 @@ export const INITIAL_DATA = {
         ct: 60, // Cycle Time (sec)
         co: 30, // Changeover (min)
         uptime: 95, // %
-        yield: 99, // % (New)
-        va: 60, // VA Time (sec) (New)
-        operators: 1, // Count (New)
+        yield: 99, // %
+        performance: 90, // % (New)
+        va: 60, // VA Time (sec)
+        operators: 1, // Count
         shifts: 1,
         processType: 'normal'
     },
@@ -64,11 +67,30 @@ export const INITIAL_DATA = {
         unit: 'pcs',
         availableTime: 480, // min/shift
         shifts: 1,
+        packSize: 1, // Standard pack for Pitch calculation
         taktTime: 0
     }, // Enhanced
     kaizen_burst: { name: 'Problem/Idea' },
     production_control: { name: 'Production Control' },
     heijunka_box: { name: 'Heijunka Box', description: 'Load Leveling' }, // NEW
+    truck: {
+        name: 'Milk Run (Truck)',
+        frequency: 4, // times/shift
+        capacity: 100, // pcs/trip
+        leadTime: 30 // min (travel time)
+    },
+    sea: {
+        name: 'Sea Freight',
+        frequency: 1,
+        capacity: 5000,
+        leadTime: 30 // days
+    },
+    air: {
+        name: 'Air Freight',
+        frequency: 2,
+        capacity: 1000,
+        leadTime: 2 // days
+    },
     timeline: { name: 'Timeline', leadTime: 0, vaTime: 0 }, // NEW
     finished_goods: { name: 'Finished Goods', amount: 0 }, // NEW
     custom: { name: 'Custom Item', description: '' }

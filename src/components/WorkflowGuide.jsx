@@ -52,17 +52,19 @@ const WorkflowGuide = () => {
         },
         {
             id: 4,
-            title: 'Analysis',
+            title: 'Analysis & TPS',
             icon: '📊',
             color: '#9C27B0',
-            description: 'Analisis data & improvement',
+            description: 'Analisis data & improvement berbasis TPS',
             details: [
                 'OEE, Efficiency, Productivity metrics',
-                'Waste Elimination (7 Wastes)',
-                'Statistical Analysis (Cp/Cpk)',
-                'Value Stream Mapping'
+                'Value Stream Mapping (VSM) Pro',
+                'Yamazumi Chart (Work Balancing)',
+                'EPEI Analysis (Flexibility Analysis)',
+                'Pitch & Takt Time Heartbeat',
+                'Waste Elimination (7 Wastes)'
             ],
-            features: ['Analysis Dashboard', 'Waste Elimination', 'Statistical Analysis']
+            features: ['Value Stream Mapping', 'Yamazumi Chart', 'EPEI Analysis', 'Analysis Dashboard']
         },
         {
             id: 5,
@@ -388,6 +390,9 @@ const WorkflowGuide = () => {
                                                                 'Object Tracking': '/ai-process',
 
                                                                 // Step 4: Analysis
+                                                                'Value Stream Mapping': '/vsm',
+                                                                'Yamazumi Chart': '/vsm',
+                                                                'EPEI Analysis': '/vsm',
                                                                 'Analysis Dashboard': '/ai-process',
                                                                 'Waste Elimination': '/waste-elimination',
                                                                 'Statistical Analysis': '/statistical-analysis',

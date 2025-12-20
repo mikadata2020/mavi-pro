@@ -61,7 +61,17 @@ function Help() {
 📹 **Multi-Camera** - Analisis 3D Fusion dari 2 sudut pandang
 🥽 **VR Training** - Mode pelatihan immersive untuk operator baru
 📚 **Knowledge Base** - Repository templates & best practices
+🗺️ **VSM Pro** - Value Stream Mapping dengan fitur TPS lanjut
 ❓ **Help** - Panduan penggunaan aplikasi
+
+**Advanced TPS Tools:**
+
+📊 **Yamazumi** - Visualisasi beban kerja (Work Balancing) vs Takt Time
+🔄 **EPEI** - Every Part Every Interval (Analisis fleksibilitas)
+🎯 **Pitch** - Heartbeat produksi (Takt Time x Pack Size)
+🚛 **Milk Run** - Analisis logistik frekuensi & kapasitas truck
+🪜 **Timeline Ladder** - Visualisasi otomatis Lead Time vs VA Time di VSM
+📈 **OEE Metrics** - Monitoring Performance, Availability, & Quality pada proses
 
 **Element Editor Tools:**
 
@@ -727,6 +737,29 @@ Prediksi kelelahan operator (fatigue) berdasarkan analisis tren cycle time.
 
 **Recommendation:**
 Sistem akan menyarankan "Micro-break" jika fatigue terdeteksi untuk menjaga kualitas dan safety.
+            `
+        },
+        tpsadv: {
+            title: '🚀 Fitur TPS Lanjutan',
+            content: `
+**Yamazumi Chart:**
+Visualisasi beban kerja setiap operator dibandingkan dengan Takt Time. Membantu identifikasi bottleneck atau operator yang idle (mura).
+✅ Fitur: Takt Time Line, Bar chart per process, Save image.
+
+**EPEI Analysis:**
+Every Part Every Interval. Menghitung seberapa fleksibel lini produksi Anda dalam melakukan changeover produk.
+✅ Fitur: Flexibility status (Healthy/Warning), SMED recommendations.
+
+**Pitch & Takt Time:**
+Menghitung Heartbeat (Pitch) produksi berdasarkan Takt Time dan standar Pack Size Customer.
+✅ Fitur: Display di metrics bar bawah VSM, input pack size di Customer node.
+
+**Milk Run Logistics:**
+Analisis pengiriman material dengan frekuensi dan kapasitas truck yang terintegrasi.
+✅ Fitur: Logistics data table di Truck symbol, Lead Time impact.
+
+**Timeline Ladder:**
+Tangga waktu otomatis di bagian bawah VSM yang memisahkan Lead Time (inventory) dan Value-Added Time (process).
             `
         }
     };

@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-const ProductionControlNode = ({ data, selected }) => {
+const ProductionControlNode = ({ data, selected, showDetails }) => {
     return (
         <div style={{ position: 'relative', minWidth: '160px' }}>
             <Handle type="target" position={Position.Top} id="t" style={{ background: '#555' }} />

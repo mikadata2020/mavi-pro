@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import { PROCESS_TYPES } from '../vsm-constants';
 
-const ProcessNode = ({ data, selected }) => {
+const ProcessNode = ({ data, selected, showDetails }) => {
     let borderStyle = '2px solid white';
     let bgStyle = data.color || '#1e1e1e';
     let labelExtra = null;
@@ -53,49 +53,60 @@ const ProcessNode = ({ data, selected }) => {
             </div>
 
             {/* Detailed Data Box - TPS Standard */}
-            <div style={{
-                width: '140px',
-                border: '1px solid #666',
-                marginTop: '-1px',
-                backgroundColor: '#252526',
-                fontSize: '0.6rem',
-                padding: '0',
-                color: '#ddd'
-            }}>
-                <div style={dataRowStyle}><span style={labelStyle}>C/T (sec)</span><span style={valStyle}>{data.ct}</span></div>
-                <div style={dataRowStyle}><span style={labelStyle}>C/O (min)</span><span style={valStyle}>{data.co}</span></div>
-                <div style={dataRowStyle}><span style={labelStyle}>Uptime (%)</span><span style={valStyle}>{data.uptime}</span></div>
-                <div style={dataRowStyle}><span style={labelStyle}>Yield (%)</span><span style={valStyle}>{data.yield || 100}</span></div>
-                <div style={dataRowStyle}><span style={labelStyle}>VA Time (s)</span><span style={valStyle}>{data.va || data.ct}</span></div>
-                <div style={dataRowStyle}><span style={labelStyle}>Operators</span><span style={valStyle}>{data.operators || 1}</span></div>
+            {showDetails && (
+                <div style={{
+                    width: '140px',
+                    border: '1px solid #666',
+                    marginTop: '-1px',
+                    backgroundColor: '#252526',
+                    fontSize: '0.6rem',
+                    padding: '0',
+                    color: '#ddd'
+                }}>
+                    <div style={dataRowStyle}><span style={labelStyle}>C/T (sec)</span><span style={valStyle}>{data.ct}</span></div>
+                    <div style={dataRowStyle}><span style={labelStyle}>C/O (min)</span><span style={valStyle}>{data.co}</span></div>
+                    <div style={dataRowStyle}><span style={labelStyle}>Uptime (%)</span><span style={valStyle}>{data.uptime}</span></div>
+                    <div style={dataRowStyle}><span style={labelStyle}>Perform. (%)</span><span style={valStyle}>{data.performance || 100}</span></div>
+                    <div style={dataRowStyle}><span style={labelStyle}>Yield (%)</span><span style={valStyle}>{data.yield || 100}</span></div>
+                    <div style={dataRowStyle}><span style={labelStyle}>VA Time (s)</span><span style={valStyle}>{data.va || data.ct}</span></div>
+                    <div style={dataRowStyle}><span style={labelStyle}>Operators</span><span style={valStyle}>{data.operators || 1}</span></div>
 
-                {/* DEEP ANALYTICS: Capacity */}
-                {data.ct > 0 && (
+                    {/* OEE Calculation */}
                     <div style={{ ...dataRowStyle, backgroundColor: '#1a1a1a', borderTop: '1px solid #555' }}>
-                        <span style={labelStyle}>Cap/Hr (pcs)</span>
-                        <span style={{ ...valStyle, color: '#4fc3f7' }}>
-                            {Math.floor((3600 * (Number(data.uptime || 100) / 100) * (Number(data.yield || 100) / 100)) / Number(data.ct))}
+                        <span style={{ ...labelStyle, color: '#4caf50', fontWeight: 'bold' }}>OEE (%)</span>
+                        <span style={{ ...valStyle, color: '#4caf50' }}>
+                            {Math.round((Number(data.uptime || 100) / 100) * (Number(data.performance || 100) / 100) * (Number(data.yield || 100) / 100) * 100)}%
                         </span>
                     </div>
-                )}
 
-                {/* DEEP ANALYTICS: Utilization Bar */}
-                {data.globalTakt > 0 && (
-                    <div style={{ padding: '4px', borderTop: '1px solid #444' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.5rem', marginBottom: '2px' }}>
-                            <span>Utilisasi</span>
-                            <span>{Math.round((Number(data.ct) / (Number(data.globalTakt) * Number(data.operators || 1))) * 100)}%</span>
+                    {/* DEEP ANALYTICS: Capacity */}
+                    {data.ct > 0 && (
+                        <div style={{ ...dataRowStyle, backgroundColor: '#1a1a1a', borderTop: '1px solid #555' }}>
+                            <span style={labelStyle}>Cap/Hr (pcs)</span>
+                            <span style={{ ...valStyle, color: '#4fc3f7' }}>
+                                {Math.floor((3600 * (Number(data.uptime || 100) / 100) * (Number(data.yield || 100) / 100)) / Number(data.ct))}
+                            </span>
                         </div>
-                        <div style={{ height: '4px', width: '100%', backgroundColor: '#333', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{
-                                height: '100%',
-                                width: `${Math.min(100, (Number(data.ct) / (Number(data.globalTakt) * Number(data.operators || 1))) * 100)}%`,
-                                backgroundColor: isBottleneck ? '#ff4444' : '#4caf50'
-                            }}></div>
+                    )}
+
+                    {/* DEEP ANALYTICS: Utilization Bar */}
+                    {data.globalTakt > 0 && (
+                        <div style={{ padding: '4px', borderTop: '1px solid #444' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.5rem', marginBottom: '2px' }}>
+                                <span>Utilisasi</span>
+                                <span>{Math.round((Number(data.ct) / (Number(data.globalTakt) * Number(data.operators || 1))) * 100)}%</span>
+                            </div>
+                            <div style={{ height: '4px', width: '100%', backgroundColor: '#333', borderRadius: '2px', overflow: 'hidden' }}>
+                                <div style={{
+                                    height: '100%',
+                                    width: `${Math.min(100, (Number(data.ct) / (Number(data.globalTakt) * Number(data.operators || 1))) * 100)}%`,
+                                    backgroundColor: isBottleneck ? '#ff4444' : '#4caf50'
+                                }}></div>
+                            </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
+            )}
 
             {/* Output Handles */}
             <Handle type="source" position={Position.Bottom} id="b" style={{ background: '#555' }} />

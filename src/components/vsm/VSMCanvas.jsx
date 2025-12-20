@@ -21,15 +21,19 @@ import GenericNode from './nodes/GenericNode';
 import InformationEdge from './edges/InformationEdge';
 import MaterialEdge from './edges/MaterialEdge';
 import Sidebar from './Sidebar';
+import TimelineLadder from './TimelineLadder';
+import YamazumiChart from './YamazumiChart';
+import EPEIAnalysis from './EPEIAnalysis';
 import AIVSMGeneratorModal from './AIVSMGeneratorModal';
+import VSMWizard from './VSMWizard';
 import { useUndoRedo } from '../../hooks/useUndoRedo';
 import { analyzeVSM, getStoredApiKey, generateVSMFromPrompt, generateVSMFromImage, validateApiKey } from '../../utils/aiGenerator';
 import ReactMarkdown from 'react-markdown';
-import { Brain, Sparkles, X, Wand2, HelpCircle, ImagePlus } from 'lucide-react';
+import { Brain, Sparkles, X, Wand2, HelpCircle, ImagePlus, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, BarChart3, Repeat, Undo, Redo, ArrowLeft, ArrowUp, Save, Folder, Layout } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
-const nodeTypes = {
-    process: ProcessNode,
+// Static types that don't need dynamic props
+const staticNodeTypes = {
     inventory: InventoryNode,
     productionControl: ProductionControlNode,
     generic: GenericNode,
@@ -71,10 +75,20 @@ const VSMCanvasContent = () => {
     const [selectedModel, setSelectedModel] = useState('gemini-1.5-flash');
     const [availableModels, setAvailableModels] = useState([]);
 
-    // Help Modal State
+    // UI State
+    const [showSidebar, setShowSidebar] = useState(true);
+    const [showNodeDetails, setShowNodeDetails] = useState(true);
+    const [showYamazumi, setShowYamazumi] = useState(false);
+    const [showEPEI, setShowEPEI] = useState(false);
+    const [showWizard, setShowWizard] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
 
-    // Fetch Available Models
+    const nodeTypes = useMemo(() => ({
+        inventory: (props) => <InventoryNode {...props} showDetails={showNodeDetails} />,
+        productionControl: (props) => <ProductionControlNode {...props} showDetails={showNodeDetails} />,
+        generic: (props) => <GenericNode {...props} showDetails={showNodeDetails} />,
+        process: (props) => <ProcessNode {...props} showDetails={showNodeDetails} />
+    }), [showNodeDetails]);
     useEffect(() => {
         const fetchModels = async () => {
             try {
@@ -248,9 +262,14 @@ const VSMCanvasContent = () => {
             const demand = Number(customerNode.data.demand || 0);
             const availableSec = Number(customerNode.data.availableTime || 480) * 60;
             const shifts = Number(customerNode.data.shifts || 1);
+            const packSize = Number(customerNode.data.packSize || 1);
             if (demand > 0) {
                 globalTakt = (availableSec * shifts) / demand;
                 avgDailyDemand = demand / shifts; // Simplified to per shift if we use shift as day unit here
+
+                // Add pitch calculation
+                const pitch = globalTakt * packSize;
+                window.__maviVSMPitch = pitch; // Temporary for state sync
             }
         }
 
@@ -304,7 +323,8 @@ const VSMCanvasContent = () => {
             totalVA: va,
             totalLT: lt,
             efficiency: eff.toFixed(2),
-            taktTime: globalTakt.toFixed(1)
+            taktTime: globalTakt.toFixed(1),
+            pitch: (window.__maviVSMPitch || 0).toFixed(1)
         });
 
         // Expose to Mavi Hub
@@ -583,6 +603,201 @@ const VSMCanvasContent = () => {
         }
     };
 
+    const handleWizardGenerate = (wizardData) => {
+        const newNodes = [];
+        const newEdges = [];
+        const { customer, processes, supplier, logistics, infoFlow } = wizardData;
+
+        // 1. Supplier (Upstream - Left)
+        const supplierId = 'node_supplier';
+        newNodes.push({
+            id: supplierId,
+            type: 'generic',
+            position: { x: 50, y: 150 },
+            data: {
+                symbolType: supplier.transportMode || VSMSymbols.SUPPLIER,
+                name: supplier.name,
+                frequency: supplier.frequency,
+                capacity: logistics.truckCapacity
+            }
+        });
+
+        // 2. Production Control (Top Center)
+        const controlId = 'node_control';
+        const controlX = (processes.length * 200) + 400;
+        newNodes.push({
+            id: controlId,
+            type: 'productionControl',
+            position: { x: controlX, y: -150 },
+            data: { name: 'PRODUCTION CONTROL' }
+        });
+
+        // 3. Customer (Downstream - Right)
+        const customerId = 'node_customer';
+        const maxProcessX = processes.length * 400 + 400;
+        const customerX = Math.max(800, maxProcessX);
+        newNodes.push({
+            id: customerId,
+            type: 'generic',
+            position: { x: customerX, y: 150 },
+            data: {
+                symbolType: VSMSymbols.CUSTOMER,
+                name: customer.name,
+                demand: customer.demand,
+                shifts: customer.shifts,
+                availableTime: customer.hoursPerShift * 60,
+                packSize: customer.packSize
+            }
+        });
+
+        // 4. Processes & Buffers (Horizontal Chain with Parallel Support)
+        let lastNodeIds = [supplierId]; // Array to support multiple parallel targets
+        let currentX = 400;
+        let baseHeight = 350;
+        let parallelCount = 0;
+        let sourceForParallel = supplierId;
+
+        processes.forEach((proc, idx) => {
+            const procId = `node_proc_${idx + 1}`;
+
+            // Adjust coordinates for parallel
+            let nodeY = baseHeight;
+            let nodeX = currentX;
+
+            if (proc.isParallel) {
+                parallelCount++;
+                nodeY += (parallelCount * 200);
+                nodeX -= 400; // Stay at same X as previous
+            } else {
+                parallelCount = 0; // Reset stack
+                sourceForParallel = lastNodeIds[lastNodeIds.length - 1];
+            }
+
+            newNodes.push({
+                id: procId,
+                type: 'process',
+                position: { x: nodeX, y: nodeY },
+                data: {
+                    name: proc.name,
+                    ct: proc.ct,
+                    co: proc.co,
+                    workers: proc.workers,
+                    performance: proc.performance,
+                    uptime: 95
+                }
+            });
+
+            // Edge from source
+            const sourceId = proc.isParallel ? sourceForParallel : lastNodeIds[lastNodeIds.length - 1];
+            const isPull = proc.flowType === 'pull';
+
+            newEdges.push({
+                id: `edge_mat_${idx}`,
+                source: sourceId,
+                target: procId,
+                type: 'smoothstep',
+                markerEnd: { type: MarkerType.ArrowClosed, color: isPull ? '#ff9900' : '#fff' },
+                style: {
+                    strokeWidth: isPull ? 3 : 2,
+                    stroke: isPull ? '#ff9900' : '#fff',
+                    strokeDasharray: isPull ? '10,5' : '0'
+                }
+            });
+
+            let currentLastId = procId;
+
+            // Buffer after process
+            if (proc.buffer !== 'none') {
+                const bufferId = `node_buffer_${idx + 1}`;
+                let symbType = VSMSymbols.INVENTORY;
+                if (proc.buffer === 'supermarket') symbType = VSMSymbols.SUPERMARKET;
+                if (proc.buffer === 'fifo') symbType = VSMSymbols.FIFO;
+
+                newNodes.push({
+                    id: bufferId,
+                    type: proc.buffer === 'inventory' ? 'inventory' : 'generic',
+                    position: { x: nodeX + 200, y: nodeY },
+                    data: {
+                        symbolType: symbType,
+                        name: proc.buffer.toUpperCase(),
+                        amount: proc.bufferQty
+                    }
+                });
+
+                newEdges.push({
+                    id: `edge_proc_to_buf_${idx}`,
+                    source: procId,
+                    target: bufferId,
+                    type: 'smoothstep',
+                    markerEnd: { type: MarkerType.ArrowClosed },
+                    style: { strokeWidth: 2 }
+                });
+                currentLastId = bufferId;
+            }
+
+            if (proc.isParallel) {
+                lastNodeIds.push(currentLastId);
+            } else {
+                lastNodeIds = [currentLastId];
+                currentX += 400;
+            }
+        });
+
+        // Connect all final nodes to Customer
+        lastNodeIds.forEach((lastId, idx) => {
+            newEdges.push({
+                id: `edge_to_customer_${idx}`,
+                source: lastId,
+                target: customerId,
+                type: 'smoothstep',
+                markerEnd: { type: MarkerType.ArrowClosed },
+                style: { strokeWidth: 2 }
+            });
+        });
+
+        // 5. Information Flows
+        const infoType = infoFlow === 'electronic' ? 'electronic' : 'manual';
+
+        // Customer -> Control
+        newEdges.push({
+            id: 'info_cust_control',
+            source: customerId,
+            target: controlId,
+            type: 'smoothstep',
+            style: { strokeDasharray: infoType === 'electronic' ? '0' : '5,5', stroke: '#0078d4' },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
+        });
+
+        // Control -> Supplier
+        newEdges.push({
+            id: 'info_control_supp',
+            source: controlId,
+            target: supplierId,
+            type: 'smoothstep',
+            style: { strokeDasharray: infoType === 'electronic' ? '0' : '5,5', stroke: '#0078d4' },
+            markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
+        });
+
+        // Control -> Processes (Schedule)
+        processes.forEach((proc, idx) => {
+            const procId = `node_proc_${idx + 1}`;
+            newEdges.push({
+                id: `info_control_proc_${idx}`,
+                source: controlId,
+                target: procId,
+                type: 'smoothstep',
+                style: { strokeDasharray: infoType === 'electronic' ? '0' : '5,5', stroke: '#0078d4' },
+                markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
+            });
+        });
+
+        setNodes(newNodes);
+        setEdges(newEdges);
+        pushToHistory({ nodes: newNodes, edges: newEdges });
+
+        alert(currentLanguage === 'id' ? '✅ VSM berhasil dibuat!' : '✅ VSM generated successfully!');
+    };
+
     // --- Save/Load Functions ---
 
     const handleSaveToFile = () => {
@@ -732,25 +947,63 @@ const VSMCanvasContent = () => {
     };
 
     // --- Render Helpers ---
+    const Separator = () => <div style={{ width: '1px', height: '20px', backgroundColor: '#555', margin: '0 5px' }} />;
 
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100%', flexDirection: 'column' }}>
             {/* Top Toolbar */}
             <div style={{
                 height: '50px', backgroundColor: '#333', borderBottom: '1px solid #555',
-                display: 'flex', alignItems: 'center', padding: '0 20px', gap: '15px', color: 'white'
+                display: 'flex', alignItems: 'center', padding: '0 20px', gap: '15px', color: 'white',
+                overflowX: 'auto', flexShrink: 0
             }}>
-                <div style={{ fontWeight: 'bold', marginRight: '20px' }}>MAVi VSM</div>
+                <div style={{
+                    fontWeight: '900',
+                    fontSize: '1.1rem',
+                    letterSpacing: '1px',
+                    color: '#0078d4',
+                    marginRight: '15px',
+                    fontFamily: "'Segoe UI', Roboto, sans-serif"
+                }}>MAVi<span style={{ color: 'white', marginLeft: '4px' }}>VSM</span></div>
 
-                <div style={toolbarGroupStyle}>
-                    <button style={btnStyle} onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">↩️ Undo</button>
-                    <button style={btnStyle} onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Y)">↪️ Redo</button>
+                <div style={{ display: 'flex', gap: '5px', marginRight: '15px' }}>
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#444' }}
+                        onClick={() => setShowSidebar(!showSidebar)}
+                        title={showSidebar ? (currentLanguage === 'id' ? 'Sembunyikan Toolbox' : 'Hide Toolbox') : (currentLanguage === 'id' ? 'Tampilkan Toolbox' : 'Show Toolbox')}
+                    >
+                        {showSidebar ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+                    </button>
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#444' }}
+                        onClick={() => setShowNodeDetails(!showNodeDetails)}
+                        title={showNodeDetails ? (currentLanguage === 'id' ? 'Sembunyikan Detail' : 'Hide Details') : (currentLanguage === 'id' ? 'Tampilkan Detail' : 'Show Details')}
+                    >
+                        {showNodeDetails ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                 </div>
 
                 <div style={toolbarGroupStyle}>
-                    <button style={btnStyle} onClick={() => handleAlign('left')} title="Align Left">⬅️ Align Left</button>
-                    <button style={btnStyle} onClick={() => handleAlign('top')} title="Align Top">⬆️ Align Top</button>
+                    <button style={btnStyle} onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+                        <Undo size={16} />
+                    </button>
+                    <button style={btnStyle} onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Y)">
+                        <Redo size={16} />
+                    </button>
                 </div>
+
+                <Separator />
+
+                <div style={toolbarGroupStyle}>
+                    <button style={btnStyle} onClick={() => handleAlign('left')} title="Align Left">
+                        <ArrowLeft size={16} />
+                    </button>
+                    <button style={btnStyle} onClick={() => handleAlign('top')} title="Align Top">
+                        <ArrowUp size={16} />
+                    </button>
+                </div>
+
+                <Separator />
 
                 <div style={toolbarGroupStyle}>
                     <button
@@ -758,14 +1011,14 @@ const VSMCanvasContent = () => {
                         onClick={handleSaveToFile}
                         title={currentLanguage === 'id' ? 'Simpan VSM ke File' : 'Save VSM to File'}
                     >
-                        💾 {currentLanguage === 'id' ? 'Simpan' : 'Save'}
+                        <Save size={16} />
                     </button>
                     <button
                         style={{ ...btnStyle, backgroundColor: '#107c10' }}
                         onClick={() => fileInputRef.current?.click()}
                         title={currentLanguage === 'id' ? 'Buka VSM dari File' : 'Load VSM from File'}
                     >
-                        📂 {currentLanguage === 'id' ? 'Buka' : 'Load'}
+                        <Folder size={16} />
                     </button>
                     <input
                         ref={fileInputRef}
@@ -775,6 +1028,8 @@ const VSMCanvasContent = () => {
                         style={{ display: 'none' }}
                     />
                 </div>
+
+                <Separator />
 
                 <div style={toolbarGroupStyle}>
                     <select
@@ -806,12 +1061,20 @@ const VSMCanvasContent = () => {
                     </select>
 
                     <button
-                        style={{ ...btnStyle, backgroundColor: '#ff6b35' }}
+                        style={{ ...btnStyle, backgroundColor: '#ff6b35', minWidth: 'fit-content' }}
                         onClick={() => setShowGenerateModal(true)}
                         disabled={isGenerating}
                         title={currentLanguage === 'id' ? 'Generate VSM dari Deskripsi' : 'Generate VSM from Description'}
                     >
-                        {isGenerating ? '⌛ Generating...' : <><Wand2 size={16} /> AI Generate</>}
+                        {isGenerating ? '⌛' : <><Wand2 size={16} /> {currentLanguage === 'id' ? 'AI Hasilkan' : 'AI Generate'}</>}
+                    </button>
+
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#0078d4', minWidth: 'fit-content' }}
+                        onClick={() => setShowWizard(true)}
+                        title={currentLanguage === 'id' ? 'Buat VSM dengan Wizard' : 'Create VSM with Wizard'}
+                    >
+                        <Layout size={16} /> {currentLanguage === 'id' ? 'Wizard' : 'Wizard'}
                     </button>
 
                     <button
@@ -820,7 +1083,7 @@ const VSMCanvasContent = () => {
                         disabled={isGenerating}
                         title={currentLanguage === 'id' ? 'Upload Gambar Hand-Drawn VSM' : 'Upload Hand-Drawn VSM Image'}
                     >
-                        {isGenerating ? '⌛ Processing...' : <><ImagePlus size={16} /> Draw Upload</>}
+                        {isGenerating ? '⌛' : <><ImagePlus size={16} /> {currentLanguage === 'id' ? 'Gambar' : 'Draw'}</>}
                     </button>
                     <input
                         ref={imageInputRef}
@@ -831,10 +1094,27 @@ const VSMCanvasContent = () => {
                     />
 
                     <button style={{ ...btnStyle, backgroundColor: '#8a2be2' }} onClick={handleAIAnalysis} disabled={isAnalyzing}>
-                        {isAnalyzing ? '⌛ Analyzing...' : <><Brain size={16} /> AI Analysis</>}
+                        {isAnalyzing ? '⌛' : <><Brain size={16} /> Analysis</>}
                     </button>
-                    <button style={btnStyle} onClick={handleExport} title="Export as PNG">📷 Export PNG</button>
-                    <button style={{ ...btnStyle, backgroundColor: '#c50f1f' }} onClick={() => { if (confirm('Clear Canvas?')) { setNodes([]); setEdges([]); pushToHistory({ nodes: [], edges: [] }); } }}>🗑️ Clear</button>
+                    <Separator />
+
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#4b0082' }}
+                        onClick={() => setShowYamazumi(true)}
+                        title={currentLanguage === 'id' ? 'Grafik Penyeimbangan (Yamazumi)' : 'Balancing Chart (Yamazumi)'}
+                    >
+                        <BarChart3 size={16} /> {currentLanguage === 'id' ? 'Yamazumi' : 'Balancing'}
+                    </button>
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#ed7d31' }}
+                        onClick={() => setShowEPEI(true)}
+                        title={currentLanguage === 'id' ? 'Analisis Fleksibilitas (EPEI)' : 'Flexibility Analysis (EPEI)'}
+                    >
+                        <Repeat size={16} /> EPEI
+                    </button>
+                    <Separator />
+                    <button style={btnStyle} onClick={handleExport} title="Export as PNG">📷 {currentLanguage === 'id' ? 'Ekspor' : 'Export'}</button>
+                    <button style={{ ...btnStyle, backgroundColor: '#c50f1f' }} onClick={() => { if (confirm('Clear Canvas?')) { setNodes([]); setEdges([]); pushToHistory({ nodes: [], edges: [] }); } }}>🗑️ {currentLanguage === 'id' ? 'Hapus' : 'Clear'}</button>
                 </div>
 
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -854,7 +1134,7 @@ const VSMCanvasContent = () => {
 
 
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                <Sidebar customLibrary={customLibrary} onAddCustom={addCustomIcon} />
+                {showSidebar && <Sidebar customLibrary={customLibrary} onAddCustom={addCustomIcon} />}
 
                 <div className="reactflow-wrapper" ref={reactFlowWrapper} style={{ flex: 1, height: '100%', position: 'relative', backgroundColor: '#1e1e1e' }}>
                     <ReactFlow
@@ -879,6 +1159,8 @@ const VSMCanvasContent = () => {
                         <Background color="#555" gap={15} size={1} variant="dots" />
                     </ReactFlow>
 
+                    <TimelineLadder nodes={nodes} metrics={metrics} />
+
                     {/* Bottom Metrics Bar */}
                     <div style={{
                         position: 'absolute', bottom: 0, left: 0, width: '100%', height: '60px',
@@ -890,6 +1172,7 @@ const VSMCanvasContent = () => {
                         <MetricBox label="Total VA Time" value={`${metrics.totalVA}s`} color="#4caf50" />
                         <MetricBox label="Total Lead Time" value={`${metrics.totalLT}s`} color="#ff9900" />
                         <MetricBox label="Takt Time" value={`${metrics.taktTime}s`} color="#ff4444" />
+                        <MetricBox label="Pitch" value={`${metrics.pitch}s`} color="#ff9900" title="Pitch = Takt Time × Pack Size" />
                         <MetricBox label="Efficiency" value={`${metrics.efficiency}%`} color="#00bfff" />
                     </div>
 
@@ -952,6 +1235,7 @@ const VSMCanvasContent = () => {
                                     <PropertyField label="Cycle Time (sec)" field="ct" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Changeover (min)" field="co" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Uptime (%)" field="uptime" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                    <PropertyField label="Performance (%)" field="performance" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Yield (%)" field="yield" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="VA Time (sec)" field="va" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Operators" field="operators" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
@@ -971,10 +1255,25 @@ const VSMCanvasContent = () => {
                                     <PropertyField label="Avail. Time (min/shift)" field="availableTime" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Demand (pcs/shift)" field="demand" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                     <PropertyField label="Shifts" field="shifts" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
-                                    <div style={{ padding: '8px', backgroundColor: '#333', borderRadius: '4px', marginTop: '10px' }}>
-                                        <div style={{ fontSize: '0.7rem', color: '#aaa' }}>Calculated Takt Time</div>
-                                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ff4444' }}>{metrics.taktTime}s</div>
+                                    <PropertyField label="Pack Size (pcs/container)" field="packSize" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+                                        <div style={{ padding: '8px', backgroundColor: '#333', borderRadius: '4px' }}>
+                                            <div style={{ fontSize: '0.6rem', color: '#aaa' }}>Takt Time</div>
+                                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#ff4444' }}>{metrics.taktTime}s</div>
+                                        </div>
+                                        <div style={{ padding: '8px', backgroundColor: '#333', borderRadius: '4px' }}>
+                                            <div style={{ fontSize: '0.6rem', color: '#aaa' }}>Pitch</div>
+                                            <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#ff9900' }}>{metrics.pitch}s</div>
+                                        </div>
                                     </div>
+                                </>
+                            )}
+
+                            {selectedNode.data.symbolType === VSMSymbols.TRUCK && (
+                                <>
+                                    <PropertyField label="Frequency (x/shift)" field="frequency" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                    <PropertyField label="Capacity (pcs/trip)" field="capacity" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
+                                    <PropertyField label="Travel Lead Time (min)" field="leadTime" node={selectedNode} update={updateNodeData} commit={onPropertyChangeComplete} />
                                 </>
                             )}
 
@@ -1025,6 +1324,28 @@ const VSMCanvasContent = () => {
                         onGenerate={handleGenerateFromPrompt}
                         currentLanguage={currentLanguage}
                         existingNodesCount={nodes.length}
+                    />
+
+                    <YamazumiChart
+                        isOpen={showYamazumi}
+                        onClose={() => setShowYamazumi(false)}
+                        nodes={nodes}
+                        taktTime={metrics.taktTime}
+                        currentLanguage={currentLanguage}
+                    />
+
+                    <EPEIAnalysis
+                        isOpen={showEPEI}
+                        onClose={() => setShowEPEI(false)}
+                        nodes={nodes}
+                        currentLanguage={currentLanguage}
+                    />
+
+                    <VSMWizard
+                        isOpen={showWizard}
+                        onClose={() => setShowWizard(false)}
+                        onGenerate={handleWizardGenerate}
+                        currentLanguage={currentLanguage}
                     />
 
                     {/* Help Modal */}
@@ -1098,6 +1419,15 @@ const VSMCanvasContent = () => {
                                                 <li>AI akan membuat VSM otomatis!</li>
                                             </ul>
 
+                                            <h3 style={{ color: '#ff9900' }}>🚀 Fitur TPS Lanjutan</h3>
+                                            <ul>
+                                                <li><strong>📊 Yamazumi Chart</strong> - Klik tombol "Yamazumi" untuk melihat keseimbangan beban kerja vs Takt Time.</li>
+                                                <li><strong>🔄 EPEI Analysis</strong> - Analisis seberapa sering Anda bisa mengganti produk (Every Part Every Interval).</li>
+                                                <li><strong>🎯 Pitch Calculation</strong> - Masukkan "Pack Size" di Customer node untuk melihat "Heartbeat" produksi.</li>
+                                                <li><strong>🚛 Milk Run</strong> - Gunakan simbol Truck untuk input frekuensi dan kapasitas logistik.</li>
+                                                <li><strong>🕒 Timeline Ladder</strong> - Tangga waktu otomatis di bagian bawah menunjukkan Lead Time vs VA Time.</li>
+                                            </ul>
+
                                             <h3 style={{ color: '#4fc3f7' }}>📊 Referensi Simbol</h3>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
                                                 <div><strong>Process Data:</strong></div>
@@ -1113,17 +1443,17 @@ const VSMCanvasContent = () => {
                                                 <div>⏱️ Timeline</div>
                                             </div>
 
-                                            <h3 style={{ color: '#4fc3f7' }}>💡 Contoh Prompt AI</h3>
+                                            <h3 style={{ color: '#4fc3f7' }}>💡 Contoh Prompt "Ultimate Automotive"</h3>
                                             <div style={{ backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '8px', marginTop: '10px', fontSize: '0.85rem' }}>
                                                 <code>
-                                                    Buatkan VSM untuk produksi PCB:<br /><br />
-                                                    CUSTOMER: demand 500 unit/hari<br /><br />
+                                                    Buatkan VSM komponen otomotif:<br /><br />
+                                                    CUSTOMER: demand 1200 unit/hari, 2 shift (8 jam), Pack Size: 24 (untuk Pitch)<br /><br />
+                                                    LOGISTICS: Supplier Baja, Truck Milk Run frekuensi 4x/hari, kapasitas 500<br /><br />
                                                     PROSES:<br />
-                                                    1. Screen Printing: CT=45s, CO=30min, Uptime=95%, Operators=2<br />
-                                                    &nbsp;&nbsp;&nbsp;Inventory: 500 pcs (6 jam)<br /><br />
-                                                    2. Component Placement: CT=60s, CO=45min, Uptime=90%, Operators=1<br />
-                                                    &nbsp;&nbsp;&nbsp;Supermarket: 300 pcs dengan kanban<br /><br />
-                                                    INFORMATION: Production Control dengan Heijunka Box
+                                                    1. Stamping: CT=15s, CO=45min (EPEI), Performance=95%, Op=1, Inventory=600<br />
+                                                    2. Welding: CT=40s, CO=15min, Op=3 (Yamazumi), Performance=98%, Supermarket=400<br />
+                                                    3. Assembly: CT=55s, CO=5min, Op=5, Performance=92%, FIFO=100<br /><br />
+                                                    INFORMATION: Production Control dengan Heijunka Box & Kanban Signal
                                                 </code>
                                             </div>
                                         </>
@@ -1168,6 +1498,15 @@ const VSMCanvasContent = () => {
                                                 <li>AI will create VSM automatically!</li>
                                             </ul>
 
+                                            <h3 style={{ color: '#ff9900' }}>🚀 Advanced TPS Features</h3>
+                                            <ul>
+                                                <li><strong>📊 Yamazumi Chart</strong> - Click "Yamazumi" to visualize work balance vs Takt Time.</li>
+                                                <li><strong>🔄 EPEI Analysis</strong> - Analyze production flexibility (Every Part Every Interval).</li>
+                                                <li><strong>🎯 Pitch Calculation</strong> - Set "Pack Size" in Customer node to calculate the production heartbeat.</li>
+                                                <li><strong>🚛 Milk Run</strong> - Use the Truck symbol for logistics frequency and capacity data.</li>
+                                                <li><strong>🕒 Timeline Ladder</strong> - Automatic ladder at the bottom shows Lead Time vs VA Time steps.</li>
+                                            </ul>
+
                                             <h3 style={{ color: '#4fc3f7' }}>📊 Symbol Reference</h3>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
                                                 <div><strong>Process Data:</strong></div>
@@ -1183,17 +1522,17 @@ const VSMCanvasContent = () => {
                                                 <div>⏱️ Timeline</div>
                                             </div>
 
-                                            <h3 style={{ color: '#4fc3f7' }}>💡 AI Prompt Example</h3>
+                                            <h3 style={{ color: '#4fc3f7' }}>💡 "Ultimate Automotive" Prompt Example</h3>
                                             <div style={{ backgroundColor: '#2d2d2d', padding: '15px', borderRadius: '8px', marginTop: '10px', fontSize: '0.85rem' }}>
                                                 <code>
-                                                    Create VSM for PCB manufacturing:<br /><br />
-                                                    CUSTOMER: demand 500 units/day<br /><br />
+                                                    Create VSM for automotive components:<br /><br />
+                                                    CUSTOMER: demand 1200 units/day, 2 shifts (8h), Pack Size: 24 (for Pitch)<br /><br />
+                                                    LOGISTICS: Steel Supplier, Milk Run Truck frequency 4x/day, capacity 500<br /><br />
                                                     PROCESSES:<br />
-                                                    1. Screen Printing: CT=45s, CO=30min, Uptime=95%, Operators=2<br />
-                                                    &nbsp;&nbsp;&nbsp;Inventory: 500 pcs (6 hours)<br /><br />
-                                                    2. Component Placement: CT=60s, CO=45min, Uptime=90%, Operators=1<br />
-                                                    &nbsp;&nbsp;&nbsp;Supermarket: 300 pcs with kanban<br /><br />
-                                                    INFORMATION: Production Control with Heijunka Box
+                                                    1. Stamping: CT=15s, CO=45min (EPEI), Performance=95%, Op=1, Inv=600<br />
+                                                    2. Welding: CT=40s, CO=15min, Op=3 (Yamazumi), Performance=98%, Supermarket=400<br />
+                                                    3. Assembly: CT=55s, CO=5min, Op=5, Performance=92%, FIFO=100<br /><br />
+                                                    INFORMATION: Production Control with Heijunka Box & Kanban Signal
                                                 </code>
                                             </div>
                                         </>

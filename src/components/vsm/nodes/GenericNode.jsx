@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import { VSMSymbols } from '../vsm-constants';
 
-const GenericNode = ({ data, selected }) => {
+const GenericNode = ({ data, selected, showDetails }) => {
     let content = null;
     let label = data.label || data.name;
 
@@ -28,7 +28,22 @@ const GenericNode = ({ data, selected }) => {
             );
             break;
         case VSMSymbols.TRUCK:
-            content = <div style={{ fontSize: '2.5rem' }}>🚚</div>;
+        case VSMSymbols.SEA:
+        case VSMSymbols.AIR:
+            const transportIcon = data.symbolType === VSMSymbols.SEA ? '🚢' : (data.symbolType === VSMSymbols.AIR ? '✈️' : '🚚');
+            content = (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ fontSize: '2.5rem' }}>{transportIcon}</div>
+                    <div style={{
+                        marginTop: '5px', fontSize: '0.6rem', color: '#4fc3f7',
+                        backgroundColor: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px',
+                        textAlign: 'center', border: '1px solid #4fc3f7'
+                    }}>
+                        <b>{data.frequency || 0}x</b> {data.symbolType === VSMSymbols.SEA ? '/mo' : '/shift'}<br />
+                        Cap: {data.capacity || 0}
+                    </div>
+                </div>
+            );
             break;
         case VSMSymbols.OPERATOR:
             content = <div style={{ fontSize: '2rem' }}>👤</div>;

@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 
-const InventoryNode = ({ data, selected }) => {
+const InventoryNode = ({ data, selected, showDetails }) => {
     return (
         <div style={{ position: 'relative', width: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Handle type="target" position={Position.Left} id="l" style={{ background: '#555' }} />
@@ -31,18 +31,20 @@ const InventoryNode = ({ data, selected }) => {
             </div>
 
             {/* Data Label */}
-            <div style={{
-                marginTop: '5px',
-                textAlign: 'center',
-                color: '#ff9900',
-                fontSize: '0.7rem',
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                padding: '2px 4px',
-                borderRadius: '4px'
-            }}>
-                {data.amount} {data.unit}<br />
-                {data.calculatedLT ? `${data.calculatedLT} days` : (data.time ? `${data.time}s` : '')}
-            </div>
+            {showDetails && (
+                <div style={{
+                    marginTop: '5px',
+                    textAlign: 'center',
+                    color: '#ff9900',
+                    fontSize: '0.7rem',
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    padding: '2px 4px',
+                    borderRadius: '4px'
+                }}>
+                    {data.amount} {data.unit}<br />
+                    {data.calculatedLT ? `${data.calculatedLT} days` : (data.time ? `${data.time}s` : '')}
+                </div>
+            )}
 
             <Handle type="source" position={Position.Right} id="r" style={{ background: '#555' }} />
             <Handle type="source" position={Position.Bottom} id="b" style={{ background: '#555' }} />
