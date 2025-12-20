@@ -38,7 +38,7 @@ const ProcessNode = ({ data, selected, showDetails }) => {
 
             {/* Main Box */}
             <div style={{
-                width: '140px',
+                width: '200px',
                 height: '60px',
                 border: borderStyle,
                 backgroundColor: bgStyle,
@@ -55,7 +55,7 @@ const ProcessNode = ({ data, selected, showDetails }) => {
             {/* Detailed Data Box - TPS Standard */}
             {showDetails && (
                 <div style={{
-                    width: '140px',
+                    width: '200px',
                     border: '1px solid #666',
                     marginTop: '-1px',
                     backgroundColor: '#252526',
@@ -103,6 +103,25 @@ const ProcessNode = ({ data, selected, showDetails }) => {
                                     backgroundColor: isBottleneck ? '#ff4444' : '#4caf50'
                                 }}></div>
                             </div>
+                        </div>
+                    )}
+                    {/* BOM / Parts List */}
+                    {data.bom && Object.keys(data.bom).length > 0 && (
+                        <div style={{ padding: '4px', borderTop: '1px solid #0078d4', backgroundColor: '#1a1a1a' }}>
+                            <div style={{ fontSize: '0.5rem', color: '#0078d4', fontWeight: 'bold', marginBottom: '2px' }}>📦 BILL OF MATERIALS:</div>
+                            {Object.entries(data.bom).map(([sid, item]) => (
+                                item?.part && (
+                                    <div key={sid} style={{ fontSize: '0.55rem', display: 'flex', gap: '4px', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '2px' }}>
+                                        <div style={{ display: 'flex', gap: '4px', flex: 1 }}>
+                                            <span style={{ color: '#888' }}>•</span>
+                                            <span style={{ whiteSpace: 'normal', lineBreak: 'anywhere' }}>{item.part}</span>
+                                        </div>
+                                        {item.leadTime && (
+                                            <span style={{ color: '#ff9900', fontWeight: 'bold', marginLeft: '5px', whiteSpace: 'nowrap' }}>{item.leadTime}d</span>
+                                        )}
+                                    </div>
+                                )
+                            ))}
                         </div>
                     )}
                 </div>

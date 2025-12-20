@@ -78,10 +78,10 @@ const AIVSMGeneratorModal = ({ isOpen, onClose, onGenerate, currentLanguage, exi
                 : 'Description too short. Minimum 20 characters.');
             return;
         }
-        if (prompt.trim().length > 1000) {
+        if (prompt.trim().length > 3000) {
             alert(currentLanguage === 'id'
-                ? 'Deskripsi terlalu panjang. Maksimal 1000 karakter.'
-                : 'Description too long. Maximum 1000 characters.');
+                ? 'Deskripsi terlalu panjang. Maksimal 3000 karakter.'
+                : 'Description too long. Maximum 3000 characters.');
             return;
         }
         onGenerate({ prompt: prompt.trim(), language: selectedLanguage, mode });
@@ -184,7 +184,7 @@ const AIVSMGeneratorModal = ({ isOpen, onClose, onGenerate, currentLanguage, exi
                         }}>
                             <span style={{
                                 fontSize: '0.75rem',
-                                color: prompt.length < 20 ? '#c50f1f' : prompt.length > 1000 ? '#ff9900' : '#888'
+                                color: prompt.length < 20 ? '#c50f1f' : prompt.length > 3000 ? '#ff9900' : '#888'
                             }}>
                                 {prompt.length} {labels.charCount}
                             </span>

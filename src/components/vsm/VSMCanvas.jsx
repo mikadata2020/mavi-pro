@@ -29,7 +29,8 @@ import VSMWizard from './VSMWizard';
 import { useUndoRedo } from '../../hooks/useUndoRedo';
 import { analyzeVSM, getStoredApiKey, generateVSMFromPrompt, generateVSMFromImage, validateApiKey } from '../../utils/aiGenerator';
 import ReactMarkdown from 'react-markdown';
-import { Brain, Sparkles, X, Wand2, HelpCircle, ImagePlus, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, BarChart3, Repeat, Undo, Redo, ArrowLeft, ArrowUp, Save, Folder, Layout } from 'lucide-react';
+import AIChatOverlay from '../features/AIChatOverlay';
+import { Brain, Sparkles, X, Wand2, HelpCircle, MessageSquare, ImagePlus, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, BarChart3, Repeat, Undo, Redo, ArrowLeft, ArrowUp, Save, Folder, Layout } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 
 // Static types that don't need dynamic props
@@ -82,6 +83,7 @@ const VSMCanvasContent = () => {
     const [showEPEI, setShowEPEI] = useState(false);
     const [showWizard, setShowWizard] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
+    const [showAIChat, setShowAIChat] = useState(false);
 
     const nodeTypes = useMemo(() => ({
         inventory: (props) => <InventoryNode {...props} showDetails={showNodeDetails} />,
@@ -606,21 +608,56 @@ const VSMCanvasContent = () => {
     const handleWizardGenerate = (wizardData) => {
         const newNodes = [];
         const newEdges = [];
-        const { customer, processes, supplier, logistics, infoFlow } = wizardData;
+        const { customer, processes, suppliers, logistics, infoFlow, useHeijunka } = wizardData;
 
-        // 1. Supplier (Upstream - Left)
-        const supplierId = 'node_supplier';
-        newNodes.push({
-            id: supplierId,
-            type: 'generic',
-            position: { x: 50, y: 150 },
-            data: {
-                symbolType: supplier.transportMode || VSMSymbols.SUPPLIER,
-                name: supplier.name,
-                frequency: supplier.frequency,
-                capacity: logistics.truckCapacity
+        // 1. Suppliers (Upstream - Left)
+        const supplierNodeIds = {};
+        const warehouseRMNodeIds = {}; // Track RM Warehouses
+
+        suppliers.forEach((supp, sIdx) => {
+            const sid = `node_supp_${supp.id}`;
+            supplierNodeIds[supp.id] = sid;
+            let currentSourceId = sid;
+
+            newNodes.push({
+                id: sid,
+                type: 'generic',
+                position: { x: 50, y: 150 + (sIdx * 250) },
+                data: {
+                    symbolType: supp.transportMode || VSMSymbols.SUPPLIER,
+                    name: supp.name,
+                    frequency: supp.frequency,
+                    capacity: logistics.truckCapacity
+                }
+            });
+
+            // Add WH RM if enabled
+            if (supp.hasWarehouse) {
+                const whid = `node_wh_rm_${supp.id}`;
+                warehouseRMNodeIds[supp.id] = whid;
+                currentSourceId = whid;
+
+                newNodes.push({
+                    id: whid,
+                    type: 'inventory',
+                    position: { x: 220, y: 150 + (sIdx * 250) },
+                    data: { name: 'WH RAW MAT', amount: 5000 }
+                });
+
+                // Connect Supplier to its WH
+                newEdges.push({
+                    id: `edge_supp_to_wh_${supp.id}`,
+                    source: sid,
+                    target: whid,
+                    type: 'smoothstep',
+                    style: { strokeWidth: 2 }
+                });
             }
+            // The actual source for processes will be either Supplier or its WH
+            supplierNodeIds[supp.id + '_source'] = currentSourceId;
         });
+
+        const firstSupplierSourceId = supplierNodeIds[suppliers[0]?.id + '_source'];
 
         // 2. Production Control (Top Center)
         const controlId = 'node_control';
@@ -632,10 +669,21 @@ const VSMCanvasContent = () => {
             data: { name: 'PRODUCTION CONTROL' }
         });
 
+        // Heijunka Box (if enabled)
+        if (useHeijunka) {
+            newNodes.push({
+                id: 'node_heijunka',
+                type: 'generic',
+                position: { x: controlX - 100, y: -50 },
+                data: { symbolType: VSMSymbols.HEIJUNKA_BOX, name: 'HEIJUNKA' }
+            });
+        }
+
         // 3. Customer (Downstream - Right)
         const customerId = 'node_customer';
-        const maxProcessX = processes.length * 400 + 400;
-        const customerX = Math.max(800, maxProcessX);
+        const maxProcessX = processes.length * 450 + 600;
+        const customerX = Math.max(1000, maxProcessX);
+
         newNodes.push({
             id: customerId,
             type: 'generic',
@@ -650,15 +698,39 @@ const VSMCanvasContent = () => {
             }
         });
 
+        // Finished Goods WH (if enabled)
+        let customerTargetId = customerId;
+        if (customer.hasWarehouse) {
+            const whfgId = 'node_wh_fg';
+            customerTargetId = whfgId;
+            newNodes.push({
+                id: whfgId,
+                type: 'inventory',
+                position: { x: customerX - 220, y: 150 },
+                data: { name: 'WH FINISHED GOODS', amount: 2000 }
+            });
+            // Connect WH FG to Customer with Shipping Symbol
+            const shipId = 'node_shipping_cust';
+            newNodes.push({
+                id: shipId,
+                type: 'generic',
+                position: { x: customerX - 110, y: 120 },
+                data: { symbolType: customer.transportMode || VSMSymbols.TRUCK, name: 'SHIPPING' }
+            });
+        }
+
         // 4. Processes & Buffers (Horizontal Chain with Parallel Support)
-        let lastNodeIds = [supplierId]; // Array to support multiple parallel targets
-        let currentX = 400;
+        let lastNodeIds = [firstSupplierSourceId];
+        let currentX = 450;
         let baseHeight = 350;
         let parallelCount = 0;
-        let sourceForParallel = supplierId;
+        let sourceOfCurrentBranch = firstSupplierSourceId; // The node where a branch starts from
+        const mainSupplierId = suppliers[0]?.id;
 
         processes.forEach((proc, idx) => {
             const procId = `node_proc_${idx + 1}`;
+            // Map all assigned suppliers to their actual source nodes (Supplier or WH)
+            const targetSupplierSourceIds = (proc.supplierIds || [suppliers[0]?.id]).map(sid => supplierNodeIds[sid + '_source'] || firstSupplierSourceId);
 
             // Adjust coordinates for parallel
             let nodeY = baseHeight;
@@ -666,11 +738,11 @@ const VSMCanvasContent = () => {
 
             if (proc.isParallel) {
                 parallelCount++;
-                nodeY += (parallelCount * 200);
-                nodeX -= 400; // Stay at same X as previous
+                nodeY += (parallelCount * 250);
+                nodeX -= 450;
             } else {
-                parallelCount = 0; // Reset stack
-                sourceForParallel = lastNodeIds[lastNodeIds.length - 1];
+                parallelCount = 0;
+                sourceOfCurrentBranch = lastNodeIds[0];
             }
 
             newNodes.push({
@@ -680,29 +752,94 @@ const VSMCanvasContent = () => {
                 data: {
                     name: proc.name,
                     ct: proc.ct,
-                    co: proc.co,
+                    va: proc.va || proc.ct,
+                    co: proc.coUnit === 'sec' ? (proc.co / 60).toFixed(2) : proc.co,
                     workers: proc.workers,
                     performance: proc.performance,
-                    uptime: 95
+                    yield: proc.yield || 99,
+                    uptime: proc.uptime || 95,
+                    bom: proc.bom || {}
                 }
             });
 
-            // Edge from source
-            const sourceId = proc.isParallel ? sourceForParallel : lastNodeIds[lastNodeIds.length - 1];
+            // If Kaizen toggled
+            if (proc.hasKaizen) {
+                newNodes.push({
+                    id: `node_kaizen_${idx + 1}`,
+                    type: 'generic',
+                    position: { x: nodeX + 50, y: nodeY - 100 },
+                    data: { symbolType: VSMSymbols.KAIZEN_BURST, name: 'KAIZEN!' }
+                });
+            }
+
+            // If Go See toggled
+            if (proc.needsGoSee) {
+                newNodes.push({
+                    id: `node_gosee_${idx + 1}`,
+                    type: 'generic',
+                    position: { x: nodeX + 150, y: nodeY - 100 },
+                    data: { symbolType: VSMSymbols.EYE_OBSERVATION, name: 'GO SEE' }
+                });
+            }
+
+            // CONNECTION LOGIC (Multi-Supplier & Multi-Entry aware)
             const isPull = proc.flowType === 'pull';
+            const connectorStyle = { strokeWidth: isPull ? 3 : 2, stroke: isPull ? '#ff9900' : '#fff', strokeDasharray: isPull ? '10,5' : '0' };
+            const connectorMarker = { type: MarkerType.ArrowClosed, color: isPull ? '#ff9900' : '#fff' };
 
-            newEdges.push({
-                id: `edge_mat_${idx}`,
-                source: sourceId,
-                target: procId,
-                type: 'smoothstep',
-                markerEnd: { type: MarkerType.ArrowClosed, color: isPull ? '#ff9900' : '#fff' },
-                style: {
-                    strokeWidth: isPull ? 3 : 2,
-                    stroke: isPull ? '#ff9900' : '#fff',
-                    strokeDasharray: isPull ? '10,5' : '0'
+            if (!proc.isParallel) {
+                // LINEAR: Merge branches
+                if (idx === 0) {
+                    // Start of flow: Connect to ALL assigned suppliers
+                    targetSupplierSourceIds.forEach((srcId, sIdx) => {
+                        newEdges.push({
+                            id: `edge_mat_init_${idx}_${sIdx}`,
+                            source: srcId,
+                            target: procId,
+                            type: 'smoothstep',
+                            markerEnd: connectorMarker,
+                            style: connectorStyle
+                        });
+                    });
+                } else {
+                    lastNodeIds.forEach((srcId, sIdx) => {
+                        newEdges.push({
+                            id: `edge_mat_merge_${idx}_${sIdx}`,
+                            source: srcId,
+                            target: procId,
+                            type: 'smoothstep',
+                            markerEnd: connectorMarker,
+                            style: connectorStyle
+                        });
+                    });
                 }
-            });
+            } else {
+                // PARALLEL: It's either a branch from mid-stream OR a new entry from supplier(s)
+                const hasExtraSupplier = proc.supplierIds?.some(sid => sid !== mainSupplierId);
+
+                if (hasExtraSupplier) {
+                    targetSupplierSourceIds.forEach((srcId, sIdx) => {
+                        newEdges.push({
+                            id: `edge_mat_branch_supp_${idx}_${sIdx}`,
+                            source: srcId,
+                            target: procId,
+                            type: 'smoothstep',
+                            markerEnd: connectorMarker,
+                            style: connectorStyle
+                        });
+                    });
+                } else {
+                    // Pure mid-stream branch
+                    newEdges.push({
+                        id: `edge_mat_branch_mid_${idx}`,
+                        source: sourceOfCurrentBranch,
+                        target: procId,
+                        type: 'smoothstep',
+                        markerEnd: connectorMarker,
+                        style: connectorStyle
+                    });
+                }
+            }
 
             let currentLastId = procId;
 
@@ -712,16 +849,13 @@ const VSMCanvasContent = () => {
                 let symbType = VSMSymbols.INVENTORY;
                 if (proc.buffer === 'supermarket') symbType = VSMSymbols.SUPERMARKET;
                 if (proc.buffer === 'fifo') symbType = VSMSymbols.FIFO;
+                if (proc.buffer === 'safety') symbType = VSMSymbols.SAFETY_STOCK;
 
                 newNodes.push({
                     id: bufferId,
                     type: proc.buffer === 'inventory' ? 'inventory' : 'generic',
-                    position: { x: nodeX + 200, y: nodeY },
-                    data: {
-                        symbolType: symbType,
-                        name: proc.buffer.toUpperCase(),
-                        amount: proc.bufferQty
-                    }
+                    position: { x: nodeX + 220, y: nodeY },
+                    data: { symbolType: symbType, name: proc.buffer.toUpperCase(), amount: proc.bufferQty }
                 });
 
                 newEdges.push({
@@ -739,54 +873,49 @@ const VSMCanvasContent = () => {
                 lastNodeIds.push(currentLastId);
             } else {
                 lastNodeIds = [currentLastId];
-                currentX += 400;
+                currentX += 450;
             }
         });
 
-        // Connect all final nodes to Customer
+        // 5. Customer & Info Flow
         lastNodeIds.forEach((lastId, idx) => {
             newEdges.push({
-                id: `edge_to_customer_${idx}`,
+                id: `edge_to_customer_target_${idx}`,
                 source: lastId,
-                target: customerId,
+                target: customerTargetId,
                 type: 'smoothstep',
                 markerEnd: { type: MarkerType.ArrowClosed },
                 style: { strokeWidth: 2 }
             });
         });
 
-        // 5. Information Flows
-        const infoType = infoFlow === 'electronic' ? 'electronic' : 'manual';
+        // Add final shipping symbol if NO FG WH but transport is selected
+        if (!customer.hasWarehouse) {
+            newNodes.push({
+                id: 'node_shipping_final',
+                type: 'generic',
+                position: { x: customerX - 100, y: 150 },
+                data: { symbolType: customer.transportMode || VSMSymbols.TRUCK, name: 'SHIPPING' }
+            });
+        }
+
+        const isElec = infoFlow === 'electronic';
 
         // Customer -> Control
         newEdges.push({
-            id: 'info_cust_control',
-            source: customerId,
-            target: controlId,
-            type: 'smoothstep',
-            style: { strokeDasharray: infoType === 'electronic' ? '0' : '5,5', stroke: '#0078d4' },
+            id: 'info_c_ctrl', source: customerId, target: controlId, type: 'smoothstep',
+            style: { strokeDasharray: isElec ? '0' : '5,5', stroke: '#0078d4' },
             markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
         });
 
-        // Control -> Supplier
-        newEdges.push({
-            id: 'info_control_supp',
-            source: controlId,
-            target: supplierId,
-            type: 'smoothstep',
-            style: { strokeDasharray: infoType === 'electronic' ? '0' : '5,5', stroke: '#0078d4' },
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
-        });
-
-        // Control -> Processes (Schedule)
-        processes.forEach((proc, idx) => {
-            const procId = `node_proc_${idx + 1}`;
+        // Control -> ALL Suppliers
+        suppliers.forEach(supp => {
             newEdges.push({
-                id: `info_control_proc_${idx}`,
+                id: `info_ctrl_s_${supp.id}`,
                 source: controlId,
-                target: procId,
+                target: supplierNodeIds[supp.id],
                 type: 'smoothstep',
-                style: { strokeDasharray: infoType === 'electronic' ? '0' : '5,5', stroke: '#0078d4' },
+                style: { strokeDasharray: isElec ? '0' : '5,5', stroke: '#0078d4' },
                 markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
             });
         });
@@ -794,8 +923,7 @@ const VSMCanvasContent = () => {
         setNodes(newNodes);
         setEdges(newEdges);
         pushToHistory({ nodes: newNodes, edges: newEdges });
-
-        alert(currentLanguage === 'id' ? '✅ VSM berhasil dibuat!' : '✅ VSM generated successfully!');
+        alert(currentLanguage === 'id' ? '✅ Jalur Multi-Supplier Berhasil Dibuat!' : '✅ Multi-Supplier Flow Generated!');
     };
 
     // --- Save/Load Functions ---
@@ -1092,6 +1220,14 @@ const VSMCanvasContent = () => {
                         onChange={handleUploadImage}
                         style={{ display: 'none' }}
                     />
+
+                    <button
+                        style={{ ...btnStyle, backgroundColor: '#0078d4' }}
+                        onClick={() => setShowAIChat(true)}
+                        title={currentLanguage === 'id' ? 'Tanya AI Assistant' : 'Ask AI Assistant'}
+                    >
+                        <Sparkles size={16} /> {currentLanguage === 'id' ? 'Tanya AI' : 'AI Chat'}
+                    </button>
 
                     <button style={{ ...btnStyle, backgroundColor: '#8a2be2' }} onClick={handleAIAnalysis} disabled={isAnalyzing}>
                         {isAnalyzing ? '⌛' : <><Brain size={16} /> Analysis</>}
@@ -1554,9 +1690,27 @@ const VSMCanvasContent = () => {
                             </div>
                         </div>
                     )}
+
+                    <AIChatOverlay
+                        visible={showAIChat}
+                        onClose={() => setShowAIChat(false)}
+                        title="VSM Assistant"
+                        subtitle="Lean AI Expert"
+                        contextData={{ nodes: getNodes(), edges, metrics }}
+                        systemPrompt="You are an expert Value Stream Mapping (VSM) and Lean Production consultant. STRICT RULE: Your primary job is to help users with the Value Stream Mapping (VSM) tool they are currently using. 
+
+If the user asks for a prompt, you must provide a detailed prompt formatted specifically for the 'AI Generate' (VSM Generator) feature of this app. 
+
+Your answers should focus on:
+1. Analyzing the current VSM data (nodes, edges, metrics) to identify wastes (Muda), bottlenecks, and high lead times.
+2. Providing VSM-specific improvement suggestions (e.g., implementing Pull systems, Supermarkets, or FIFO).
+3. Helping users write descriptions/prompts to generate NEW VSM diagrams from scratch.
+
+DO NOT provide prompts for unrelated tasks like document creation or generic work instructions unless explicitly asked for 'Standard Work'. Focus on the FLOW of material and information."
+                    />
                 </div>
             </div>
-        </div >
+        </div>
     );
 };
 
