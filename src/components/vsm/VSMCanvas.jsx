@@ -18,6 +18,7 @@ import ProcessNode from './nodes/ProcessNode';
 import InventoryNode from './nodes/InventoryNode';
 import ProductionControlNode from './nodes/ProductionControlNode';
 import GenericNode from './nodes/GenericNode';
+import TextNode from './nodes/TextNode';
 import InformationEdge from './edges/InformationEdge';
 import MaterialEdge from './edges/MaterialEdge';
 import Sidebar from './Sidebar';
@@ -38,6 +39,7 @@ const staticNodeTypes = {
     inventory: InventoryNode,
     productionControl: ProductionControlNode,
     generic: GenericNode,
+    text_note: TextNode,
 };
 
 const edgeTypes = {
@@ -56,6 +58,7 @@ const VSMCanvasContent = () => {
     const [selectedEdge, setSelectedEdge] = useState(null);
     const [edgeMenuPosition, setEdgeMenuPosition] = useState(null);
     const [activeEdgeType, setActiveEdgeType] = useState('material'); // material, information, electronic
+    const [clipboard, setClipboard] = useState(null); // For Copy/Paste
     const [customLibrary, setCustomLibrary] = useState([]);
     const { screenToFlowPosition, getNodes, setNodes: setReactFlowNodes } = useReactFlow();
 
@@ -91,7 +94,8 @@ const VSMCanvasContent = () => {
         inventory: (props) => <InventoryNode {...props} showDetails={showNodeDetails} />,
         productionControl: (props) => <ProductionControlNode {...props} showDetails={showNodeDetails} />,
         generic: (props) => <GenericNode {...props} showDetails={showNodeDetails} />,
-        process: (props) => <ProcessNode {...props} showDetails={showNodeDetails} />
+        process: (props) => <ProcessNode {...props} showDetails={showNodeDetails} />,
+        text_note: TextNode // Add text_note explicitly
     }), [showNodeDetails]);
     useEffect(() => {
         const fetchModels = async () => {
@@ -238,6 +242,66 @@ const VSMCanvasContent = () => {
             setCustomLibrary(JSON.parse(savedCustom));
         }
     }, []);
+
+    // Keyboard Shortcuts: Copy/Paste
+    useEffect(() => {
+        const handleKeyDown = (event) => {
+            // Ignore if active element is input
+            if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+            // COPY: Ctrl+C
+            if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+                if (selectedNode) {
+                    setClipboard({
+                        type: 'node',
+                        data: { ...selectedNode }
+                    });
+                    // Visual feedback could be added here
+                }
+            }
+
+            // PASTE: Ctrl+V
+            if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+                if (clipboard && clipboard.type === 'node') {
+                    const nodeToPaste = clipboard.data;
+                    const newId = `${nodeToPaste.type}-${Date.now()}`;
+
+                    // Offset position slightly to make it visible
+                    const offset = 30; // pixels
+                    const newPosition = {
+                        x: nodeToPaste.position.x + offset,
+                        y: nodeToPaste.position.y + offset
+                    };
+
+                    const newNode = {
+                        ...nodeToPaste,
+                        id: newId,
+                        position: newPosition,
+                        selected: true, // Select the new node
+                        data: {
+                            ...nodeToPaste.data,
+                            // Ensure unique names/labels if necessary, or keep same
+                            name: `${nodeToPaste.data.name} (Copy)`
+                        }
+                    };
+
+                    setNodes((nds) => {
+                        // Deselect all others
+                        const deselectedNodes = nds.map(n => ({ ...n, selected: false }));
+                        const newNodes = [...deselectedNodes, newNode];
+                        pushToHistory({ nodes: newNodes, edges });
+                        return newNodes;
+                    });
+
+                    // Update selection
+                    setSelectedNode(newNode);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedNode, clipboard, setNodes, edges, pushToHistory]);
 
     // Effect: Sync History -> UI when Undoing/Redoing
     useEffect(() => {
@@ -1610,10 +1674,19 @@ const VSMCanvasContent = () => {
                             </h3>
 
                             <div style={{ marginBottom: '15px' }}>
-                                <label style={labelStyle}>Label / Name</label>
+                                <label style={labelStyle}>
+                                    {selectedNode.type === 'text_note' ? 'Text Content' : 'Label / Name'}
+                                </label>
                                 <input
-                                    value={selectedNode.data.label || selectedNode.data.name || ''}
-                                    onChange={(e) => updateNodeData(selectedNode.id, 'name', e.target.value)}
+                                    value={selectedNode.type === 'text_note'
+                                        ? (selectedNode.data.text || '')
+                                        : (selectedNode.data.label || selectedNode.data.name || '')
+                                    }
+                                    onChange={(e) => updateNodeData(
+                                        selectedNode.id,
+                                        selectedNode.type === 'text_note' ? 'text' : 'name',
+                                        e.target.value
+                                    )}
                                     onBlur={onPropertyChangeComplete}
                                     style={inputStyle}
                                 />
@@ -1623,7 +1696,10 @@ const VSMCanvasContent = () => {
                             <div style={{ marginBottom: '15px' }}>
                                 <label style={labelStyle}>Node Color</label>
                                 <div style={{ display: 'flex', gap: '5px' }}>
-                                    {['#1e1e1e', '#c50f1f', '#0078d4', '#107c10', '#d13438', '#881798'].map(color => (
+                                    {(selectedNode.type === 'text_note'
+                                        ? ['#ffff88', '#e0f7fa', '#f8bbd0', '#ccff90', '#ffffff', '#ffcc80']
+                                        : ['#1e1e1e', '#c50f1f', '#0078d4', '#107c10', '#d13438', '#881798']
+                                    ).map(color => (
                                         <div
                                             key={color}
                                             onClick={() => { updateNodeData(selectedNode.id, 'color', color); onPropertyChangeComplete(); }}

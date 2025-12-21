@@ -38,6 +38,7 @@ export const VSMSymbols = {
     WAREHOUSE_RECEIVING: 'warehouse_receiving', // NEW: Receiving dock/warehouse
     FORKLIFT: 'forklift', // NEW: Forklift transport
     TROLLEY: 'trolley', // NEW: Trolley transport
+    TEXT_NOTE: 'text_note', // NEW: Free text note
     CUSTOM: 'custom',
 };
 
@@ -97,5 +98,6 @@ export const INITIAL_DATA = {
     },
     timeline: { name: 'Timeline', leadTime: 0, vaTime: 0 }, // NEW
     finished_goods: { name: 'Finished Goods', amount: 0 }, // NEW
+    text_note: { text: 'New Note', color: '#ffff88', fontSize: '14px' }, // NEW
     custom: { name: 'Custom Item', description: '' }
 };

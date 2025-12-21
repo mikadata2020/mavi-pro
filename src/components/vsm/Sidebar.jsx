@@ -206,6 +206,14 @@ const Sidebar = ({ customLibrary, onAddCustom, activeEdgeType, onEdgeTypeSelect 
                     </div>
                 </div>
 
+                {/* GENERAL & NOTES */}
+                <div style={sectionTitleStyle}>General / Notes</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                    <div style={{ ...blockBtnStyle, backgroundColor: '#ffff88', color: '#000', border: '1px solid #e0e040' }} onDragStart={(event) => onDragStart(event, 'text_note', VSMSymbols.TEXT_NOTE)} draggable>
+                        📝 Sticky Note / Text
+                    </div>
+                </div>
+
                 {/* CUSTOM SECTION */}
                 <div style={sectionTitleStyle}>Custom (My Icons)</div>
                 <button onClick={() => fileInputRef.current.click()} style={{ ...blockBtnStyle, cursor: 'pointer', backgroundColor: '#0078d4', borderColor: '#0078d4', width: '100%', gap: '5px' }}>
