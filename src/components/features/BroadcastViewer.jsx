@@ -14,6 +14,9 @@ function BroadcastViewer({ roomId, onClose }) {
     const [stats, setStats] = useState({ fps: 0, bitrate: 0 });
     const [isRemoteMuted, setIsRemoteMuted] = useState(true);
     const [trackCount, setTrackCount] = useState(0);
+    const [viewerName, setViewerName] = useState('');
+    const [nameInput, setNameInput] = useState('');
+    const [zoom, setZoom] = useState(1);
 
     const videoRef = useRef(null);
     const peerRef = useRef(null);
@@ -221,19 +224,40 @@ function BroadcastViewer({ roomId, onClose }) {
     };
 
     return (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-                <video
-                    ref={videoRef}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    playsInline
-                    autoPlay
-                    muted={isRemoteMuted}
-                />
-                <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: drawingMode ? 'auto' : 'none' }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} />
+        <div style={{
+            position: 'fixed', inset: 0, backgroundColor: '#000',
+            zIndex: 9999, display: 'flex', flexDirection: 'column',
+            overflow: 'hidden'
+        }}>
+            <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+                <div style={{
+                    width: '100%',
+                    height: '100%',
+                    transform: `scale(${zoom})`,
+                    transformOrigin: 'center center',
+                    transition: 'transform 0.2s ease-out',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}>
+                    <video
+                        ref={videoRef}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        playsInline
+                        autoPlay
+                        muted={isRemoteMuted}
+                    />
+                    <canvas
+                        ref={canvasRef}
+                        style={{ position: 'absolute', inset: 0, pointerEvents: drawingMode ? 'auto' : 'none' }}
+                        onMouseDown={handleMouseDown}
+                        onMouseMove={handleMouseMove}
+                        onMouseUp={handleMouseUp}
+                    />
+                </div>
 
                 {/* Status Overlays */}
-                <div style={{ position: 'absolute', top: 20, left: 20, display: 'flex', gap: '10px' }}>
+                <div style={{ position: 'absolute', top: 20, left: 20, display: 'flex', gap: '10px', zIndex: 1001 }}>
                     <div style={{ padding: '6px 12px', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: '20px', color: 'white', fontSize: '0.8rem' }}>
                         {status}
                     </div>
@@ -262,6 +286,9 @@ function BroadcastViewer({ roomId, onClose }) {
                         ) : (
                             <span style={{ color: '#ff6b6b' }}>None</span>
                         )}
+                    </div>
+                    <div style={{ padding: '6px 12px', backgroundColor: 'rgba(0,120,212,0.6)', borderRadius: '20px', color: 'white', fontSize: '0.8rem' }}>
+                        🔍 {Math.round(zoom * 100)}%
                     </div>
                 </div>
 
@@ -302,10 +329,18 @@ function BroadcastViewer({ roomId, onClose }) {
                 </div>
 
                 {/* Toolbar */}
-                <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '15px', padding: '10px', backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: '12px', border: '1px solid #444' }}>
+                <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: '15px', padding: '10px', backgroundColor: 'rgba(30,30,30,0.9)', borderRadius: '12px', border: '1px solid #444', zIndex: 1003 }}>
                     <button onClick={() => setDrawingMode(!drawingMode)} style={{ padding: '8px 15px', backgroundColor: drawingMode ? '#0078d4' : '#444', border: 'none', borderRadius: '4px', color: 'white' }}>
                         ✏️ Annotate
                     </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderLeft: '1px solid #555', paddingLeft: '15px' }}>
+                        <button onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} style={{ width: '30px', height: '30px', backgroundColor: '#444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}>-</button>
+                        <span style={{ color: 'white', fontSize: '0.8rem', minWidth: '40px', textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+                        <button onClick={() => setZoom(Math.min(3, zoom + 0.1))} style={{ width: '30px', height: '30px', backgroundColor: '#444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}>+</button>
+                        <button onClick={() => setZoom(1)} style={{ padding: '5px 10px', backgroundColor: '#444', border: 'none', borderRadius: '4px', color: 'white', fontSize: '0.7rem', cursor: 'pointer' }}>Reset</button>
+                    </div>
+
                     {drawingMode && (
                         <>
                             <select value={tool} onChange={(e) => setTool(e.target.value)} style={{ backgroundColor: '#2d2d2d', color: 'white', border: '1px solid #444', borderRadius: '4px' }}>
@@ -327,7 +362,7 @@ function BroadcastViewer({ roomId, onClose }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         backgroundColor: 'rgba(0,0,0,0.8)',
-                        zIndex: 1000 // Highest z-index to ensure visibility
+                        zIndex: 1005
                     }}>
                         <div style={{ textAlign: 'center' }}>
                             <p style={{ color: 'white', marginBottom: '20px', fontSize: '1.2rem' }}>Broadcast ready</p>
@@ -360,13 +395,62 @@ function BroadcastViewer({ roomId, onClose }) {
 
             <ChatBox
                 messages={chatMessages}
-                onSendMessage={(data) => connRef.current?.send({
-                    ...data,
-                    timestamp: Date.now(),
-                    sender: `Viewer ${peerRef.current?.id?.substring(0, 4) || '...'}`
-                })}
-                userName={`Viewer ${peerRef.current?.id?.substring(0, 4) || '...'}`}
+                onSendMessage={(data) => {
+                    const chatData = {
+                        ...data,
+                        timestamp: Date.now(),
+                        sender: viewerName || `Viewer ${peerRef.current?.id?.substring(0, 4) || '...'}`
+                    };
+                    if (data.type === 'file' && data.file) {
+                        chatData.url = URL.createObjectURL(new Blob([data.file]));
+                    }
+                    setChatMessages(prev => [...prev, chatData]);
+                    connRef.current?.send(chatData);
+                }}
+                userName={viewerName || `Viewer ${peerRef.current?.id?.substring(0, 4) || '...'}`}
             />
+
+            {/* Name Entry Overlay */}
+            {!viewerName && (
+                <div style={{
+                    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)',
+                    zIndex: 20000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    backdropFilter: 'blur(5px)'
+                }}>
+                    <div style={{
+                        backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '12px',
+                        width: '320px', border: '1px solid #444', textAlign: 'center'
+                    }}>
+                        <h3 style={{ color: 'white', marginBottom: '20px' }}>Join Broadcast</h3>
+                        <p style={{ color: '#aaa', marginBottom: '20px', fontSize: '0.9rem' }}>Please enter your name to join the chat</p>
+                        <input
+                            type="text"
+                            value={nameInput}
+                            onChange={(e) => setNameInput(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && nameInput.trim() && setViewerName(nameInput.trim())}
+                            placeholder="Your Name"
+                            autoFocus
+                            style={{
+                                width: '100%', padding: '12px', marginBottom: '20px',
+                                backgroundColor: '#2d2d2d', border: '1px solid #444',
+                                borderRadius: '6px', color: 'white', outline: 'none'
+                            }}
+                        />
+                        <button
+                            onClick={() => nameInput.trim() && setViewerName(nameInput.trim())}
+                            disabled={!nameInput.trim()}
+                            style={{
+                                width: '100%', padding: '12px', backgroundColor: '#0078d4',
+                                color: 'white', border: 'none', borderRadius: '6px',
+                                fontWeight: 'bold', cursor: nameInput.trim() ? 'pointer' : 'not-allowed',
+                                opacity: nameInput.trim() ? 1 : 0.6
+                            }}
+                        >
+                            Continue
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

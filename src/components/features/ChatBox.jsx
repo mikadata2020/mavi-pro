@@ -14,7 +14,7 @@ function ChatBox({ messages, onSendMessage, userName = 'You', style = {} }) {
 
     const handleSend = () => {
         if (inputMessage.trim()) {
-            onSendMessage({ type: 'text', content: inputMessage.trim() });
+            onSendMessage({ type: 'text', message: inputMessage.trim() });
             setInputMessage('');
         }
     };
@@ -62,7 +62,6 @@ function ChatBox({ messages, onSendMessage, userName = 'You', style = {} }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '1.2rem' }}>💬</span>
                     <span style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem' }}>Chat</span>
-                    {messages.length > 0 && <span style={{ backgroundColor: '#0078d4', color: 'white', borderRadius: '10px', padding: '2px 6px', fontSize: '0.7rem' }}>{messages.length}</span>}
                 </div>
             </div>
 

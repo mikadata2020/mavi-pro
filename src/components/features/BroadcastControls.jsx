@@ -57,7 +57,7 @@ function BroadcastControls({
         <>
             {/* Floating Controls Bar */}
             <div style={{
-                position: 'fixed', top: '50%', right: '20px', transform: 'translateY(-50%)',
+                position: 'fixed', top: '50%', left: '20px', transform: 'translateY(-50%)',
                 backgroundColor: 'rgba(30, 30, 30, 0.95)', border: '1px solid #444', borderRadius: '12px',
                 padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px',
                 alignItems: 'center', zIndex: 1001, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
@@ -112,7 +112,7 @@ function BroadcastControls({
             {/* Viewer List Panel */}
             {showViewerList && (
                 <div style={{
-                    position: 'fixed', top: '50%', right: '90px', transform: 'translateY(-50%)',
+                    position: 'fixed', top: '50%', left: '90px', transform: 'translateY(-50%)',
                     width: '200px', backgroundColor: '#1e1e1e', border: '1px solid #444',
                     borderRadius: '8px', padding: '15px', zIndex: 1000, color: 'white'
                 }}>
@@ -134,7 +134,7 @@ function BroadcastControls({
 
             {/* Chat Box */}
             {isVisible && (
-                <div style={{ position: 'fixed', bottom: '20px', right: '100px', zIndex: 1000 }}>
+                <div style={{ position: 'fixed', top: '100px', left: '90px', zIndex: 1000 }}>
                     <ChatBox messages={chatMessages} onSendMessage={onSendMessage} userName={userName} style={{ bottom: 'auto', right: 'auto' }} />
                 </div>
             )}

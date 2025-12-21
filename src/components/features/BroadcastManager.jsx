@@ -257,6 +257,15 @@ const BroadcastManager = forwardRef(({
                             msg.url = URL.createObjectURL(new Blob([data.file]));
                         }
                         setChatMessages(prev => [...prev, msg]);
+
+                        // Relay to all other viewers
+                        Object.values(peerRef.current.connections).forEach(conns => {
+                            conns.forEach(c => {
+                                if (c.open && c.peer !== conn.peer) {
+                                    c.send(msg);
+                                }
+                            });
+                        });
                     } else if (type === 'request_speak') {
                         // Request speak logic
                     } else {

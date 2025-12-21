@@ -464,8 +464,14 @@ function AppContent() {
               <Route path="/vr-training" element={<div style={{ overflow: 'hidden', height: '100%' }}><VRTrainingMode measurements={measurements} videoSrc={videoSrc} videoName={videoName} currentProject={currentProject} /></div>} />
               <Route path="/knowledge-base" element={<div style={{ overflow: 'hidden', height: '100%' }}><KnowledgeBase onLoadVideo={handleLoadVideoFromKB} /></div>} />
               <Route path="/broadcast" element={
-                <div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}>
-                  <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <div style={{
+                  padding: '10px',
+                  paddingLeft: isBroadcasting ? '420px' : '10px',
+                  overflowY: 'auto',
+                  height: '100%',
+                  transition: 'padding-left 0.3s ease'
+                }}>
+                  <div style={{ maxWidth: '600px', margin: isBroadcasting ? '0' : '0 auto' }}>
                     <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>Share your video stream with other devices in real-time.</p>
                     {/* UI Portal for BroadcastManager */}
