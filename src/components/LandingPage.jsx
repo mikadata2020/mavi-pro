@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Play, ArrowRight, CheckCircle, BarChart2, BookOpen, Layers, Users, Shield, Zap, Cloud, AlertTriangle, XCircle, Briefcase, Factory, TrendingUp, HelpCircle, ChevronDown, ChevronUp, Video, Brain } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext';
+import LanguageSelector from './LanguageSelector';
 
 const LandingPage = ({ onLogin, onDemo }) => {
+    const { t } = useLanguage();
     const [scrolled, setScrolled] = useState(false);
 
     useEffect(() => {
@@ -47,7 +50,7 @@ const LandingPage = ({ onLogin, onDemo }) => {
         },
         navLinks: {
             display: 'flex',
-            gap: '2rem',
+            gap: '1.5rem',
             alignItems: 'center',
         },
         link: {
@@ -213,37 +216,36 @@ const LandingPage = ({ onLogin, onDemo }) => {
                     <Zap size={24} /> Mavi
                 </div>
                 <div style={styles.navLinks}>
-                    <a href="#features" style={styles.link}>Features</a>
-                    <a href="#solutions" style={styles.link}>Solutions</a>
-                    <a href="#pricing" style={styles.link}>Pricing</a>
+                    <a href="#features" style={styles.link}>{t('landing.nav.features')}</a>
+                    <a href="#solutions" style={styles.link}>{t('landing.nav.solutions')}</a>
                     <button onClick={onLogin} style={{ ...styles.btnSecondary, padding: '0.5rem 1.5rem', marginLeft: 0 }}>
-                        Log In
+                        {t('landing.nav.login')}
                     </button>
                     <button onClick={onDemo} style={{ ...styles.btnPrimary, padding: '0.5rem 1.5rem' }}>
-                        Start Demo
+                        {t('landing.nav.startDemo')}
                     </button>
+                    <LanguageSelector />
                 </div>
             </nav>
 
             {/* Hero */}
             <header style={styles.hero}>
                 <div style={{ display: 'inline-block', padding: '0.5rem 1rem', borderRadius: '999px', backgroundColor: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', fontWeight: '600', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                    ✨ New: AI Manual Generation
+                    {t('landing.hero.newBadge')}
                 </div>
                 <h1 style={styles.h1}>
-                    Optimize Motion with <br />
-                    <span style={styles.highlight}>Intelligent Analysis</span>
+                    {t('landing.hero.title')} <br />
+                    <span style={styles.highlight}>{t('landing.hero.highlight')}</span>
                 </h1>
                 <p style={styles.subtitle}>
-                    Mavi uses advanced computer vision to analyze workflows, calculating standard times
-                    and identifying waste automatically. Increase productivity by up to 40%.
+                    {t('landing.hero.subtitle')}
                 </p>
                 <div>
                     <button onClick={onDemo} style={styles.btnPrimary}>
-                        Start Free Demo <ArrowRight size={18} />
+                        {t('landing.hero.ctaPrimary')} <ArrowRight size={18} />
                     </button>
                     <button onClick={() => document.getElementById('features').scrollIntoView({ behavior: 'smooth' })} style={styles.btnSecondary}>
-                        Learn More
+                        {t('landing.hero.ctaSecondary')}
                     </button>
                 </div>
                 <div style={{ marginTop: '4rem', perspective: '1000px' }}>
@@ -333,7 +335,7 @@ const LandingPage = ({ onLogin, onDemo }) => {
 
             {/* Solutions / Problem vs Solution */}
             <section id="solutions" style={{ ...styles.section, backgroundColor: '#0a0a0a' }}>
-                <h2 style={styles.sectionTitle}>Why choose Mavi?</h2>
+                <h2 style={styles.sectionTitle}>{t('landing.solutions.title')}</h2>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '4rem', alignItems: 'center' }}>
 
                     {/* The Old Way */}
@@ -342,28 +344,28 @@ const LandingPage = ({ onLogin, onDemo }) => {
                             <div style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
                                 <AlertTriangle size={24} />
                             </div>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ef4444' }}>The Old Way</h3>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ef4444' }}>{t('landing.solutions.oldWay')}</h3>
                         </div>
                         <ul style={{ listStyle: 'none', padding: 0 }}>
                             <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                 <XCircle size={20} color="#ef4444" style={{ marginTop: '4px', flexShrink: 0 }} />
                                 <div>
-                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Manual Stopwatch</strong>
-                                    <span style={{ color: '#a1a1aa' }}>Inaccurate timing dependent on human reaction speed.</span>
+                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.old.stopwatch.title')}</strong>
+                                    <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.old.stopwatch.desc')}</span>
                                 </div>
                             </li>
                             <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                 <XCircle size={20} color="#ef4444" style={{ marginTop: '4px', flexShrink: 0 }} />
                                 <div>
-                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Paper & Clipboard</strong>
-                                    <span style={{ color: '#a1a1aa' }}>Data is trapped on paper, requiring manual entry into Excel later.</span>
+                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.old.paper.title')}</strong>
+                                    <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.old.paper.desc')}</span>
                                 </div>
                             </li>
                             <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                 <XCircle size={20} color="#ef4444" style={{ marginTop: '4px', flexShrink: 0 }} />
                                 <div>
-                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Subjective Analysis</strong>
-                                    <span style={{ color: '#a1a1aa' }}>Different engineers produce different results for the same task.</span>
+                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.old.subjective.title')}</strong>
+                                    <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.old.subjective.desc')}</span>
                                 </div>
                             </li>
                         </ul>
@@ -377,33 +379,33 @@ const LandingPage = ({ onLogin, onDemo }) => {
                                 <div style={{ padding: '0.75rem', borderRadius: '8px', backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
                                     <Zap size={24} />
                                 </div>
-                                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>The Mavi Solution</h3>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>{t('landing.solutions.maviWay')}</h3>
                             </div>
                             <ul style={{ listStyle: 'none', padding: 0 }}>
                                 <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                     <CheckCircle size={20} color="#10b981" style={{ marginTop: '4px', flexShrink: 0 }} />
                                     <div>
-                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>AI Video Analysis</strong>
-                                        <span style={{ color: '#a1a1aa' }}>Frame-perfect timing automatically extracted from video footage.</span>
+                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.mavi.video.title')}</strong>
+                                        <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.mavi.video.desc')}</span>
                                     </div>
                                 </li>
                                 <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                     <CheckCircle size={20} color="#10b981" style={{ marginTop: '4px', flexShrink: 0 }} />
                                     <div>
-                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Digital & Instant</strong>
-                                        <span style={{ color: '#a1a1aa' }}>Data is digitizied immediately. Generate reports and manuals in one click.</span>
+                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.mavi.digital.title')}</strong>
+                                        <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.mavi.digital.desc')}</span>
                                     </div>
                                 </li>
                                 <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                     <CheckCircle size={20} color="#10b981" style={{ marginTop: '4px', flexShrink: 0 }} />
                                     <div>
-                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Standardized & Accurate</strong>
-                                        <span style={{ color: '#a1a1aa' }}>Consistent analysis every time, eliminating human error and bias.</span>
+                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.mavi.standardized.title')}</strong>
+                                        <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.mavi.standardized.desc')}</span>
                                     </div>
                                 </li>
                             </ul>
                             <button onClick={onDemo} style={{ ...styles.btnPrimary, width: '100%', marginTop: '1rem', justifyContent: 'center' }}>
-                                Switch to Mavi Today
+                                {t('landing.solutions.mavi.cta')}
                             </button>
                         </div>
                     </div>
@@ -413,22 +415,22 @@ const LandingPage = ({ onLogin, onDemo }) => {
 
             {/* Features Grid (Kept below for detail) */}
             <section id="features" style={styles.section}>
-                <h2 style={styles.sectionTitle}>More powerful features</h2>
+                <h2 style={styles.sectionTitle}>{t('landing.features.title')}</h2>
                 <div style={styles.grid}>
                     <div style={styles.card}>
                         <div style={styles.cardIcon}><BookOpen size={24} /></div>
-                        <h3 style={styles.cardTitle}>Manual Creator</h3>
-                        <p style={styles.cardText}>Turn analysis into training manuals. Import from Excel/Word or generate from video steps.</p>
+                        <h3 style={styles.cardTitle}>{t('landing.features.manual.title')}</h3>
+                        <p style={styles.cardText}>{t('landing.features.manual.desc')}</p>
                     </div>
                     <div style={styles.card}>
                         <div style={styles.cardIcon}><Layers size={24} /></div>
-                        <h3 style={styles.cardTitle}>Drag & Drop Workflow</h3>
-                        <p style={styles.cardText}>Rearrange process elements visually to test new layouts without disrupting the line.</p>
+                        <h3 style={styles.cardTitle}>{t('landing.features.workflow.title')}</h3>
+                        <p style={styles.cardText}>{t('landing.features.workflow.desc')}</p>
                     </div>
                     <div style={styles.card}>
                         <div style={styles.cardIcon}><Cloud size={24} /></div>
-                        <h3 style={styles.cardTitle}>Cloud Sync</h3>
-                        <p style={styles.cardText}>Collaborate with your team in real-time. Sync projects and manuals across devices securely.</p>
+                        <h3 style={styles.cardTitle}>{t('landing.features.cloud.title')}</h3>
+                        <p style={styles.cardText}>{t('landing.features.cloud.desc')}</p>
                     </div>
                 </div>
             </section>
@@ -437,7 +439,7 @@ const LandingPage = ({ onLogin, onDemo }) => {
 
             {/* How It Works */}
             <section style={{ ...styles.section, backgroundColor: '#0a0a0a', textAlign: 'center' }}>
-                <h2 style={styles.sectionTitle}>How Mavi Works</h2>
+                <h2 style={styles.sectionTitle}>{t('landing.how.title')}</h2>
                 <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '4rem', marginTop: '3rem' }}>
 
                     {/* Step 1 */}
@@ -446,8 +448,8 @@ const LandingPage = ({ onLogin, onDemo }) => {
                             <Video size={40} />
                             <div style={{ position: 'absolute', top: '-5px', right: '-5px', width: '30px', height: '30px', borderRadius: '50%', backgroundColor: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>1</div>
                         </div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>Capture</h3>
-                        <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>Record your production line or upload an existing video file directly to the platform.</p>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>{t('landing.how.capture.title')}</h3>
+                        <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>{t('landing.how.capture.desc')}</p>
                     </div>
 
                     {/* Arrow (Hidden on mobile) */}
@@ -461,8 +463,8 @@ const LandingPage = ({ onLogin, onDemo }) => {
                             <Brain size={40} />
                             <div style={{ position: 'absolute', top: '-5px', right: '-5px', width: '30px', height: '30px', borderRadius: '50%', backgroundColor: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>2</div>
                         </div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>Analyze</h3>
-                        <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>Our Computer Vision engine detects cycles, calculates times, and identifies waste automatically.</p>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>{t('landing.how.analyze.title')}</h3>
+                        <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>{t('landing.how.analyze.desc')}</p>
                     </div>
 
                     {/* Arrow */}
@@ -476,8 +478,8 @@ const LandingPage = ({ onLogin, onDemo }) => {
                             <TrendingUp size={40} />
                             <div style={{ position: 'absolute', top: '-5px', right: '-5px', width: '30px', height: '30px', borderRadius: '50%', backgroundColor: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>3</div>
                         </div>
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>Improve</h3>
-                        <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>Use data-backed insights to rebalance lines, eliminate bottlenecks, and boost productivity.</p>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>{t('landing.how.improve.title')}</h3>
+                        <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>{t('landing.how.improve.desc')}</p>
                     </div>
 
                 </div>
@@ -485,98 +487,52 @@ const LandingPage = ({ onLogin, onDemo }) => {
 
             {/* Target Audience / Use Cases */}
             <section style={styles.section}>
-                <h2 style={styles.sectionTitle}>Built for professionals</h2>
+                <h2 style={styles.sectionTitle}>{t('landing.audience.title')}</h2>
                 <div style={styles.grid}>
                     <div style={styles.card}>
                         <div style={{ ...styles.cardIcon, color: '#fda4af', backgroundColor: 'rgba(253, 164, 175, 0.1)' }}><Briefcase size={24} /></div>
-                        <h3 style={styles.cardTitle}>Industrial Engineers</h3>
-                        <p style={styles.cardText}>Stop spending hours on manual data entry. Capture cycles automatically and generate standard work charts in minutes.</p>
+                        <h3 style={styles.cardTitle}>{t('landing.audience.ie.title')}</h3>
+                        <p style={styles.cardText}>{t('landing.audience.ie.desc')}</p>
                     </div>
                     <div style={styles.card}>
                         <div style={{ ...styles.cardIcon, color: '#93c5fd', backgroundColor: 'rgba(147, 197, 253, 0.1)' }}><Factory size={24} /></div>
-                        <h3 style={styles.cardTitle}>Plant Managers</h3>
-                        <p style={styles.cardText}>Gain full visibility into your production lines. Identify bottlenecks instantly and track efficiency improvements over time.</p>
+                        <h3 style={styles.cardTitle}>{t('landing.audience.pm.title')}</h3>
+                        <p style={styles.cardText}>{t('landing.audience.pm.desc')}</p>
                     </div>
                     <div style={styles.card}>
                         <div style={{ ...styles.cardIcon, color: '#fcd34d', backgroundColor: 'rgba(252, 211, 77, 0.1)' }}><TrendingUp size={24} /></div>
-                        <h3 style={styles.cardTitle}>Lean Consultants</h3>
-                        <p style={styles.cardText}>Deliver value to your clients faster. Use Mavi to provide data-backed recommendations and impressive "Before/After" visual proof.</p>
-                    </div>
-                </div>
-            </section>
-
-            {/* Pricing */}
-            <section id="pricing" style={styles.section}>
-                <h2 style={styles.sectionTitle}>Simple, transparent pricing</h2>
-                <div style={styles.grid}>
-                    {/* Starter */}
-                    <div style={styles.pricingCard}>
-                        <h3 style={styles.cardTitle}>Starter</h3>
-                        <div style={styles.price}>$0<span style={styles.pricePeriod}>/mo</span></div>
-                        <p style={styles.cardText}>Perfect for trying out Mavi.</p>
-                        <button onClick={onDemo} style={{ ...styles.btnSecondary, width: '100%', margin: '2rem 0' }}>Start Free</button>
-                        <ul style={styles.featureList}>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Basic Video Analysis</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> 1 User</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Local Storage Only</li>
-                        </ul>
-                    </div>
-                    {/* Pro */}
-                    <div style={{ ...styles.pricingCard, borderColor: '#4f46e5', backgroundColor: 'rgba(79, 70, 229, 0.05)' }}>
-                        <div style={styles.popularBadge}>Most Popular</div>
-                        <h3 style={styles.cardTitle}>Pro</h3>
-                        <div style={styles.price}>$49<span style={styles.pricePeriod}>/mo</span></div>
-                        <p style={styles.cardText}>For professional engineers.</p>
-                        <button onClick={onLogin} style={{ ...styles.btnPrimary, width: '100%', margin: '2rem 0' }}>Get Started</button>
-                        <ul style={styles.featureList}>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Advanced AI Analysis</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Unlimited Projects</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Cloud Sync & Backup</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Manual Creator (Excel/Word)</li>
-                        </ul>
-                    </div>
-                    {/* Enterprise */}
-                    <div style={styles.pricingCard}>
-                        <h3 style={styles.cardTitle}>Enterprise</h3>
-                        <div style={styles.price}>Custom</div>
-                        <p style={styles.cardText}>For large organizations.</p>
-                        <button style={{ ...styles.btnSecondary, width: '100%', margin: '2rem 0' }}>Contact Sales</button>
-                        <ul style={styles.featureList}>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Custom AI Models</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> On-Premise Deployment</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> Dedicated Support</li>
-                            <li style={styles.featureItem}><CheckCircle size={16} color="#4f46e5" /> SSO Integration</li>
-                        </ul>
+                        <h3 style={styles.cardTitle}>{t('landing.audience.lc.title')}</h3>
+                        <p style={styles.cardText}>{t('landing.audience.lc.desc')}</p>
                     </div>
                 </div>
             </section>
 
             {/* FAQ */}
             <section style={{ ...styles.section, maxWidth: '800px' }}>
-                <h2 style={styles.sectionTitle}>Frequently Asked Questions</h2>
+                <h2 style={styles.sectionTitle}>{t('landing.faq.title')}</h2>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <div style={{ padding: '1.5rem', backgroundColor: '#111', borderRadius: '12px', border: '1px solid #222' }}>
                         <h4 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <HelpCircle size={18} color="#4f46e5" /> Is my video data secure?
+                            <HelpCircle size={18} color="#4f46e5" /> {t('landing.faq.q1.q')}
                         </h4>
                         <p style={{ color: '#a1a1aa', lineHeight: '1.6', margin: 0 }}>
-                            Yes. Mavi uses enterprise-grade encryption. For Pro plans, data is stored securely in the cloud. For Starter plans, data never leaves your local device.
+                            {t('landing.faq.q1.a')}
                         </p>
                     </div>
                     <div style={{ padding: '1.5rem', backgroundColor: '#111', borderRadius: '12px', border: '1px solid #222' }}>
                         <h4 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <HelpCircle size={18} color="#4f46e5" /> Can I export reports to Excel?
+                            <HelpCircle size={18} color="#4f46e5" /> {t('landing.faq.q2.q')}
                         </h4>
                         <p style={{ color: '#a1a1aa', lineHeight: '1.6', margin: 0 }}>
-                            Absolutely. You can export all analysis data, charts, and standard work sheets directly to Excel, PDF, or Word formats.
+                            {t('landing.faq.q2.a')}
                         </p>
                     </div>
                     <div style={{ padding: '1.5rem', backgroundColor: '#111', borderRadius: '12px', border: '1px solid #222' }}>
                         <h4 style={{ fontSize: '1.1rem', fontWeight: '600', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <HelpCircle size={18} color="#4f46e5" /> Do I need special hardware?
+                            <HelpCircle size={18} color="#4f46e5" /> {t('landing.faq.q3.q')}
                         </h4>
                         <p style={{ color: '#a1a1aa', lineHeight: '1.6', margin: 0 }}>
-                            No. Mavi works with any standard video file (MP4, WEBM) or direct webcam input. No expensive sensors required.
+                            {t('landing.faq.q3.a')}
                         </p>
                     </div>
                 </div>
@@ -584,13 +540,13 @@ const LandingPage = ({ onLogin, onDemo }) => {
 
             {/* Final CTA */}
             <section style={{ padding: '6rem 2rem', textAlign: 'center', background: 'linear-gradient(180deg, #050505 0%, rgba(79, 70, 229, 0.1) 100%)' }}>
-                <h2 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '1.5rem' }}>Ready to optimize your workflow?</h2>
+                <h2 style={{ fontSize: '3rem', fontWeight: '800', marginBottom: '1.5rem' }}>{t('landing.cta.title')}</h2>
                 <p style={{ fontSize: '1.25rem', color: '#a1a1aa', maxWidth: '600px', margin: '0 auto 3rem' }}>
-                    Join thousands of engineers who are saving time and improving efficiency with Mavi.
+                    {t('landing.cta.desc')}
                 </p>
                 <div style={{ display: 'inline-flex', gap: '1rem', justifyContent: 'center' }}>
                     <button onClick={onDemo} style={{ ...styles.btnPrimary, padding: '1.25rem 3rem', fontSize: '1.2rem' }}>
-                        Start Free Trial
+                        {t('landing.cta.button')}
                     </button>
                 </div>
             </section>
@@ -601,12 +557,12 @@ const LandingPage = ({ onLogin, onDemo }) => {
                     <Zap size={24} /> Mavi
                 </div>
                 <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginBottom: '2rem' }}>
-                    <a href="#" style={styles.link}>Product</a>
-                    <a href="#" style={styles.link}>Company</a>
-                    <a href="#" style={styles.link}>Resources</a>
-                    <a href="#" style={styles.link}>Legal</a>
+                    <a href="#" style={styles.link}>{t('landing.footer.product')}</a>
+                    <a href="#" style={styles.link}>{t('landing.footer.company')}</a>
+                    <a href="#" style={styles.link}>{t('landing.footer.resources')}</a>
+                    <a href="#" style={styles.link}>{t('landing.footer.legal')}</a>
                 </div>
-                <div>© 2025 Mavi Systems Inc. All rights reserved.</div>
+                <div>{t('landing.footer.rights')}</div>
             </footer>
         </div>
     );

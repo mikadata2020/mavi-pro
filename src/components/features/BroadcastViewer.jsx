@@ -12,6 +12,8 @@ function BroadcastViewer({ roomId, onClose }) {
     const [color, setColor] = useState('#FF0000');
     const [isPlaying, setIsPlaying] = useState(false);
     const [stats, setStats] = useState({ fps: 0, bitrate: 0 });
+    const [isRemoteMuted, setIsRemoteMuted] = useState(true);
+    const [trackCount, setTrackCount] = useState(0);
 
     const videoRef = useRef(null);
     const peerRef = useRef(null);
@@ -46,19 +48,38 @@ function BroadcastViewer({ roomId, onClose }) {
                         }
                     });
 
-                    // Request Mic for Two-Way Audio
-                    navigator.mediaDevices.getUserMedia({ audio: true })
-                        .then(stream => {
-                            localAudioStreamRef.current = stream;
-                            const call = peer.call(roomId, stream);
-                            setupCall(call);
-                        })
-                        .catch(err => {
-                            console.warn('Mic access denied, joining without audio', err);
-                            const canvas = document.createElement('canvas');
-                            const call = peer.call(roomId, canvas.captureStream(1));
-                            setupCall(call);
-                        });
+                    // Helper to create a robust offer stream (V+A) to ensure bidirectional media
+                    const createOfferStream = async () => {
+                        const tracks = [];
+
+                        // 1. Try to get Audio
+                        try {
+                            const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                            localAudioStreamRef.current = audioStream;
+                            tracks.push(...audioStream.getAudioTracks());
+                        } catch (err) {
+                            console.warn('Mic access denied, using silent audio track', err);
+                            // Optional: Create silent audio if needed, but video is more critical
+                        }
+
+                        // 2. Always create a dummy Video track for negotiation
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 2;
+                        canvas.height = 2;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = 'black';
+                        ctx.fillRect(0, 0, 2, 2);
+                        const dummyVideoStream = canvas.captureStream(1);
+                        tracks.push(...dummyVideoStream.getVideoTracks());
+
+                        return new MediaStream(tracks);
+                    };
+
+                    createOfferStream().then(offerStream => {
+                        console.log('[BroadcastViewer] Starting call with tracks:', offerStream.getTracks().map(t => t.kind));
+                        const call = peer.call(roomId, offerStream);
+                        setupCall(call);
+                    });
                 });
 
                 peer.on('error', (err) => setError('Peer connection error: ' + err.type));
@@ -71,12 +92,22 @@ function BroadcastViewer({ roomId, onClose }) {
 
         const setupCall = (call) => {
             call.on('stream', (remoteStream) => {
+                console.log('[BroadcastViewer] Received remote stream:', remoteStream.id, 'Tracks:', remoteStream.getTracks().map(t => `${t.kind}:${t.readyState}`).join(', '));
+                setTrackCount(remoteStream.getTracks().length);
+
                 setStatus('Receiving stream...');
                 if (videoRef.current) {
                     videoRef.current.srcObject = remoteStream;
                     videoRef.current.play()
-                        .then(() => setIsPlaying(true))
-                        .catch(() => setStatus('Click "Join" to watch'));
+                        .then(() => {
+                            console.log('[BroadcastViewer] Autoplay success');
+                            setIsPlaying(true);
+                        })
+                        .catch((err) => {
+                            console.warn('[BroadcastViewer] Autoplay prevented, showing manual join button:', err);
+                            setStatus('Broadcast ready. Click Join.');
+                            setIsPlaying(false);
+                        });
                 }
 
                 // Monitor Stats
@@ -90,7 +121,7 @@ function BroadcastViewer({ roomId, onClose }) {
                             if (report.type === 'inbound-rtp' && report.kind === 'video') {
                                 setStats({
                                     fps: Math.round(report.framesPerSecond || 0),
-                                    bitrate: Math.round((report.bytesReceived * 8) / 2000) || 0 // bits to Kbps over ~2s
+                                    bitrate: Math.round((report.bytesReceived * 8) / 2000) || 0
                                 });
                             }
                         });
@@ -192,7 +223,13 @@ function BroadcastViewer({ roomId, onClose }) {
     return (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
             <div style={{ position: 'relative', flex: 1 }}>
-                <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'contain' }} playsInline muted />
+                <video
+                    ref={videoRef}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    playsInline
+                    autoPlay
+                    muted={isRemoteMuted}
+                />
                 <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: drawingMode ? 'auto' : 'none' }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} />
 
                 {/* Status Overlays */}
@@ -205,9 +242,57 @@ function BroadcastViewer({ roomId, onClose }) {
                             🟢 {stats.fps} FPS | {stats.bitrate} KB/s
                         </div>
                     )}
+                    <div style={{ padding: '6px 12px', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: '20px', color: 'white', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        Tracks: {trackCount > 0 ? (
+                            videoRef.current?.srcObject?.getTracks().map(t => (
+                                <span key={t.id} style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    borderRadius: '50%',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    backgroundColor: t.kind === 'video' ? '#0078d4' : '#107c10',
+                                    fontSize: '0.6rem',
+                                    fontWeight: 'bold'
+                                }}>
+                                    {t.kind === 'video' ? 'V' : 'A'}
+                                </span>
+                            ))
+                        ) : (
+                            <span style={{ color: '#ff6b6b' }}>None</span>
+                        )}
+                    </div>
                 </div>
 
-                <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: '10px' }}>
+                <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: '10px', zIndex: 1002 }}>
+                    <button
+                        onClick={() => {
+                            if (videoRef.current && videoRef.current.srcObject) {
+                                videoRef.current.play()
+                                    .then(() => setIsPlaying(true))
+                                    .catch(e => setStatus('Manual play failed: ' + e.message));
+                            }
+                        }}
+                        style={{ padding: '10px', backgroundColor: '#0078d4', border: 'none', borderRadius: '50%', cursor: 'pointer', color: 'white' }}
+                        title="Force Video Play"
+                    >
+                        ▶
+                    </button>
+                    <button
+                        onClick={() => window.location.reload()}
+                        style={{ padding: '10px', backgroundColor: '#444', border: 'none', borderRadius: '50%', cursor: 'pointer', color: 'white' }}
+                        title="Refresh Connection"
+                    >
+                        🔄
+                    </button>
+                    <button
+                        onClick={() => setIsRemoteMuted(!isRemoteMuted)}
+                        style={{ padding: '10px', backgroundColor: isRemoteMuted ? '#c50f1f' : '#107c10', border: 'none', borderRadius: '50%', cursor: 'pointer', color: 'white' }}
+                        title={isRemoteMuted ? "Unmute Broadcast" : "Mute Broadcast"}
+                    >
+                        {isRemoteMuted ? '🔈' : '🔊'}
+                    </button>
                     <button onClick={toggleMute} style={{ padding: '10px', backgroundColor: isMuted ? '#c50f1f' : '#107c10', border: 'none', borderRadius: '50%', cursor: 'pointer', color: 'white' }}>
                         {isMuted ? '🔇' : '🎤'}
                     </button>
@@ -235,10 +320,40 @@ function BroadcastViewer({ roomId, onClose }) {
                 </div>
 
                 {!isPlaying && (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-                        <button onClick={() => { videoRef.current?.play(); setIsPlaying(true); }} style={{ padding: '20px 40px', fontSize: '1.2rem', backgroundColor: '#0078d4', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                            ▶ Join Broadcast
-                        </button>
+                    <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        zIndex: 1000 // Highest z-index to ensure visibility
+                    }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <p style={{ color: 'white', marginBottom: '20px', fontSize: '1.2rem' }}>Broadcast ready</p>
+                            <button
+                                onClick={() => {
+                                    if (videoRef.current) {
+                                        videoRef.current.play()
+                                            .then(() => setIsPlaying(true))
+                                            .catch(err => console.error("Manual play failed:", err));
+                                    }
+                                    setIsPlaying(true);
+                                }}
+                                style={{
+                                    padding: '20px 40px',
+                                    fontSize: '1.5rem',
+                                    backgroundColor: '#0078d4',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 0 20px rgba(0,120,212,0.5)'
+                                }}
+                            >
+                                ▶ Join Broadcast
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>

@@ -358,6 +358,25 @@ function AppContent() {
         connectedPeers={connectedPeers}
       />
 
+      <div style={{ display: 'none' }}>
+        <BroadcastManager
+          ref={broadcastManagerRef}
+          onRemoteInteraction={handleRemoteInteraction}
+          isBroadcasting={isBroadcasting}
+          setIsBroadcasting={setIsBroadcasting}
+          isMuted={isMuted}
+          setIsMuted={setIsMuted}
+          chatMessages={chatMessages}
+          setChatMessages={setChatMessages}
+          isRecording={isRecording}
+          setIsRecording={setIsRecording}
+          isWebcamOn={isWebcamOn}
+          setIsWebcamOn={setIsWebcamOn}
+          connectedPeers={connectedPeers}
+          setConnectedPeers={setConnectedPeers}
+        />
+      </div>
+
       <button
         className="sidebar-toggle"
         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -449,22 +468,32 @@ function AppContent() {
                   <div style={{ maxWidth: '600px', margin: '0 auto' }}>
                     <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>Share your video stream with other devices in real-time.</p>
-                    <BroadcastManager
-                      ref={broadcastManagerRef}
-                      onRemoteInteraction={handleRemoteInteraction}
-                      isBroadcasting={isBroadcasting}
-                      setIsBroadcasting={setIsBroadcasting}
-                      isMuted={isMuted}
-                      setIsMuted={setIsMuted}
-                      chatMessages={chatMessages}
-                      setChatMessages={setChatMessages}
-                      isRecording={isRecording}
-                      setIsRecording={setIsRecording}
-                      isWebcamOn={isWebcamOn}
-                      setIsWebcamOn={setIsWebcamOn}
-                      connectedPeers={connectedPeers}
-                      setConnectedPeers={setConnectedPeers}
-                    />
+                    {/* UI Portal for BroadcastManager */}
+                    <div id="broadcast-manager-ui-portal"></div>
+                    {!isBroadcasting && (
+                      <div style={{
+                        padding: '20px',
+                        backgroundColor: 'var(--bg-secondary)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-color)',
+                        textAlign: 'center'
+                      }}>
+                        <p>Broadcast is not active.</p>
+                        <button
+                          onClick={() => broadcastManagerRef.current?.startBroadcast()}
+                          style={{
+                            padding: '10px 20px',
+                            backgroundColor: 'var(--accent-blue)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Start New Broadcast
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               } />

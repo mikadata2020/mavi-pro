@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import ReactDOM from 'react-dom';
 import Peer from 'peerjs';
 import ChatBox from './ChatBox';
 
@@ -26,8 +27,10 @@ const BroadcastManager = forwardRef(({
     const recordedChunks = useRef([]);
     const canvasMixerRef = useRef(null);
     const webcamStreamRef = useRef(null);
+    const screenVideoRef = useRef(null);
 
     useImperativeHandle(ref, () => ({
+        startBroadcast,
         toggleMute,
         sendChatMessage,
         stopBroadcast,
@@ -97,50 +100,137 @@ const BroadcastManager = forwardRef(({
 
             // 3. Setup Canvas Mixer for Screen + Webcam Overlay
             const canvas = document.createElement('canvas');
-            canvas.width = 1280; // Standard HD
+            canvas.width = 1280;
             canvas.height = 720;
+            canvas.style.position = 'fixed';
+            canvas.style.top = '-9999px';
+            canvas.style.left = '-9999px';
+            document.body.appendChild(canvas);
             canvasMixerRef.current = canvas;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { alpha: false });
+
+            // Initial draw to wake up stream
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const screenVideo = document.createElement('video');
             screenVideo.srcObject = screenStream;
-            screenVideo.play();
+            screenVideo.muted = true;
+            screenVideo.playsInline = true;
+            screenVideo.setAttribute('autoplay', '');
+            screenVideo.style.position = 'fixed';
+            screenVideo.style.top = '0';
+            screenVideo.style.left = '0';
+            screenVideo.style.width = '320px';
+            screenVideo.style.height = '180px';
+            screenVideo.style.opacity = '0.001';
+            screenVideo.style.pointerEvents = 'none';
+            screenVideo.style.zIndex = '-9999';
+            document.body.appendChild(screenVideo);
+            screenVideoRef.current = screenVideo;
 
-            const mixerInterval = setInterval(() => {
-                if (!screenStream.active) {
-                    clearInterval(mixerInterval);
-                    return;
-                }
-
-                // Draw Screen
-                ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
-
-                // Draw Webcam if active
-                if (webcamStreamRef.current && webcamStreamRef.current.active) {
-                    const webcamVideo = webcamStreamRef.current._videoElement;
-                    const w = 240;
-                    const h = 180;
-                    const x = canvas.width - w - 20;
-                    const y = canvas.height - h - 20;
-
-                    // Draw border/shadow for webcam
-                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                    ctx.fillRect(x - 2, y - 2, w + 4, h + 4);
-                    ctx.drawImage(webcamVideo, x, y, w, h);
-                }
-            }, 1000 / 30); // 30 FPS
+            try {
+                await screenVideo.play();
+                console.log('[BroadcastManager] Screen video active');
+            } catch (playErr) {
+                console.warn('[BroadcastManager] screenVideo.play() failed:', playErr);
+            }
 
             const mixedStream = canvas.captureStream(30);
+            const localStream = new MediaStream();
 
-            // 4. Combine with Audio
-            const combinedStream = new MediaStream();
-            mixedStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
-            if (audioStream) {
-                audioStream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+            // Add video track
+            const vTracks = mixedStream.getVideoTracks();
+            if (vTracks.length > 0) {
+                localStream.addTrack(vTracks[0]);
+                console.log('[BroadcastManager] Video track added to localStream');
+            } else {
+                console.error('[BroadcastManager] FAILED to capture video track from canvas');
             }
+
+            // Add audio tracks
+            if (audioStream) {
+                audioStream.getAudioTracks().forEach(t => {
+                    localStream.addTrack(t);
+                    console.log('[BroadcastManager] Audio track added to localStream');
+                });
+            }
+
+            // Ensure screenVideo is slightly visible/active to prevent browser throttling
+            screenVideo.style.opacity = '0.01';
+            screenVideo.style.width = '16px';
+            screenVideo.style.height = '16px';
+            screenVideo.style.zIndex = '-1'; // Behind everything but still "in the layout"
+
+            const renderMixer = () => {
+                if (!screenStream || !screenStream.active) return;
+
+                // Draw Screen
+                if (screenVideo.readyState >= 2) {
+                    ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+                } else {
+                    ctx.fillStyle = '#1e1e1e';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '24px Segoe UI, Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Preparing broadcast...', canvas.width / 2, canvas.height / 2);
+                }
+
+                // Draw Visual Heartbeat / LIVE Indicator with Timestamp
+                ctx.save();
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(20, 20, 180, 40);
+
+                // Pulsing dot
+                const alpha = 0.5 + Math.sin(Date.now() / 200) * 0.5;
+                ctx.fillStyle = `rgba(255, 0, 0, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(40, 40, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 18px Arial';
+                ctx.fillText('LIVE', 60, 46);
+
+                // Running timer to prove the stream is not a still image
+                const timeStr = new Date().toLocaleTimeString();
+                ctx.font = '14px monospace';
+                ctx.fillText(timeStr, 110, 45);
+                ctx.restore();
+
+                // Draw Webcam overlay
+                if (webcamStreamRef.current && webcamStreamRef.current.active) {
+                    const webcamVideo = webcamStreamRef.current._videoElement;
+                    if (webcamVideo && webcamVideo.readyState >= 2) {
+                        const w = 320;
+                        const h = 240;
+                        const x = canvas.width - w - 40;
+                        const y = canvas.height - h - 40;
+
+                        ctx.save();
+                        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                        ctx.shadowBlur = 15;
+                        ctx.strokeStyle = '#333';
+                        ctx.lineWidth = 4;
+                        ctx.strokeRect(x, y, w, h);
+                        ctx.drawImage(webcamVideo, x, y, w, h);
+                        ctx.restore();
+                    }
+                }
+            };
+
+            // Use setInterval in addition to RAF to ensure frames are generated even if tab is in background
+            const mixerInterval = setInterval(renderMixer, 1000 / 30);
+            const rafLoop = () => {
+                renderMixer();
+                if (screenStream.active) requestAnimationFrame(rafLoop);
+            };
+            requestAnimationFrame(rafLoop);
 
             // Handle stream stop
             screenStream.getVideoTracks()[0].onended = () => {
+                clearInterval(mixerInterval);
                 stopBroadcast();
             };
 
@@ -179,14 +269,23 @@ const BroadcastManager = forwardRef(({
             });
 
             peer.on('call', (call) => {
-                call.answer(combinedStream);
+                // Ensure all tracks in localStream are enabled before answering
+                localStream.getTracks().forEach(track => {
+                    track.enabled = true;
+                });
+
+                console.log('[BroadcastManager] Answering call from:', call.peer, 'Tracks being sent:', localStream.getTracks().map(t => `${t.kind}(${t.enabled})`).join(', '));
+
+                call.answer(localStream);
+
                 call.on('stream', (remoteStream) => {
+                    console.log('[BroadcastManager] Received remote stream from viewer:', call.peer, 'Tracks:', remoteStream.getTracks().length);
                     playViewerAudio(remoteStream, call.peer);
                 });
             });
 
             peerRef.current = peer;
-            window.localStream = combinedStream;
+            window.localStream = localStream;
             window.screenStream = screenStream;
             window.audioStream = audioStream;
 
@@ -294,6 +393,18 @@ const BroadcastManager = forwardRef(({
         }
         if (window.screenStream) window.screenStream.getTracks().forEach(t => t.stop());
         if (window.audioStream) window.audioStream.getTracks().forEach(t => t.stop());
+        if (screenVideoRef.current) {
+            screenVideoRef.current.pause();
+            screenVideoRef.current.srcObject = null;
+            if (screenVideoRef.current.parentNode) {
+                document.body.removeChild(screenVideoRef.current);
+            }
+            screenVideoRef.current = null;
+        }
+        if (canvasMixerRef.current && canvasMixerRef.current.parentNode) {
+            document.body.removeChild(canvasMixerRef.current);
+            canvasMixerRef.current = null;
+        }
 
         setPeerId('');
         setIsBroadcasting(false);
@@ -327,7 +438,7 @@ const BroadcastManager = forwardRef(({
         });
     };
 
-    return (
+    const uiContent = (
         <div style={{
             backgroundColor: '#2d2d2d',
             padding: '15px',
@@ -415,8 +526,45 @@ const BroadcastManager = forwardRef(({
                         </button>
                     </div>
 
-                    <div style={{ fontSize: '0.8rem', color: '#aaa' }}>
-                        👥 Connected Viewers: {connectedPeers.length}
+                    <div style={{ fontSize: '0.8rem', color: '#aaa', display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px', padding: '10px', backgroundColor: '#1e1e1e', borderRadius: '4px' }}>
+                        <div style={{ color: '#00ff00' }}>● LIVE</div>
+                        <span>👥 Viewers: {connectedPeers.length}</span>
+                        <span>📤 Sending: {window.localStream?.getTracks().map(t => (
+                            <span key={t.id} style={{
+                                marginLeft: '4px',
+                                padding: '1px 6px',
+                                borderRadius: '10px',
+                                backgroundColor: t.kind === 'video' ? '#0078d4' : '#107c10',
+                                color: 'white',
+                                fontSize: '0.7rem'
+                            }}>
+                                {t.kind.toUpperCase()} {t.enabled ? '✓' : '✗'}
+                            </span>
+                        ))}</span>
+                    </div>
+                    {/* Host Preview */}
+                    <div style={{ marginTop: '10px' }}>
+                        <div style={{ fontSize: '0.7rem', color: '#666', marginBottom: '4px' }}>MIXER PREVIEW</div>
+                        <canvas
+                            ref={(el) => {
+                                if (el && canvasMixerRef.current) {
+                                    const pCtx = el.getContext('2d');
+                                    const renderPreview = () => {
+                                        if (!isBroadcasting) return;
+                                        pCtx.drawImage(canvasMixerRef.current, 0, 0, el.width, el.height);
+                                        requestAnimationFrame(renderPreview);
+                                    };
+                                    renderPreview();
+                                }
+                            }}
+                            width={160}
+                            height={90}
+                            style={{
+                                backgroundColor: '#000',
+                                border: '1px solid #444',
+                                borderRadius: '4px'
+                            }}
+                        />
                     </div>
                 </div>
             )}
@@ -434,6 +582,13 @@ const BroadcastManager = forwardRef(({
             {/* Chat Box removed - using global BroadcastControls */}
         </div>
     );
+
+    const portalTarget = document.getElementById('broadcast-manager-ui-portal');
+    if (portalTarget) {
+        return ReactDOM.createPortal(uiContent, portalTarget);
+    }
+
+    return null;
 });
 
 export default BroadcastManager;
