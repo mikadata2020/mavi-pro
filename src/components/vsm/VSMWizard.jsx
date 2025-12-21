@@ -1,23 +1,40 @@
 import React, { useState } from 'react';
-import { X, ChevronRight, ChevronLeft, Plus, Trash2, Layout, User, Package, Truck, Info, CheckCircle2 } from 'lucide-react';
+import { X, ChevronRight, ChevronLeft, Plus, Trash2, Layout, User, Package, Truck, Info, CheckCircle2, Factory, Monitor, Settings2, ArrowRight, Wand2, Building2 } from 'lucide-react';
 import { VSMSymbols } from './vsm-constants';
 
 const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
     const [step, setStep] = useState(1);
     const [data, setData] = useState({
-        customer: { name: 'Customer', demand: 1000, shifts: 2, hoursPerShift: 8, packSize: 24, transportMode: VSMSymbols.TRUCK, hasWarehouse: false },
+        customer: {
+            name: 'Customer',
+            demand: 1000,
+            shifts: 2,
+            hoursPerShift: 8,
+            packSize: 24,
+            transportMode: VSMSymbols.TRUCK,
+            source: 'production' // 'production', 'warehouse', 'supplier'
+        },
         processes: [
-            { id: 1, name: 'Process 1', ct: 30, va: 30, co: 45, coUnit: 'min', workers: 1, performance: 90, yield: 99, uptime: 95, buffer: 'inventory', bufferQty: 500, isParallel: false, flowType: 'push', hasKaizen: false, needsGoSee: false, supplierIds: ['s1'], bom: {} }
+            { id: 1, name: 'Process 1', ct: 30, va: 30, co: 45, coUnit: 'min', workers: 1, performance: 90, yield: 99, uptime: 95, buffer: 'inventory', bufferQty: 500, isParallel: false, flowType: 'push', hasKaizen: false, needsGoSee: false, supplierIds: ['s1'], bom: {}, inputSource: 'previous', transportFromReceiving: null }
         ],
         suppliers: [
             { id: 's1', name: 'Main Supplier', frequency: 1, transportMode: VSMSymbols.TRUCK, hasWarehouse: false }
         ],
         logistics: { milkRunFrequency: 4, truckCapacity: 500 },
+        receiving: { enabled: false, transportMode: VSMSymbols.TROLLEY, amount: 1000 },
         infoFlow: 'electronic', // 'manual' or 'electronic'
         useHeijunka: false
     });
 
     if (!isOpen) return null;
+
+    const steps = [
+        { id: 1, title: currentLanguage === 'id' ? 'Pelanggan' : 'Customer', icon: <User size={18} />, desc: currentLanguage === 'id' ? 'Permintaan & Sumber' : 'Demand & Source' },
+        { id: 2, title: currentLanguage === 'id' ? 'Produksi' : 'Production', icon: <Factory size={18} />, desc: currentLanguage === 'id' ? 'Aliran Proses & Buffer' : 'Process Flow & Buffers' },
+        { id: 3, title: currentLanguage === 'id' ? 'Penerimaan' : 'Receiving', icon: <Package size={18} />, desc: currentLanguage === 'id' ? 'Gudang Masuk (Inbound)' : 'Inbound Warehouse' },
+        { id: 4, title: currentLanguage === 'id' ? 'Pemasok' : 'Suppliers', icon: <Truck size={18} />, desc: currentLanguage === 'id' ? 'Material & Logistik' : 'Material & Logistics' },
+        { id: 5, title: currentLanguage === 'id' ? 'Kontrol' : 'Control', icon: <Settings2 size={18} />, desc: currentLanguage === 'id' ? 'Aliran Informasi' : 'Information Flow' },
+    ];
 
     const updateCustomer = (field, value) => {
         setData(prev => ({ ...prev, customer: { ...prev.customer, [field]: value } }));
@@ -27,7 +44,7 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
         const newId = data.processes.length + 1;
         setData(prev => ({
             ...prev,
-            processes: [...prev.processes, { id: newId, name: `Process ${newId}`, ct: 30, va: 30, co: 45, coUnit: 'min', workers: 1, performance: 90, yield: 99, uptime: 95, buffer: 'inventory', bufferQty: 100, isParallel: false, flowType: 'push', hasKaizen: false, needsGoSee: false, supplierIds: [prev.suppliers[0]?.id], bom: {} }]
+            processes: [...prev.processes, { id: newId, name: `Process ${newId}`, ct: 30, va: 30, co: 45, coUnit: 'min', workers: 1, performance: 90, yield: 99, uptime: 95, buffer: 'inventory', bufferQty: 100, isParallel: false, flowType: 'push', hasKaizen: false, needsGoSee: false, supplierIds: [prev.suppliers[0]?.id], bom: {}, inputSource: 'previous', transportFromReceiving: null }]
         }));
     };
 
@@ -44,8 +61,6 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
             processes: prev.processes.filter(p => p.id !== id)
         }));
     };
-
-    const totalSteps = 4;
 
     const addSupplier = () => {
         const newId = `s${data.suppliers.length + 1}`;
@@ -80,14 +95,17 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
             case 1:
                 return (
                     <div className="wizard-step">
-                        <h3 style={stepTitleStyle}><User size={20} /> {currentLanguage === 'id' ? 'Pelanggan & Permintaan' : 'Customer & Demand'}</h3>
+                        <h3 style={stepTitleStyle}>{currentLanguage === 'id' ? 'Konfigurasi Pelanggan' : 'Customer Configuration'}</h3>
+                        <p style={stepDescStyle}>{currentLanguage === 'id' ? 'Tentukan siapa pelanggan Anda dan seberapa besar permintaan mereka.' : 'Define your customer and their demand requirements.'}</p>
+
                         <div style={inputGroupStyle}>
                             <label style={labelStyle}>{currentLanguage === 'id' ? 'Nama Pelanggan' : 'Customer Name'}</label>
-                            <input style={inputStyle} value={data.customer.name} onChange={e => updateCustomer('name', e.target.value)} />
+                            <input style={inputStyle} value={data.customer.name} onChange={e => updateCustomer('name', e.target.value)} placeholder="e.g. Toyota Motor Corp" />
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                             <div style={inputGroupStyle}>
-                                <label style={labelStyle}>{currentLanguage === 'id' ? 'Permintaan / Hari' : 'Demand / Day'}</label>
+                                <label style={labelStyle}>{currentLanguage === 'id' ? 'Permintaan / Hari (pcs)' : 'Demand / Day (pcs)'}</label>
                                 <input type="number" style={inputStyle} value={data.customer.demand} onChange={e => updateCustomer('demand', parseInt(e.target.value))} />
                             </div>
                             <div style={inputGroupStyle}>
@@ -95,7 +113,7 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
                                 <input type="number" style={inputStyle} value={data.customer.shifts} onChange={e => updateCustomer('shifts', parseInt(e.target.value))} />
                             </div>
                             <div style={inputGroupStyle}>
-                                <label style={labelStyle}>{currentLanguage === 'id' ? 'Jam / Shift' : 'Hours / Shift'}</label>
+                                <label style={labelStyle}>{currentLanguage === 'id' ? 'Jam per Shift' : 'Hours/Shift'}</label>
                                 <input type="number" style={inputStyle} value={data.customer.hoursPerShift} onChange={e => updateCustomer('hoursPerShift', parseInt(e.target.value))} />
                             </div>
                             <div style={inputGroupStyle}>
@@ -104,9 +122,34 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
                             </div>
                         </div>
 
-                        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px' }}>
-                            <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#0078d4' }}>🚚 {currentLanguage === 'id' ? 'Pengiriman ke Pelanggan' : 'Shipping to Customer'}</h4>
-                            <div style={{ display: 'flex', gap: '10px' }}>
+                        <div style={sectionCardStyle}>
+                            <h4 style={sectionTitleStyle}>🛒 {currentLanguage === 'id' ? 'Sumber Material Pelanggan' : 'Customer Material Source'}</h4>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                {[
+                                    { id: 'production', label: currentLanguage === 'id' ? 'Produksi' : 'Production', icon: <Factory size={20} />, desc: 'Direct flow' },
+                                    { id: 'warehouse', label: currentLanguage === 'id' ? 'Gudang FG' : 'FG Warehouse', icon: <Building2 size={20} />, desc: 'Stock points' },
+                                    { id: 'supplier', label: currentLanguage === 'id' ? 'Pemasok' : 'Supplier', icon: <Truck size={20} />, desc: 'Trading/Drop-ship' }
+                                ].map(option => (
+                                    <div
+                                        key={option.id}
+                                        onClick={() => updateCustomer('source', option.id)}
+                                        style={{
+                                            ...choiceStyle,
+                                            borderColor: data.customer.source === option.id ? '#0078d4' : '#444',
+                                            backgroundColor: data.customer.source === option.id ? 'rgba(0, 120, 212, 0.1)' : '#1e1e1e'
+                                        }}
+                                    >
+                                        <div style={{ color: data.customer.source === option.id ? '#0078d4' : '#888', marginBottom: '8px' }}>{option.icon}</div>
+                                        <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{option.label}</span>
+                                        <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>{option.desc}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{ ...sectionCardStyle, marginTop: '15px' }}>
+                            <h4 style={sectionTitleStyle}>🚚 {currentLanguage === 'id' ? 'Metode Pengiriman' : 'Shipping Method'}</h4>
+                            <div style={{ display: 'flex', gap: '12px' }}>
                                 {[
                                     { id: VSMSymbols.TRUCK, label: 'Truck', icon: '🚚' },
                                     { id: VSMSymbols.SEA, label: 'Sea', icon: '🚢' },
@@ -117,219 +160,194 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
                                         onClick={() => updateCustomer('transportMode', mode.id)}
                                         style={{
                                             ...choiceStyle,
-                                            padding: '8px',
                                             borderColor: data.customer.transportMode === mode.id ? '#0078d4' : '#444',
-                                            backgroundColor: data.customer.transportMode === mode.id ? '#1a365d' : '#2a2a2a'
+                                            backgroundColor: data.customer.transportMode === mode.id ? 'rgba(0, 120, 212, 0.1)' : '#1e1e1e'
                                         }}
                                     >
-                                        <span style={{ fontSize: '1.2rem' }}>{mode.icon}</span>
-                                        <span style={{ fontSize: '0.6rem' }}>{mode.label}</span>
+                                        <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>{mode.icon}</span>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: '500' }}>{mode.label}</span>
                                     </div>
                                 ))}
                             </div>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '15px', cursor: 'pointer', fontSize: '0.85rem' }}>
-                                <input type="checkbox" checked={data.customer.hasWarehouse} onChange={e => updateCustomer('hasWarehouse', e.target.checked)} />
-                                🏢 {currentLanguage === 'id' ? 'Gunakan Gudang Barang Jadi (WH FG)' : 'Use Finished Goods Warehouse (WH FG)'}
-                            </label>
                         </div>
                     </div>
                 );
             case 2:
                 return (
                     <div className="wizard-step">
-                        <h3 style={stepTitleStyle}><Layout size={20} /> {currentLanguage === 'id' ? 'Proses Produksi' : 'Manufacturing Processes'}</h3>
+                        <h3 style={stepTitleStyle}>{currentLanguage === 'id' ? 'Proses Produksi' : 'Production Processes'}</h3>
+                        <div style={alertInfoStyle}>
+                            <Info size={16} />
+                            <span>{currentLanguage === 'id' ? 'Masukkan proses berurutan dari Hulu (Supplier) ke Hilir (Customer).' : 'Enter processes in order from Upstream (Supplier) to Downstream (Customer).'}</span>
+                        </div>
+
                         <div style={{ padding: '5px' }}>
                             {data.processes.map((proc, idx) => (
-                                <div key={proc.id} style={{
-                                    ...processCardStyle,
-                                    marginLeft: proc.isParallel ? '40px' : '0',
-                                    borderLeftColor: proc.isParallel ? '#ff9900' : '#0078d4',
-                                    transition: 'all 0.3s ease'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '80%' }}>
-                                            {proc.isParallel && <span style={{ color: '#ff9900', fontSize: '0.8rem', fontWeight: 'bold' }}>↳ Parallel</span>}
-                                            <input style={{ ...inputStyle, fontWeight: 'bold', width: '100%', background: 'none', borderBottom: '1px solid #555' }} value={proc.name} onChange={e => updateProcess(proc.id, 'name', e.target.value)} />
+                                <React.Fragment key={proc.id}>
+                                    <div style={{
+                                        ...processCardStyle,
+                                        marginLeft: proc.isParallel ? '40px' : '0',
+                                        borderLeftColor: proc.isParallel ? '#ff9900' : '#0078d4',
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                                <div style={processBadgeStyle}>{idx + 1}</div>
+                                                <input
+                                                    style={ghostInputStyle}
+                                                    value={proc.name}
+                                                    onChange={e => updateProcess(proc.id, 'name', e.target.value)}
+                                                    placeholder="Process Name"
+                                                />
+                                            </div>
+                                            <button onClick={() => removeProcess(proc.id)} style={removeBtnStyle}><Trash2 size={16} /></button>
                                         </div>
-                                        <button onClick={() => removeProcess(proc.id)} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer' }}><X size={16} /></button>
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>CT (s)</label>
-                                            <input type="number" style={inputStyle} value={proc.ct} onChange={e => updateProcess(proc.id, 'ct', parseInt(e.target.value))} />
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                                            <div style={miniInputGroup}>
+                                                <label style={miniLabel}>CT (sec)</label>
+                                                <input type="number" style={miniInput} value={proc.ct} onChange={e => updateProcess(proc.id, 'ct', parseInt(e.target.value))} />
+                                            </div>
+                                            <div style={miniInputGroup}>
+                                                <label style={miniLabel}>CO ({proc.coUnit})</label>
+                                                <div style={{ display: 'flex', gap: '4px' }}>
+                                                    <input type="number" style={{ ...miniInput, flex: 1 }} value={proc.co} onChange={e => updateProcess(proc.id, 'co', parseInt(e.target.value))} />
+                                                    <select style={unitSelect} value={proc.coUnit} onChange={e => updateProcess(proc.id, 'coUnit', e.target.value)}>
+                                                        <option value="min">m</option>
+                                                        <option value="sec">s</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div style={miniInputGroup}>
+                                                <label style={miniLabel}>Uptime (%)</label>
+                                                <input type="number" style={miniInput} value={proc.uptime} onChange={e => updateProcess(proc.id, 'uptime', parseInt(e.target.value))} />
+                                            </div>
                                         </div>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>CO</label>
-                                            <div style={{ display: 'flex', gap: '2px' }}>
-                                                <input type="number" style={{ ...inputStyle, width: '40px', padding: '5px' }} value={proc.co} onChange={e => updateProcess(proc.id, 'co', parseInt(e.target.value))} />
-                                                <select style={{ ...inputStyle, width: '45px', padding: '2px', fontSize: '0.6rem' }} value={proc.coUnit} onChange={e => updateProcess(proc.id, 'coUnit', e.target.value)}>
-                                                    <option value="min">min</option>
-                                                    <option value="sec">sec</option>
+
+                                        <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #444', display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={miniLabel}>📦 Buffer:</span>
+                                                <select style={unitSelect} value={proc.buffer} onChange={e => updateProcess(proc.id, 'buffer', e.target.value)}>
+                                                    <option value="inventory">Inventory</option>
+                                                    <option value="supermarket">Supermarket</option>
+                                                    <option value="fifo">FIFO</option>
+                                                    <option value="none">None</option>
+                                                </select>
+                                                {proc.buffer !== 'none' && (
+                                                    <input type="number" style={{ ...miniInput, width: '50px' }} value={proc.bufferQty} onChange={e => updateProcess(proc.id, 'bufferQty', parseInt(e.target.value))} />
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <span style={miniLabel}>🔄 Flow:</span>
+                                                <select style={unitSelect} value={proc.flowType} onChange={e => updateProcess(proc.id, 'flowType', e.target.value)}>
+                                                    <option value="push">Push</option>
+                                                    <option value="pull">Pull</option>
                                                 </select>
                                             </div>
                                         </div>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>VA (s)</label>
-                                            <input type="number" style={{ ...inputStyle, borderColor: '#4caf50' }} value={proc.va} onChange={e => updateProcess(proc.id, 'va', parseInt(e.target.value))} title="Value Added Time" />
-                                        </div>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Op</label>
-                                            <input type="number" style={inputStyle} value={proc.workers} onChange={e => updateProcess(proc.id, 'workers', parseInt(e.target.value))} />
-                                        </div>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Yield (%)</label>
-                                            <input type="number" style={inputStyle} value={proc.yield} onChange={e => updateProcess(proc.id, 'yield', parseInt(e.target.value))} />
-                                        </div>
-                                        <div style={inputGroupStyle}>
-                                            <label style={labelStyle}>Uptime (%)</label>
-                                            <input type="number" style={inputStyle} value={proc.uptime} onChange={e => updateProcess(proc.id, 'uptime', parseInt(e.target.value))} />
-                                        </div>
                                     </div>
-                                    <div style={{ marginTop: '10px', display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: proc.hasKaizen ? '#ffeb3b' : '#aaa', fontSize: '0.8rem', fontWeight: proc.hasKaizen ? 'bold' : 'normal' }}>
-                                            <input type="checkbox" checked={proc.hasKaizen} onChange={e => updateProcess(proc.id, 'hasKaizen', e.target.checked)} />
-                                            💥 Kaizen
-                                        </label>
-
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: proc.needsGoSee ? '#00ffff' : '#aaa', fontSize: '0.8rem' }}>
-                                            <input type="checkbox" checked={proc.needsGoSee} onChange={e => updateProcess(proc.id, 'needsGoSee', e.target.checked)} />
-                                            👁️ Go See
-                                        </label>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                            <label style={{ ...labelStyle, marginBottom: 0 }}>Suppliers:</label>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                                                {data.suppliers.map(s => {
-                                                    const isSelected = proc.supplierIds?.includes(s.id);
-                                                    return (
-                                                        <button
-                                                            key={s.id}
-                                                            onClick={() => {
-                                                                const newIds = isSelected
-                                                                    ? proc.supplierIds.filter(id => id !== s.id)
-                                                                    : [...(proc.supplierIds || []), s.id];
-                                                                updateProcess(proc.id, 'supplierIds', newIds);
-                                                            }}
-                                                            style={{
-                                                                padding: '2px 8px',
-                                                                fontSize: '0.7rem',
-                                                                borderRadius: '10px',
-                                                                cursor: 'pointer',
-                                                                border: '1px solid ' + (isSelected ? '#0078d4' : '#555'),
-                                                                backgroundColor: isSelected ? '#1a365d' : '#2a2a2a',
-                                                                color: isSelected ? '#fff' : '#888'
-                                                            }}
-                                                        >
-                                                            {s.name}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
+                                    {idx < data.processes.length - 1 && !data.processes[idx + 1].isParallel && (
+                                        <div style={flowArrowContainer}>
+                                            <ArrowRight size={20} color="#555" />
                                         </div>
-
-                                        {/* BOM Detail Inputs */}
-                                        {proc.supplierIds?.length > 0 && (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', backgroundColor: '#222', padding: '8px', borderRadius: '4px', borderLeft: '2px solid #0078d4' }}>
-                                                <label style={{ ...labelStyle, fontSize: '0.65rem', marginBottom: 0, color: '#0078d4' }}>📦 Part / Component (BOM):</label>
-                                                {proc.supplierIds.map(sid => {
-                                                    const sName = data.suppliers.find(s => s.id === sid)?.name || sid;
-                                                    return (
-                                                        <div key={sid} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <span style={{ fontSize: '0.65rem', color: '#888', width: '45px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{sName}:</span>
-                                                            <input
-                                                                style={{ ...inputStyle, padding: '2px 5px', fontSize: '0.7rem', height: 'auto', flex: 1 }}
-                                                                placeholder="Part Name"
-                                                                value={proc.bom?.[sid]?.part || ''}
-                                                                onChange={e => {
-                                                                    const newBom = { ...(proc.bom || {}), [sid]: { ...(proc.bom?.[sid] || {}), part: e.target.value } };
-                                                                    updateProcess(proc.id, 'bom', newBom);
-                                                                }}
-                                                            />
-                                                            <input
-                                                                type="number"
-                                                                style={{ ...inputStyle, padding: '2px 5px', fontSize: '0.7rem', height: 'auto', width: '35px' }}
-                                                                placeholder="LT"
-                                                                value={proc.bom?.[sid]?.leadTime || ''}
-                                                                onChange={e => {
-                                                                    const newBom = { ...(proc.bom || {}), [sid]: { ...(proc.bom?.[sid] || {}), leadTime: e.target.value } };
-                                                                    updateProcess(proc.id, 'bom', newBom);
-                                                                }}
-                                                            />
-                                                            <span style={{ fontSize: '0.6rem', color: '#666' }}>d</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-
-                                        <div style={{ height: '15px', width: '1px', backgroundColor: '#444' }}></div>
-
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <label style={{ ...labelStyle, marginBottom: 0 }}>Buffer:</label>
-                                            <select style={{ ...inputStyle, padding: '5px' }} value={proc.buffer} onChange={e => updateProcess(proc.id, 'buffer', e.target.value)}>
-                                                <option value="inventory">Inventory</option>
-                                                <option value="supermarket">Supermarket</option>
-                                                <option value="fifo">FIFO</option>
-                                                <option value="safety">Safety Stock</option>
-                                                <option value="none">None</option>
-                                            </select>
-                                            {proc.buffer !== 'none' && (
-                                                <input type="number" style={{ ...inputStyle, width: '60px', padding: '5px' }} value={proc.bufferQty} onChange={e => updateProcess(proc.id, 'bufferQty', parseInt(e.target.value))} placeholder="Qty" />
-                                            )}
-                                        </div>
-
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <label style={{ ...labelStyle, marginBottom: 0 }}>Flow:</label>
-                                            <select style={{ ...inputStyle, padding: '5px' }} value={proc.flowType} onChange={e => updateProcess(proc.id, 'flowType', e.target.value)}>
-                                                <option value="push">Push (Arrow)</option>
-                                                <option value="pull">Pull (Kanban)</option>
-                                            </select>
-                                        </div>
-
-                                        {idx > 0 && (
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
-                                                <input type="checkbox" checked={proc.isParallel} onChange={e => updateProcess(proc.id, 'isParallel', e.target.checked)} />
-                                                Parallel to Prev
-                                            </label>
-                                        )}
-                                    </div>
-                                </div>
+                                    )}
+                                </React.Fragment>
                             ))}
-                            <button onClick={addProcess} style={addBtnStyle}><Plus size={16} /> {currentLanguage === 'id' ? 'Tambah Proses' : 'Add Process'}</button>
+                            <button onClick={addProcess} style={addBtnStyle}><Plus size={16} /> {currentLanguage === 'id' ? 'Tambah Proses Baru' : 'Add New Process'}</button>
                         </div>
                     </div>
                 );
             case 3:
                 return (
                     <div className="wizard-step">
-                        <h3 style={stepTitleStyle}><Truck size={20} /> {currentLanguage === 'id' ? 'Pemasok & Logistik' : 'Suppliers & Logistics'}</h3>
+                        <h3 style={stepTitleStyle}>{currentLanguage === 'id' ? 'Gudang Penerimaan (Receiving)' : 'Receiving Warehouse'}</h3>
+                        <p style={stepDescStyle}>{currentLanguage === 'id' ? 'Konfigurasi area penerimaan material dari pemasok sebelum masuk ke produksi.' : 'Configure the material receiving area before it enters production.'}</p>
 
-                        <div style={{ maxHeight: '300px', overflowY: 'auto', paddingRight: '5px' }}>
-                            {data.suppliers.map((supp, sIdx) => (
-                                <div key={supp.id} style={{ ...processCardStyle, borderLeftColor: '#4caf50', marginBottom: '15px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                        <input style={{ ...inputStyle, fontWeight: 'bold', width: '80%', background: 'none', borderBottom: '1px solid #555' }} value={supp.name} onChange={e => updateSupplier(supp.id, 'name', e.target.value)} placeholder="Supplier Name" />
-                                        <button onClick={() => removeSupplier(supp.id)} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer' }}><X size={16} /></button>
+                        <div
+                            style={{
+                                ...sectionCardStyle,
+                                cursor: 'pointer',
+                                borderLeft: '4px solid ' + (data.receiving.enabled ? '#0078d4' : '#444'),
+                                marginBottom: '25px'
+                            }}
+                            onClick={() => setData(prev => ({ ...prev, receiving: { ...prev.receiving, enabled: !prev.receiving.enabled } }))}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <input type="checkbox" checked={data.receiving.enabled} readOnly />
+                                <div>
+                                    <div style={{ fontWeight: 'bold' }}>{currentLanguage === 'id' ? 'Gunakan Gudang Penerimaan?' : 'Use Receiving Warehouse?'}</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#888' }}>{currentLanguage === 'id' ? 'Menambahkan buffer stock awal setelah material datang dari supplier.' : 'Adds an initial buffer stock after material arrives from supplier.'}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {data.receiving.enabled && (
+                            <>
+                                <div style={inputGroupStyle}>
+                                    <label style={labelStyle}>{currentLanguage === 'id' ? 'Jumlah Stok Awal (pcs)' : 'Initial Stock Amount (pcs)'}</label>
+                                    <input type="number" style={inputStyle} value={data.receiving.amount} onChange={e => setData(prev => ({ ...prev, receiving: { ...prev.receiving, amount: parseInt(e.target.value) } }))} />
+                                </div>
+
+                                <div style={sectionCardStyle}>
+                                    <h4 style={sectionTitleStyle}>🚜 {currentLanguage === 'id' ? 'Metode Pemindahan ke Produksi' : 'Internal Transport to Production'}</h4>
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        {[
+                                            { id: VSMSymbols.TROLLEY, label: currentLanguage === 'id' ? 'Trolley' : 'Trolley', icon: '🛒' },
+                                            { id: VSMSymbols.FORKLIFT, label: currentLanguage === 'id' ? 'Forklift' : 'Forklift', icon: '🚜' }
+                                        ].map(mode => (
+                                            <div
+                                                key={mode.id}
+                                                onClick={() => setData(prev => ({ ...prev, receiving: { ...prev.receiving, transportMode: mode.id } }))}
+                                                style={{
+                                                    ...choiceStyle,
+                                                    borderColor: data.receiving.transportMode === mode.id ? '#0078d4' : '#444',
+                                                    backgroundColor: data.receiving.transportMode === mode.id ? 'rgba(0, 120, 212, 0.1)' : '#1e1e1e'
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '1.5rem', marginBottom: '4px' }}>{mode.icon}</span>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: '500' }}>{mode.label}</span>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '15px' }}>
+                                </div>
+                            </>
+                        )}
+
+                        {!data.receiving.enabled && (
+                            <div style={alertInfoStyle}>
+                                <Info size={16} />
+                                <span>{currentLanguage === 'id' ? 'Material akan dikirim langsung dari supplier ke proses produksi pertama.' : 'Material will be delivered directly from supplier to the first production process.'}</span>
+                            </div>
+                        )}
+                    </div>
+                );
+            case 4:
+                return (
+                    <div className="wizard-step">
+                        <h3 style={stepTitleStyle}>{currentLanguage === 'id' ? 'Pemasok & Material' : 'Suppliers & Raw Material'}</h3>
+                        <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '10px' }}>
+                            {data.suppliers.map((supp, sIdx) => (
+                                <div key={supp.id} style={{ ...processCardStyle, borderLeftColor: '#4caf50' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                        <input style={ghostInputStyle} value={supp.name} onChange={e => updateSupplier(supp.id, 'name', e.target.value)} />
+                                        <button onClick={() => removeSupplier(supp.id)} style={removeBtnStyle}><Trash2 size={16} /></button>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                         <div style={inputGroupStyle}>
                                             <label style={labelStyle}>Freq (x/day)</label>
                                             <input type="number" style={inputStyle} value={supp.frequency} onChange={e => updateSupplier(supp.id, 'frequency', parseInt(e.target.value))} />
                                         </div>
                                         <div style={inputGroupStyle}>
                                             <label style={labelStyle}>Transport</label>
-                                            <div style={{ display: 'flex', gap: '5px' }}>
+                                            <div style={{ display: 'flex', gap: '8px' }}>
                                                 {[VSMSymbols.TRUCK, VSMSymbols.SEA, VSMSymbols.AIR].map(m => (
                                                     <button
                                                         key={m}
                                                         onClick={() => updateSupplier(supp.id, 'transportMode', m)}
                                                         style={{
-                                                            padding: '5px',
-                                                            background: supp.transportMode === m ? '#1a365d' : '#333',
-                                                            border: '1px solid ' + (supp.transportMode === m ? '#0078d4' : '#555'),
-                                                            borderRadius: '4px',
-                                                            cursor: 'pointer',
-                                                            fontSize: '1.2rem'
+                                                            ...choiceStyle,
+                                                            padding: '8px',
+                                                            borderColor: supp.transportMode === m ? '#4caf50' : '#444',
+                                                            backgroundColor: supp.transportMode === m ? 'rgba(76, 175, 80, 0.1)' : '#1e1e1e'
                                                         }}
                                                     >
                                                         {m === VSMSymbols.TRUCK ? '🚚' : m === VSMSymbols.SEA ? '🚢' : '✈️'}
@@ -338,69 +356,75 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
                                             </div>
                                         </div>
                                     </div>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', cursor: 'pointer', fontSize: '0.8rem', color: '#888' }}>
+                                    <label style={checkboxLabelStyle}>
                                         <input type="checkbox" checked={supp.hasWarehouse} onChange={e => updateSupplier(supp.id, 'hasWarehouse', e.target.checked)} />
-                                        🏢 {currentLanguage === 'id' ? 'Gunakan Gudang Material (WH RM)' : 'Use Raw Material Warehouse (WH RM)'}
+                                        🏢 {currentLanguage === 'id' ? 'Gunakan Gudang Material (WH RM)' : 'Use Material Warehouse (WH RM)'}
                                     </label>
                                 </div>
                             ))}
                         </div>
                         <button onClick={addSupplier} style={addBtnStyle}><Plus size={16} /> {currentLanguage === 'id' ? 'Tambah Pemasok' : 'Add Supplier'}</button>
-
-                        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#333', borderRadius: '8px' }}>
-                            <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#ff9900' }}>📦 {currentLanguage === 'id' ? 'Kapasitas Global' : 'Global Logistics'}</h4>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                                <div style={inputGroupStyle}>
-                                    <label style={labelStyle}>{currentLanguage === 'id' ? 'Frekuensi Milk Run' : 'Milk Run Frequency'}</label>
-                                    <input type="number" style={inputStyle} value={data.logistics.milkRunFrequency} onChange={e => setData(prev => ({ ...prev, logistics: { ...prev.logistics, milkRunFrequency: parseInt(e.target.value) } }))} />
-                                </div>
-                                <div style={inputGroupStyle}>
-                                    <label style={labelStyle}>{currentLanguage === 'id' ? 'Kapasitas Logistik' : 'Logistics Capacity'}</label>
-                                    <input type="number" style={inputStyle} value={data.logistics.truckCapacity} onChange={e => setData(prev => ({ ...prev, logistics: { ...prev.logistics, truckCapacity: parseInt(e.target.value) } }))} />
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 );
-            case 4:
+            case 5:
                 return (
                     <div className="wizard-step">
-                        <h3 style={stepTitleStyle}><Info size={20} /> {currentLanguage === 'id' ? 'Aliran Informasi & Kontrol' : 'Information Flow & Control'}</h3>
-                        <div style={inputGroupStyle}>
-                            <label style={labelStyle}>{currentLanguage === 'id' ? 'Tipe Aliran Informasi' : 'Information Flow Type'}</label>
+                        <h3 style={stepTitleStyle}>{currentLanguage === 'id' ? 'Kontrol & Aliran Informasi' : 'Control & Info Flow'}</h3>
+
+                        <div style={sectionCardStyle}>
+                            <label style={labelStyle}>{currentLanguage === 'id' ? 'Metode Komunikasi' : 'Communication Method'}</label>
                             <div style={{ display: 'flex', gap: '15px', marginTop: '10px' }}>
                                 <div
                                     onClick={() => setData(prev => ({ ...prev, infoFlow: 'manual' }))}
-                                    style={{ ...choiceStyle, borderColor: data.infoFlow === 'manual' ? '#0078d4' : '#444' }}
+                                    style={{
+                                        ...choiceStyle,
+                                        padding: '15px',
+                                        borderColor: data.infoFlow === 'manual' ? '#0078d4' : '#444',
+                                        backgroundColor: data.infoFlow === 'manual' ? 'rgba(0, 120, 212, 0.1)' : '#1e1e1e'
+                                    }}
                                 >
                                     <strong>Physical</strong>
-                                    <span style={{ fontSize: '0.7rem', color: '#888' }}>Kanban/Fax/Manual</span>
+                                    <span style={{ fontSize: '0.7rem', color: '#888' }}>Kanban/Manual</span>
                                 </div>
                                 <div
                                     onClick={() => setData(prev => ({ ...prev, infoFlow: 'electronic' }))}
-                                    style={{ ...choiceStyle, borderColor: data.infoFlow === 'electronic' ? '#0078d4' : '#444' }}
+                                    style={{
+                                        ...choiceStyle,
+                                        padding: '15px',
+                                        borderColor: data.infoFlow === 'electronic' ? '#0078d4' : '#444',
+                                        backgroundColor: data.infoFlow === 'electronic' ? 'rgba(0, 120, 212, 0.1)' : '#1e1e1e'
+                                    }}
                                 >
                                     <strong>Electronic</strong>
-                                    <span style={{ fontSize: '0.7rem', color: '#888' }}>ERP/MRP/Digital</span>
+                                    <span style={{ fontSize: '0.7rem', color: '#888' }}>ERP/Digital</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div style={{ marginTop: '15px', display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#2d2d2d', padding: '10px', borderRadius: '8px', cursor: 'pointer', border: '1px solid ' + (data.useHeijunka ? '#0078d4' : '#444') }} onClick={() => setData(prev => ({ ...prev, useHeijunka: !prev.useHeijunka }))}>
-                            <input type="checkbox" checked={data.useHeijunka} readOnly />
-                            <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>📊 Use Heijunka Box? (Load Leveling)</div>
-                                <div style={{ fontSize: '0.7rem', color: '#888' }}>Distribute production volume evenly. Recommended for Lean Future State.</div>
+                        <div
+                            style={{
+                                ...sectionCardStyle,
+                                cursor: 'pointer',
+                                borderLeft: '4px solid ' + (data.useHeijunka ? '#0078d4' : '#444')
+                            }}
+                            onClick={() => setData(prev => ({ ...prev, useHeijunka: !prev.useHeijunka }))}
+                        >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <input type="checkbox" checked={data.useHeijunka} readOnly />
+                                <div>
+                                    <div style={{ fontWeight: 'bold' }}>📊 Use Heijunka Box?</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#888' }}>Distribute production volume evenly for Lean Future State.</div>
+                                </div>
                             </div>
                         </div>
 
-                        <div style={{ marginTop: '30px', textAlign: 'center', padding: '20px' }}>
-                            <div style={{ fontSize: '3rem', color: '#4CAF50', marginBottom: '10px' }}><CheckCircle2 size={60} /></div>
-                            <h4>{currentLanguage === 'id' ? 'Siap Generate VSM!' : 'Ready to Generate VSM!'}</h4>
-                            <p style={{ fontSize: '0.8rem', color: '#888' }}>
+                        <div style={{ marginTop: '30px', textAlign: 'center', padding: '30px', backgroundColor: 'rgba(76, 175, 80, 0.05)', borderRadius: '12px', border: '1px dashed #4caf50' }}>
+                            <CheckCircle2 size={48} color="#4caf50" style={{ marginBottom: '15px' }} />
+                            <h4 style={{ margin: 0 }}>{currentLanguage === 'id' ? 'Siap Generate!' : 'Ready to Generate!'}</h4>
+                            <p style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '8px' }}>
                                 {currentLanguage === 'id'
-                                    ? 'Kami akan menyusun diagram secara otomatis dari hulu ke hilir.'
-                                    : 'We will automatically arrange the diagram from upstream to downstream.'}
+                                    ? 'VSM akan disusun dari Hulu (Supplier) ke Hilir (Customer).'
+                                    : 'VSM will be arranged from Upstream (Supplier) to Downstream (Customer).'}
                             </p>
                         </div>
                     </div>
@@ -413,75 +437,139 @@ const VSMWizard = ({ isOpen, onClose, onGenerate, currentLanguage }) => {
     return (
         <div style={overlayStyle}>
             <div style={modalStyle}>
-                {/* Header */}
-                <div style={headerStyle}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <SparklesIcon color="#ff9900" />
-                        <h2 style={{ margin: 0, fontSize: '1.2rem' }}>{currentLanguage === 'id' ? 'VSM Magic Wizard' : 'VSM Magic Wizard'}</h2>
+                {/* Dashboard Sidebar Stepper */}
+                <div style={sidebarStyle}>
+                    <div style={brandStyle}>
+                        <div style={logoStyle}><Package size={20} /></div>
+                        <div>
+                            <div style={{ fontWeight: '900', fontSize: '0.9rem', color: '#fff' }}>MAVi VSM</div>
+                            <div style={{ fontSize: '0.65rem', color: '#0078d4', fontWeight: 'bold' }}>MAGIC WIZARD</div>
+                        </div>
                     </div>
-                    <button onClick={onClose} style={closeBtnStyle}><X size={20} /></button>
+
+                    <div style={stepperContainerStyle}>
+                        {steps.map((s, idx) => (
+                            <div key={s.id} style={stepItemWrapper}>
+                                <div
+                                    style={{
+                                        ...stepItemStyle,
+                                        color: step === s.id ? '#fff' : '#888',
+                                        backgroundColor: step === s.id ? 'rgba(255,255,255,0.05)' : 'transparent',
+                                        paddingLeft: '10px',
+                                        borderRadius: '8px',
+                                        marginRight: '-10px'
+                                    }}
+                                    onClick={() => setStep(s.id)}
+                                >
+                                    <div style={{
+                                        ...stepIconStyle,
+                                        backgroundColor: step === s.id ? '#0078d4' : '#2a2a2a',
+                                        borderColor: step === s.id ? '#0078d4' : '#444',
+                                    }}>
+                                        {s.icon}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{s.title}</div>
+                                        <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>{s.desc}</div>
+                                    </div>
+                                    {step > s.id && <CheckCircle2 size={14} color="#4caf50" style={{ marginRight: '10px' }} />}
+                                </div>
+                                {idx < steps.length - 1 && <div style={{ ...connectorLine, backgroundColor: step > s.id ? '#4caf50' : '#444' }} />}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={sidebarFooterStyle}>
+                        <button onClick={onClose} style={cancelBtnStyle}>Cancel</button>
+                    </div>
                 </div>
 
-                {/* Progress Bar */}
-                <div style={progressContainerStyle}>
-                    {[1, 2, 3, 4].map(s => (
-                        <div key={s} style={{
-                            ...progressItemStyle,
-                            backgroundColor: s <= step ? '#0078d4' : '#444'
-                        }} />
-                    ))}
-                </div>
+                {/* Main Content Area */}
+                <div style={mainContentStyle}>
+                    <div style={headerActionStyle}>
+                        <button onClick={onClose} style={closeBtnStyle}><X size={20} /></button>
+                    </div>
 
-                {/* Content */}
-                <div style={contentStyle}>
-                    {renderStep()}
-                </div>
+                    <div style={scrollContentStyle}>
+                        {renderStep()}
+                    </div>
 
-                {/* Footer */}
-                <div style={footerStyle}>
-                    <button
-                        onClick={() => setStep(s => Math.max(1, s - 1))}
-                        disabled={step === 1}
-                        style={{ ...navBtnStyle, opacity: step === 1 ? 0.3 : 1 }}
-                    >
-                        <ChevronLeft size={18} /> {currentLanguage === 'id' ? 'Kembali' : 'Back'}
-                    </button>
-                    {step < totalSteps ? (
-                        <button onClick={() => setStep(s => Math.min(totalSteps, s + 1))} style={navBtnStyle}>
-                            {currentLanguage === 'id' ? 'Lanjut' : 'Next'} <ChevronRight size={18} />
+                    <div style={footerStyle}>
+                        <button
+                            onClick={() => setStep(s => Math.max(1, s - 1))}
+                            disabled={step === 1}
+                            style={{ ...navBtnStyle, visibility: step === 1 ? 'hidden' : 'visible' }}
+                        >
+                            <ChevronLeft size={18} /> {currentLanguage === 'id' ? 'Kembali' : 'Back'}
                         </button>
-                    ) : (
-                        <button onClick={handleGenerate} style={generateBtnStyle}>
-                            {currentLanguage === 'id' ? 'Generate VSM' : 'Generate VSM'}
-                        </button>
-                    )}
+
+                        {step < steps.length ? (
+                            <button onClick={() => setStep(s => s + 1)} style={primaryBtnStyle}>
+                                {currentLanguage === 'id' ? 'Lanjut' : 'Next Step'} <ChevronRight size={18} />
+                            </button>
+                        ) : (
+                            <button onClick={handleGenerate} style={generateBtnStyle}>
+                                <Wand2 size={18} /> {currentLanguage === 'id' ? 'Hasilkan VSM' : 'Generate VSM'}
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
     );
 };
 
-const SparklesIcon = ({ color }) => (
-    <div style={{ color }}><Package size={24} /></div>
-);
-
 // Styles
-const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 300, display: 'flex', justifyContent: 'center', alignItems: 'center' };
-const modalStyle = { width: '600px', maxHeight: '90vh', backgroundColor: '#1e1e1e', borderRadius: '12px', border: '1px solid #444', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' };
-const headerStyle = { padding: '20px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#252526', flexShrink: 0 };
-const closeBtnStyle = { background: 'none', border: 'none', color: '#aaa', cursor: 'pointer' };
-const progressContainerStyle = { display: 'flex', height: '4px', flexShrink: 0 };
-const progressItemStyle = { flex: 1, transition: 'background-color 0.3s ease' };
-const contentStyle = { padding: '30px', flex: 1, overflowY: 'auto', color: '#eee' };
-const footerStyle = { padding: '20px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'space-between', backgroundColor: '#252526', flexShrink: 0 };
-const stepTitleStyle = { margin: '0 0 20px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '10px', color: '#0078d4' };
-const inputGroupStyle = { marginBottom: '15px', display: 'flex', flexDirection: 'column' };
-const labelStyle = { fontSize: '0.8rem', color: '#888', marginBottom: '5px' };
-const inputStyle = { padding: '10px', backgroundColor: '#333', border: '1px solid #444', borderRadius: '6px', color: '#fff', fontSize: '0.9rem', outline: 'none' };
-const processCardStyle = { backgroundColor: '#2a2a2a', padding: '15px', borderRadius: '8px', marginBottom: '15px', borderLeft: '4px solid #0078d4' };
-const addBtnStyle = { width: '100%', padding: '10px', backgroundColor: '#333', border: '1px dashed #555', borderRadius: '8px', color: '#aaa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px' };
-const navBtnStyle = { display: 'flex', alignItems: 'center', gap: '5px', padding: '10px 20px', backgroundColor: '#444', border: 'none', borderRadius: '6px', color: '#fff', cursor: 'pointer', fontWeight: 'bold' };
-const generateBtnStyle = { ...navBtnStyle, backgroundColor: '#0078d4' };
-const choiceStyle = { flex: 1, padding: '15px', backgroundColor: '#2a2a2a', border: '2px solid #444', borderRadius: '8px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'all 0.2s' };
+const overlayStyle = { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', justifyContent: 'center', alignItems: 'center', backdropFilter: 'blur(8px)' };
+const modalStyle = { width: '850px', height: '600px', backgroundColor: '#181818', borderRadius: '16px', overflow: 'hidden', display: 'flex', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.5)', border: '1px solid #333' };
+
+const sidebarStyle = { width: '240px', backgroundColor: '#111', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', padding: '25px' };
+const brandStyle = { display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '40px' };
+const logoStyle = { width: '36px', height: '36px', backgroundColor: '#0078d4', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' };
+
+const stepperContainerStyle = { flex: 1 };
+const stepItemWrapper = { display: 'flex', flexDirection: 'column', position: 'relative', marginBottom: '8px' };
+const stepItemStyle = { display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 0', cursor: 'pointer', transition: 'all 0.2s' };
+const stepIconStyle = { width: '32px', height: '32px', borderRadius: '10px', border: '2px solid transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' };
+const connectorLine = { width: '2px', height: '12px', marginLeft: '15px', transition: 'all 0.3s' };
+
+const mainContentStyle = { flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', backgroundColor: '#181818' };
+const scrollContentStyle = { flex: 1, padding: '40px', overflowY: 'auto' };
+const footerStyle = { padding: '20px 40px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1c1c1c' };
+
+const stepTitleStyle = { margin: '0 0 10px 0', fontSize: '1.4rem', color: '#fff' };
+const stepDescStyle = { margin: '0 0 30px 0', fontSize: '0.9rem', color: '#888' };
+
+const inputGroupStyle = { marginBottom: '20px' };
+const labelStyle = { display: 'block', fontSize: '0.8rem', color: '#aaa', marginBottom: '8px', fontWeight: '500' };
+const inputStyle = { width: '100%', padding: '12px', backgroundColor: '#222', border: '1px solid #333', borderRadius: '8px', color: '#fff', outline: 'none', transition: 'border-color 0.2s' };
+
+const sectionCardStyle = { backgroundColor: '#222', padding: '20px', borderRadius: '12px', border: '1px solid #333' };
+const sectionTitleStyle = { margin: '0 0 15px 0', fontSize: '0.9rem', color: '#ccc' };
+
+const choiceStyle = { flex: 1, padding: '15px 10px', border: '2px solid #333', borderRadius: '10px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', transition: 'all 0.2s', textAlign: 'center' };
+const checkboxLabelStyle = { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '20px', fontSize: '0.85rem', color: '#ccc', cursor: 'pointer' };
+
+const processCardStyle = { backgroundColor: '#1e1e1e', padding: '16px', borderRadius: '12px', border: '1px solid #333', marginBottom: '10px', position: 'relative' };
+const processBadgeStyle = { width: '24px', height: '24px', backgroundColor: '#0078d4', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 'bold' };
+const ghostInputStyle = { background: 'none', border: 'none', color: '#fff', fontSize: '1rem', fontWeight: 'bold', outline: 'none', flex: 1 };
+const removeBtnStyle = { background: 'none', border: 'none', color: '#555', cursor: 'pointer', padding: '5px' };
+
+const miniInputGroup = { display: 'flex', flexDirection: 'column', gap: '4px' };
+const miniLabel = { fontSize: '0.65rem', color: '#888' };
+const miniInput = { padding: '8px', backgroundColor: '#111', border: '1px solid #333', borderRadius: '6px', color: '#fff', fontSize: '0.8rem' };
+const unitSelect = { ...miniInput, padding: '8px 4px' };
+
+const flowArrowContainer = { display: 'flex', justifyContent: 'center', padding: '8px 0' };
+const alertInfoStyle = { display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', backgroundColor: 'rgba(0, 120, 212, 0.1)', borderRadius: '8px', fontSize: '0.8rem', color: '#4fc3f7', marginBottom: '20px' };
+
+const addBtnStyle = { width: '100%', padding: '12px', backgroundColor: 'transparent', border: '1px dashed #444', borderRadius: '10px', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px' };
+const navBtnStyle = { padding: '10px 20px', background: 'none', border: 'none', color: '#888', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' };
+const primaryBtnStyle = { padding: '12px 24px', backgroundColor: '#0078d4', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' };
+const generateBtnStyle = { ...primaryBtnStyle, backgroundColor: '#4caf50' };
+const cancelBtnStyle = { width: '100%', padding: '10px', background: 'none', border: '1px solid #333', borderRadius: '8px', color: '#888', cursor: 'pointer' };
+const sidebarFooterStyle = { marginTop: 'auto' };
+const headerActionStyle = { position: 'absolute', top: '20px', right: '25px', zIndex: 10 };
+const closeBtnStyle = { background: 'none', border: 'none', color: '#555', cursor: 'pointer' };
 
 export default VSMWizard;

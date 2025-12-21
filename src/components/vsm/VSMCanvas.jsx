@@ -54,6 +54,8 @@ const VSMCanvasContent = () => {
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [selectedNode, setSelectedNode] = useState(null);
     const [selectedEdge, setSelectedEdge] = useState(null);
+    const [edgeMenuPosition, setEdgeMenuPosition] = useState(null);
+    const [activeEdgeType, setActiveEdgeType] = useState('material'); // material, information, electronic
     const [customLibrary, setCustomLibrary] = useState([]);
     const { screenToFlowPosition, getNodes, setNodes: setReactFlowNodes } = useReactFlow();
 
@@ -345,6 +347,37 @@ const VSMCanvasContent = () => {
         };
     }, [nodes, edges]);
 
+    // Update edge styling when selected
+    useEffect(() => {
+        if (selectedEdge) {
+            setEdges((eds) =>
+                eds.map((edge) => {
+                    if (edge.id === selectedEdge.id) {
+                        return {
+                            ...edge,
+                            animated: true,
+                            style: { ...edge.style, strokeWidth: 3, stroke: '#0078d4' }
+                        };
+                    }
+                    return {
+                        ...edge,
+                        animated: false,
+                        style: { ...edge.style, strokeWidth: 2, stroke: edge.style?.stroke || '#fff' }
+                    };
+                })
+            );
+        } else {
+            // Reset all edges to default
+            setEdges((eds) =>
+                eds.map((edge) => ({
+                    ...edge,
+                    animated: false,
+                    style: { ...edge.style, strokeWidth: 2, stroke: edge.style?.stroke || '#fff' }
+                }))
+            );
+        }
+    }, [selectedEdge]);
+
     const recordHistory = useCallback(() => {
         if (isUndoing.current) return;
         pushToHistory({ nodes, edges });
@@ -353,26 +386,39 @@ const VSMCanvasContent = () => {
     // --- Interaction Handlers ---
 
     const onConnect = useCallback((params) => {
+        let edgeStyle = { strokeWidth: 2 };
+        let edgeType = 'smoothstep';
+        let edgeMarkerEnd = { type: MarkerType.ArrowClosed };
+        let edgeData = {};
+        let animated = false;
+
+        if (activeEdgeType === 'information') {
+            edgeStyle = { strokeWidth: 1.5, strokeDasharray: '5 5' };
+            edgeMarkerEnd = { type: MarkerType.ArrowOpen };
+            edgeData = { type: 'manual' };
+        } else if (activeEdgeType === 'electronic') {
+            edgeStyle = { strokeWidth: 2, stroke: '#00ffff' };
+            edgeType = 'smoothstep'; // Or custom 'information' type if using InformationEdge
+            edgeData = { type: 'electronic', infoType: 'electronic' };
+            // For now use default edge but styled.
+            // If we use 'InformationEdge' component we need to set type='information'
+            // But let's stick to standard edges with styling for stability unless InformationEdge is proven.
+            // The existing InformationEdge seems visual Only.
+        }
+
         setEdges((eds) => {
-            const newEdges = addEdge({ ...params, type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, style: { strokeWidth: 2 } }, eds);
-            // We need to record history AFTER state update, but here we are in callback.
-            // Simplified: use useEffect dependencies to trigger history push? No, too frequent.
-            // Better: Trigger explicit history save wrapper.
-            // For now, let's rely on manual trigger or specific events.
+            const newEdges = addEdge({
+                ...params,
+                type: edgeType,
+                markerEnd: edgeMarkerEnd,
+                style: edgeStyle,
+                animated,
+                data: edgeData
+            }, eds);
             return newEdges;
         });
-        // We'll trust the user to perform an action that triggers history save, or we can use a separate effect that debounces.
-        // Let's implement a debounce saver for history in the future if needed, but for "Professional" feel, actions should be discrete.
-        // We will trigger recordHistory in onConnect/DragStop logic if possible. 
-        // Actually, just calling recordHistory() directly here holds stale state closure.
-        // So we will use a "useEffect" that watches nodes/edges but is debounced?
-        // Or simply:
-        setTimeout(() => {
-            // Hacky way to get latest state? No. 
-            // Correct way: useNodesState and useEdgesState set functions accept a callback.
-            // We will leave history recording to major events for now.
-        }, 100);
-    }, []);
+        setTimeout(() => { }, 100);
+    }, [activeEdgeType]);
 
     // Record history on drag stop
     const onNodeDragStop = useCallback(() => {
@@ -386,6 +432,18 @@ const VSMCanvasContent = () => {
         const customDataStr = event.dataTransfer.getData('application/customdata');
 
         if (!type) return;
+
+        if (type === 'edgeMode') {
+            const edgeType = event.dataTransfer.getData('application/vsmEdgeType');
+            if (edgeType) {
+                setActiveEdgeType(edgeType);
+                // Show a brief message or toast
+                alert(currentLanguage === 'id'
+                    ? `Mode Garis Aktif: ${edgeType.toUpperCase()}. Tarik garis antar node!`
+                    : `Line Mode Active: ${edgeType.toUpperCase()}. Drag between nodes to connect!`);
+            }
+            return;
+        }
 
         const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
@@ -417,8 +475,42 @@ const VSMCanvasContent = () => {
         event.dataTransfer.dropEffect = 'move';
     }, []);
 
-    const onNodeClick = (event, node) => setSelectedNode(node);
-    const onPaneClick = () => setSelectedNode(null);
+    const onNodeClick = (event, node) => {
+        setSelectedNode(node);
+        setSelectedEdge(null);
+        setEdgeMenuPosition(null);
+    };
+
+    const onEdgeClick = (event, edge) => {
+        event.stopPropagation();
+        setSelectedEdge(edge);
+        setSelectedNode(null);
+
+        // Position context menu near the click
+        const rect = reactFlowWrapper.current?.getBoundingClientRect();
+        if (rect) {
+            setEdgeMenuPosition({
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            });
+        }
+    };
+
+    const onPaneClick = () => {
+        setSelectedNode(null);
+        setSelectedEdge(null);
+        setEdgeMenuPosition(null);
+    };
+
+    const deleteEdge = (edgeId) => {
+        setEdges((eds) => {
+            const newEdges = eds.filter(e => e.id !== edgeId);
+            pushToHistory({ nodes, edges: newEdges });
+            return newEdges;
+        });
+        setSelectedEdge(null);
+        setEdgeMenuPosition(null);
+    };
 
     const updateNodeData = (id, field, value) => {
         setNodes((nds) =>
@@ -439,6 +531,32 @@ const VSMCanvasContent = () => {
     // Save history when user finishes editing a property (onBlur)
     const onPropertyChangeComplete = () => {
         recordHistory();
+    };
+
+    const updateEdgeMarker = (edgeId, direction) => {
+        setEdges((eds) =>
+            eds.map((edge) => {
+                if (edge.id === edgeId) {
+                    let markerStart = undefined;
+                    let markerEnd = undefined;
+
+                    if (direction === 'start') {
+                        markerStart = { type: MarkerType.ArrowClosed, color: edge.style?.stroke || '#fff' };
+                    } else if (direction === 'end') {
+                        markerEnd = { type: MarkerType.ArrowClosed, color: edge.style?.stroke || '#fff' };
+                    } else if (direction === 'both') {
+                        markerStart = { type: MarkerType.ArrowClosed, color: edge.style?.stroke || '#fff' };
+                        markerEnd = { type: MarkerType.ArrowClosed, color: edge.style?.stroke || '#fff' };
+                    }
+                    // direction 'none' leaves both undefined
+
+                    return { ...edge, markerStart, markerEnd };
+                }
+                return edge;
+            })
+        );
+        // Force re-render of context menu state if needed, or just let edge update trigger it.
+        // We might want to keep selection? Yes.
     };
 
     const deleteNode = (id) => {
@@ -610,28 +728,39 @@ const VSMCanvasContent = () => {
     const handleWizardGenerate = (wizardData) => {
         const newNodes = [];
         const newEdges = [];
-        const { customer, processes, suppliers, logistics, infoFlow, useHeijunka } = wizardData;
+        const { customer, processes, suppliers, logistics, receiving, infoFlow, useHeijunka } = wizardData;
 
         // 1. Suppliers (Upstream - Left)
         const supplierNodeIds = {};
-        const warehouseRMNodeIds = {}; // Track RM Warehouses
+        const warehouseRMNodeIds = {};
 
         suppliers.forEach((supp, sIdx) => {
             const sid = `node_supp_${supp.id}`;
             supplierNodeIds[supp.id] = sid;
             let currentSourceId = sid;
 
+            // FIX: Always use SUPPLIER (Factory) icon, transport is secondary
             newNodes.push({
                 id: sid,
                 type: 'generic',
                 position: { x: 50, y: 150 + (sIdx * 250) },
                 data: {
-                    symbolType: supp.transportMode || VSMSymbols.SUPPLIER,
+                    symbolType: VSMSymbols.SUPPLIER,
                     name: supp.name,
                     frequency: supp.frequency,
                     capacity: logistics.truckCapacity
                 }
             });
+
+            // Add transport indicator next to supplier if specified
+            if (supp.transportMode) {
+                newNodes.push({
+                    id: `${sid}_transport`,
+                    type: 'generic',
+                    position: { x: 120, y: 150 + (sIdx * 250) - 40 },
+                    data: { symbolType: supp.transportMode, name: '' }
+                });
+            }
 
             // Add WH RM if enabled
             if (supp.hasWarehouse) {
@@ -646,7 +775,6 @@ const VSMCanvasContent = () => {
                     data: { name: 'WH RAW MAT', amount: 5000 }
                 });
 
-                // Connect Supplier to its WH
                 newEdges.push({
                     id: `edge_supp_to_wh_${supp.id}`,
                     source: sid,
@@ -655,15 +783,109 @@ const VSMCanvasContent = () => {
                     style: { strokeWidth: 2 }
                 });
             }
-            // The actual source for processes will be either Supplier or its WH
             supplierNodeIds[supp.id + '_source'] = currentSourceId;
         });
 
         const firstSupplierSourceId = supplierNodeIds[suppliers[0]?.id + '_source'];
 
+        // 🎯 RECEIVING WAREHOUSE LOGIC (Multi-Transport Support)
+        let productionSourceIds = suppliers.map(s => supplierNodeIds[s.id + '_source']);
+        let startXForProduction = 450;
+        const receivingTransportNodes = {}; // Map process ID to transport node ID
+
+        if (receiving?.enabled) {
+            const whRecId = 'node_wh_receiving';
+            startXForProduction = 750;
+
+            newNodes.push({
+                id: whRecId,
+                type: 'generic',
+                position: { x: 400, y: 150 },
+                data: { symbolType: VSMSymbols.WAREHOUSE_RECEIVING, name: 'RECEIVING', amount: receiving.amount }
+            });
+
+            // Connect all supplier sources to receiving
+            productionSourceIds.forEach((srcId, idx) => {
+                newEdges.push({
+                    id: `edge_supp_to_rec_${idx}`,
+                    source: srcId,
+                    target: whRecId,
+                    type: 'smoothstep',
+                    style: { strokeWidth: 2 }
+                });
+            });
+
+            // Create transport nodes for each process that receives from Receiving
+            let transportXOffset = 550; // Start X position (to the right of Receiving)
+            const transportY = 150; // Same Y as Receiving warehouse (horizontal alignment)
+            let hasAnyTransportNode = false;
+            let transportNodeCount = 0;
+
+            processes.forEach((proc, idx) => {
+                if (proc.inputSource === 'receiving') {
+                    const transRecId = `node_rec_transport_${idx}`;
+                    const transportMode = proc.transportFromReceiving || VSMSymbols.TROLLEY;
+
+                    receivingTransportNodes[proc.id] = transRecId;
+                    hasAnyTransportNode = true;
+
+                    newNodes.push({
+                        id: transRecId,
+                        type: 'generic',
+                        position: { x: transportXOffset + (transportNodeCount * 150), y: transportY },
+                        data: { symbolType: transportMode, name: '' }
+                    });
+
+                    newEdges.push({
+                        id: `edge_rec_to_trans_${idx}`,
+                        source: whRecId,
+                        sourceHandle: 'right',
+                        target: transRecId,
+                        targetHandle: 'left',
+                        type: 'smoothstep',
+                        style: { strokeWidth: 2 }
+                    });
+
+                    transportNodeCount++; // Increment for horizontal spacing
+                }
+            });
+
+            // If no processes explicitly set inputSource='receiving', create a default transport node
+            // This ensures ALL material flows through Receiving when it's enabled
+            if (!hasAnyTransportNode) {
+                const defaultTransId = 'node_rec_transport_default';
+                const defaultTransportMode = receiving.transportMode || VSMSymbols.TROLLEY;
+
+                newNodes.push({
+                    id: defaultTransId,
+                    type: 'generic',
+                    position: { x: 550, y: 150 },
+                    data: { symbolType: defaultTransportMode, name: '' }
+                });
+
+                newEdges.push({
+                    id: 'edge_rec_to_trans_default',
+                    source: whRecId,
+                    sourceHandle: 'right',
+                    target: defaultTransId,
+                    targetHandle: 'left',
+                    type: 'smoothstep',
+                    style: { strokeWidth: 2 }
+                });
+
+                productionSourceIds = [defaultTransId];
+            } else {
+                // Update productionSourceIds to include the first transport node
+                const firstTransportId = Object.values(receivingTransportNodes)[0];
+                if (firstTransportId) {
+                    productionSourceIds = [firstTransportId];
+                }
+            }
+        }
+
         // 2. Production Control (Top Center)
         const controlId = 'node_control';
-        const controlX = (processes.length * 200) + 400;
+        const controlX = (processes.length * 200) + 600;
         newNodes.push({
             id: controlId,
             type: 'productionControl',
@@ -671,7 +893,6 @@ const VSMCanvasContent = () => {
             data: { name: 'PRODUCTION CONTROL' }
         });
 
-        // Heijunka Box (if enabled)
         if (useHeijunka) {
             newNodes.push({
                 id: 'node_heijunka',
@@ -683,13 +904,13 @@ const VSMCanvasContent = () => {
 
         // 3. Customer (Downstream - Right)
         const customerId = 'node_customer';
-        const maxProcessX = processes.length * 450 + 600;
-        const customerX = Math.max(1000, maxProcessX);
+        const maxProcessX = (processes.length + 1) * 450 + 800;
+        const customerX = Math.max(1200, maxProcessX);
 
         newNodes.push({
             id: customerId,
             type: 'generic',
-            position: { x: customerX, y: 150 },
+            position: { x: customerX, y: 350 }, // Lowered y for process alignment
             data: {
                 symbolType: VSMSymbols.CUSTOMER,
                 name: customer.name,
@@ -700,37 +921,67 @@ const VSMCanvasContent = () => {
             }
         });
 
-        // Finished Goods WH (if enabled)
-        let customerTargetId = customerId;
-        if (customer.hasWarehouse) {
+        // 🎯 FLEXIBLE FLOW LOGIC
+        const shipId = 'node_shipping_cust';
+        let processChainTargetId = shipId; // Default for production
+
+        newNodes.push({
+            id: shipId,
+            type: 'generic',
+            position: { x: customerX - 220, y: 320 },
+            data: { symbolType: customer.transportMode || VSMSymbols.TRUCK, name: 'SHIPPING' }
+        });
+
+        newEdges.push({
+            id: 'edge_ship_to_cust',
+            source: shipId,
+            target: customerId,
+            type: 'smoothstep',
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { strokeWidth: 2 }
+        });
+
+        if (customer.source === 'warehouse') {
             const whfgId = 'node_wh_fg';
-            customerTargetId = whfgId;
+            processChainTargetId = whfgId;
             newNodes.push({
                 id: whfgId,
                 type: 'inventory',
-                position: { x: customerX - 220, y: 150 },
+                position: { x: customerX - 440, y: 350 },
                 data: { name: 'WH FINISHED GOODS', amount: 2000 }
             });
-            // Connect WH FG to Customer with Shipping Symbol
-            const shipId = 'node_shipping_cust';
-            newNodes.push({
-                id: shipId,
-                type: 'generic',
-                position: { x: customerX - 110, y: 120 },
-                data: { symbolType: customer.transportMode || VSMSymbols.TRUCK, name: 'SHIPPING' }
+            newEdges.push({
+                id: 'edge_whfg_to_ship',
+                source: whfgId,
+                target: shipId,
+                type: 'smoothstep',
+                style: { strokeWidth: 2 }
             });
+        } else if (customer.source === 'supplier') {
+            newEdges.push({
+                id: 'edge_supp_direct_to_ship',
+                source: productionSourceIds[0],
+                target: shipId,
+                type: 'smoothstep',
+                style: { strokeWidth: 3, stroke: '#4caf50' },
+                markerEnd: { type: MarkerType.ArrowClosed, color: '#4caf50' }
+            });
+            processChainTargetId = customerId;
         }
 
         // 4. Processes & Buffers (Horizontal Chain with Parallel Support)
-        let lastNodeIds = [firstSupplierSourceId];
-        let currentX = 450;
+        let lastNodeIds = productionSourceIds;
+        let currentX = startXForProduction;
         let baseHeight = 350;
         let parallelCount = 0;
-        let sourceOfCurrentBranch = firstSupplierSourceId; // The node where a branch starts from
+        let sourceOfCurrentBranch = productionSourceIds[0];
         const mainSupplierId = suppliers[0]?.id;
+        let pacemakerProcId = null;
 
         processes.forEach((proc, idx) => {
             const procId = `node_proc_${idx + 1}`;
+            pacemakerProcId = procId; // Last one will be the pacemaker
+
             // Map all assigned suppliers to their actual source nodes (Supplier or WH)
             const targetSupplierSourceIds = (proc.supplierIds || [suppliers[0]?.id]).map(sid => supplierNodeIds[sid + '_source'] || firstSupplierSourceId);
 
@@ -791,9 +1042,23 @@ const VSMCanvasContent = () => {
 
             if (!proc.isParallel) {
                 // LINEAR: Merge branches
-                if (idx === 0) {
-                    // Start of flow: Connect to ALL assigned suppliers
-                    targetSupplierSourceIds.forEach((srcId, sIdx) => {
+
+                // NEW: Check if this process receives from Receiving
+                if (proc.inputSource === 'receiving' && receivingTransportNodes[proc.id]) {
+                    // Connect from dedicated transport node
+                    newEdges.push({
+                        id: `edge_trans_to_proc_${idx}`,
+                        source: receivingTransportNodes[proc.id],
+                        target: procId,
+                        type: 'smoothstep',
+                        markerEnd: connectorMarker,
+                        style: connectorStyle
+                    });
+                } else if (idx === 0) {
+                    // Start of flow: Connect to Receiving Warehouse if enabled, else to assigned suppliers
+                    const sourcesToConnect = receiving?.enabled ? lastNodeIds : targetSupplierSourceIds;
+
+                    sourcesToConnect.forEach((srcId, sIdx) => {
                         newEdges.push({
                             id: `edge_mat_init_${idx}_${sIdx}`,
                             source: srcId,
@@ -804,6 +1069,7 @@ const VSMCanvasContent = () => {
                         });
                     });
                 } else {
+                    // Connect from previous process
                     lastNodeIds.forEach((srcId, sIdx) => {
                         newEdges.push({
                             id: `edge_mat_merge_${idx}_${sIdx}`,
@@ -819,7 +1085,10 @@ const VSMCanvasContent = () => {
                 // PARALLEL: It's either a branch from mid-stream OR a new entry from supplier(s)
                 const hasExtraSupplier = proc.supplierIds?.some(sid => sid !== mainSupplierId);
 
-                if (hasExtraSupplier) {
+                // NEW: If Receiving is enabled, parallel processes CANNOT connect directly to suppliers
+                // They must either connect to Receiving transport or branch from mid-stream
+                if (hasExtraSupplier && !receiving?.enabled) {
+                    // Only allow direct supplier connection if Receiving is NOT enabled
                     targetSupplierSourceIds.forEach((srcId, sIdx) => {
                         newEdges.push({
                             id: `edge_mat_branch_supp_${idx}_${sIdx}`,
@@ -879,36 +1148,39 @@ const VSMCanvasContent = () => {
             }
         });
 
-        // 5. Customer & Info Flow
+        // 5. Final Connections to Customer Target
         lastNodeIds.forEach((lastId, idx) => {
             newEdges.push({
                 id: `edge_to_customer_target_${idx}`,
                 source: lastId,
-                target: customerTargetId,
+                target: processChainTargetId,
                 type: 'smoothstep',
                 markerEnd: { type: MarkerType.ArrowClosed },
                 style: { strokeWidth: 2 }
             });
         });
 
-        // Add final shipping symbol if NO FG WH but transport is selected
-        if (!customer.hasWarehouse) {
-            newNodes.push({
-                id: 'node_shipping_final',
-                type: 'generic',
-                position: { x: customerX - 100, y: 150 },
-                data: { symbolType: customer.transportMode || VSMSymbols.TRUCK, name: 'SHIPPING' }
-            });
-        }
-
         const isElec = infoFlow === 'electronic';
 
-        // Customer -> Control
+        // Customer -> Control (Information Flow)
         newEdges.push({
             id: 'info_c_ctrl', source: customerId, target: controlId, type: 'smoothstep',
             style: { strokeDasharray: isElec ? '0' : '5,5', stroke: '#0078d4' },
             markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
         });
+
+        // Control -> Pacemaker Process (Last process in chain)
+        if (pacemakerProcId) {
+            newEdges.push({
+                id: 'info_ctrl_to_pacemaker',
+                source: controlId,
+                target: pacemakerProcId,
+                type: 'smoothstep',
+                label: 'DAILY SCHED',
+                style: { strokeDasharray: isElec ? '0' : '5,5', stroke: '#0078d4' },
+                markerEnd: { type: MarkerType.ArrowClosed, color: '#0078d4' }
+            });
+        }
 
         // Control -> ALL Suppliers
         suppliers.forEach(supp => {
@@ -1272,7 +1544,7 @@ const VSMCanvasContent = () => {
 
 
             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                {showSidebar && <Sidebar customLibrary={customLibrary} onAddCustom={addCustomIcon} />}
+                {showSidebar && <Sidebar customLibrary={customLibrary} onAddCustom={addCustomIcon} activeEdgeType={activeEdgeType} onEdgeTypeSelect={setActiveEdgeType} />}
 
                 <div className="reactflow-wrapper" ref={reactFlowWrapper} style={{ flex: 1, height: '100%', position: 'relative', backgroundColor: '#1e1e1e' }}>
                     <ReactFlow
@@ -1285,12 +1557,23 @@ const VSMCanvasContent = () => {
                         onDrop={onDrop}
                         onDragOver={onDragOver}
                         onNodeClick={onNodeClick}
+                        onEdgeClick={onEdgeClick}
                         onPaneClick={onPaneClick}
                         nodeTypes={nodeTypes}
                         connectionMode="loose"
                         fitView
                         snapToGrid={true}
                         snapGrid={[15, 15]}
+                        edgesUpdatable={true}
+                        edgesFocusable={true}
+                        elementsSelectable={true}
+                        deleteKeyCode="Delete"
+                        defaultEdgeOptions={{
+                            type: 'smoothstep',
+                            animated: false,
+                            style: { strokeWidth: 2, stroke: '#fff' },
+                            markerEnd: { type: MarkerType.ArrowClosed, color: '#fff' }
+                        }}
                     >
                         <Controls />
                         <MiniMap style={{ backgroundColor: '#333' }} nodeColor="#555" maskColor="rgba(0, 0, 0, 0.7)" />
@@ -1416,6 +1699,79 @@ const VSMCanvasContent = () => {
                             )}
 
                             <button onClick={() => deleteNode(selectedNode.id)} style={{ width: '100%', padding: '8px', backgroundColor: '#333', color: '#c50f1f', border: '1px solid #c50f1f', borderRadius: '4px', cursor: 'pointer', marginTop: '20px' }}>Delete Node</button>
+                        </div>
+                    )}
+
+                    {/* Edge Context Menu */}
+                    {selectedEdge && edgeMenuPosition && (
+                        <div style={{
+                            position: 'absolute',
+                            left: edgeMenuPosition.x,
+                            top: edgeMenuPosition.y,
+                            backgroundColor: '#252526',
+                            border: '1px solid #0078d4',
+                            borderRadius: '8px',
+                            padding: '10px',
+                            zIndex: 1000,
+                            boxShadow: '0 4px 15px rgba(0,0,0,0.5)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                            minWidth: '120px'
+                        }}>
+                            <div style={{ fontSize: '0.7rem', color: '#aaa', borderBottom: '1px solid #444', paddingBottom: '5px', marginBottom: '5px' }}>
+                                {currentLanguage === 'id' ? 'Opsi Garis' : 'Edge Options'}
+                            </div>
+
+                            <button
+                                onClick={() => setEdgeMenuPosition(null)}
+                                style={{
+                                    padding: '8px',
+                                    backgroundColor: '#333',
+                                    color: '#4fc3f7',
+                                    border: '1px solid #4fc3f7',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                }}
+                            >
+                                <span>↔️</span> {currentLanguage === 'id' ? 'Move / Geser' : 'Move / Reconnect'}
+                            </button>
+
+                            <button
+                                onClick={() => deleteEdge(selectedEdge.id)}
+                                style={{
+                                    padding: '8px',
+                                    backgroundColor: '#333',
+                                    color: '#ff4444',
+                                    border: '1px solid #ff4444',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                }}
+                            >
+                                <span>🗑️</span> {currentLanguage === 'id' ? 'Hapus Garis' : 'Delete Line'}
+                            </button>
+
+                            <div style={{ fontSize: '0.7rem', color: '#aaa', borderBottom: '1px solid #444', paddingBottom: '5px', marginBottom: '5px', marginTop: '10px' }}>
+                                Arah Panah / Arrow
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+                                <button onClick={() => updateEdgeMarker(selectedEdge.id, 'end')} title="Forward" style={{ padding: '5px', cursor: 'pointer', backgroundColor: '#333', border: '1px solid #555', color: '#fff' }}>➡️</button>
+                                <button onClick={() => updateEdgeMarker(selectedEdge.id, 'start')} title="Backward" style={{ padding: '5px', cursor: 'pointer', backgroundColor: '#333', border: '1px solid #555', color: '#fff' }}>⬅️</button>
+                                <button onClick={() => updateEdgeMarker(selectedEdge.id, 'both')} title="Both" style={{ padding: '5px', cursor: 'pointer', backgroundColor: '#333', border: '1px solid #555', color: '#fff' }}>↔️</button>
+                                <button onClick={() => updateEdgeMarker(selectedEdge.id, 'none')} title="None" style={{ padding: '5px', cursor: 'pointer', backgroundColor: '#333', border: '1px solid #555', color: '#fff' }}>➖</button>
+                            </div>
+
+                            <div style={{ fontSize: '0.6rem', color: '#888', fontStyle: 'italic', marginTop: '5px' }}>
+                                {currentLanguage === 'id' ? '*Drag ujung garis untuk geser' : '*Drag endpoints to reconnect'}
+                            </div>
                         </div>
                     )}
 

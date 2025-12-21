@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { VSMSymbols } from './vsm-constants';
 
-const Sidebar = ({ customLibrary, onAddCustom }) => {
+const Sidebar = ({ customLibrary, onAddCustom, activeEdgeType, onEdgeTypeSelect }) => {
     const fileInputRef = useRef(null);
 
     const onDragStart = (event, nodeType, symbolType) => {
@@ -58,8 +58,64 @@ const Sidebar = ({ customLibrary, onAddCustom }) => {
 
             <div style={{ padding: '15px' }}>
 
+                {/* FLOW CONNECTIONS (LINES) */}
+                <div style={{ ...sectionTitleStyle, marginTop: 0 }}>Flow Connections</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '15px' }}>
+                    <button
+                        onClick={() => onEdgeTypeSelect('material')}
+                        draggable
+                        onDragStart={(event) => {
+                            event.dataTransfer.setData('application/reactflow', 'edgeMode');
+                            event.dataTransfer.setData('application/vsmEdgeType', 'material');
+                            event.dataTransfer.effectAllowed = 'move';
+                        }}
+                        style={{
+                            ...blockBtnStyle,
+                            cursor: 'grab',
+                            backgroundColor: activeEdgeType === 'material' ? '#0078d4' : '#333',
+                            border: activeEdgeType === 'material' ? '1px solid #fff' : '1px solid #555'
+                        }}
+                    >
+                        ━━ Material
+                    </button>
+                    <button
+                        onClick={() => onEdgeTypeSelect('information')}
+                        draggable
+                        onDragStart={(event) => {
+                            event.dataTransfer.setData('application/reactflow', 'edgeMode');
+                            event.dataTransfer.setData('application/vsmEdgeType', 'information');
+                            event.dataTransfer.effectAllowed = 'move';
+                        }}
+                        style={{
+                            ...blockBtnStyle,
+                            cursor: 'grab',
+                            backgroundColor: activeEdgeType === 'information' ? '#0078d4' : '#333',
+                            border: activeEdgeType === 'information' ? '1px solid #fff' : '1px solid #555'
+                        }}
+                    >
+                        --- Manual Info
+                    </button>
+                    <button
+                        onClick={() => onEdgeTypeSelect('electronic')}
+                        draggable
+                        onDragStart={(event) => {
+                            event.dataTransfer.setData('application/reactflow', 'edgeMode');
+                            event.dataTransfer.setData('application/vsmEdgeType', 'electronic');
+                            event.dataTransfer.effectAllowed = 'move';
+                        }}
+                        style={{
+                            ...blockBtnStyle,
+                            cursor: 'grab',
+                            backgroundColor: activeEdgeType === 'electronic' ? '#0078d4' : '#333',
+                            border: activeEdgeType === 'electronic' ? '1px solid #fff' : '1px solid #555',
+                            gridColumn: 'span 2'
+                        }}
+                    >
+                        ⚡ Electronic Info
+                    </button>
+                </div>
                 {/* PROCESS SECTION */}
-                <div style={{ ...sectionTitleStyle, marginTop: 0 }}>Process Data</div>
+                <div style={sectionTitleStyle}>Process Data</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <div style={blockBtnStyle} onDragStart={(event) => onDragStart(event, 'process', VSMSymbols.PROCESS)} draggable>
                         🏭 Process Box

@@ -31,9 +31,11 @@ const GenericNode = ({ data, selected, showDetails }) => {
         case VSMSymbols.SEA:
         case VSMSymbols.AIR:
             const transportIcon = data.symbolType === VSMSymbols.SEA ? '🚢' : (data.symbolType === VSMSymbols.AIR ? '✈️' : '🚚');
+            // Only flip Truck (🚚) as it usually faces left. Sea and Air usually face right.
+            const shouldFlipTransport = data.symbolType === VSMSymbols.TRUCK;
             content = (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ fontSize: '2.5rem' }}>{transportIcon}</div>
+                    <div style={{ fontSize: '2.5rem', transform: shouldFlipTransport ? 'scaleX(-1)' : 'none' }}>{transportIcon}</div>
                     <div style={{
                         marginTop: '5px', fontSize: '0.6rem', color: '#4fc3f7',
                         backgroundColor: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px',
@@ -232,6 +234,31 @@ const GenericNode = ({ data, selected, showDetails }) => {
                 </div>
             );
             break;
+        case VSMSymbols.WAREHOUSE_RECEIVING:
+            content = (
+                <div style={{ position: 'relative', width: '80px', height: '50px', border: '2px solid #4fc3f7', backgroundColor: '#1e1e1e', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ position: 'absolute', top: '-10px', left: '10px', width: '20px', height: '10px', border: '2px solid #4fc3f7', borderBottom: 'none', backgroundColor: '#1e1e1e' }}></div>
+                    <div style={{ fontSize: '0.6rem', color: '#4fc3f7', fontWeight: 'bold' }}>RECEIVING</div>
+                    <div style={{ fontSize: '0.8rem', color: 'white' }}>{data.amount || 0}</div>
+                </div>
+            );
+            break;
+        case VSMSymbols.FORKLIFT:
+            content = (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ fontSize: '2rem', transform: 'scaleX(-1)' }}>🚜</div>
+                    <div style={{ fontSize: '0.6rem', color: '#ff9900' }}>FORKLIFT</div>
+                </div>
+            );
+            break;
+        case VSMSymbols.TROLLEY:
+            content = (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div style={{ fontSize: '2rem', transform: 'scaleX(-1)' }}>🛒</div>
+                    <div style={{ fontSize: '0.6rem', color: '#ff9900' }}>TROLLEY</div>
+                </div>
+            );
+            break;
         case VSMSymbols.CUSTOM:
             content = (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -250,11 +277,23 @@ const GenericNode = ({ data, selected, showDetails }) => {
 
     return (
         <div style={commonStyle}>
-            <Handle type="target" position={Position.Top} style={{ background: '#555' }} />
-            <Handle type="target" position={Position.Left} style={{ background: '#555' }} />
+            {/* Top handles */}
+            <Handle type="target" position={Position.Top} id="top" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Top} id="top-source" style={{ background: '#555', left: '60%' }} />
+
+            {/* Left handles */}
+            <Handle type="target" position={Position.Left} id="left" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Left} id="left-source" style={{ background: '#555', top: '60%' }} />
+
             {content}
-            <Handle type="source" position={Position.Right} style={{ background: '#555' }} />
-            <Handle type="source" position={Position.Bottom} style={{ background: '#555' }} />
+
+            {/* Right handles */}
+            <Handle type="source" position={Position.Right} id="right" style={{ background: '#555' }} />
+            <Handle type="target" position={Position.Right} id="right-target" style={{ background: '#555', top: '60%' }} />
+
+            {/* Bottom handles */}
+            <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: '#555' }} />
+            <Handle type="target" position={Position.Bottom} id="bottom-target" style={{ background: '#555', left: '60%' }} />
         </div>
     );
 };

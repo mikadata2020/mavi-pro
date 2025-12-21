@@ -27,9 +27,12 @@ const ProcessNode = ({ data, selected, showDetails }) => {
 
     return (
         <div style={{ position: 'relative' }}>
-            {/* Input Handles */}
-            <Handle type="target" position={Position.Top} id="t" style={{ background: '#555' }} />
-            <Handle type="target" position={Position.Left} id="l" style={{ background: '#555' }} />
+            {/* Input Handles - All sides can be targets */}
+            <Handle type="target" position={Position.Top} id="top" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Top} id="top-source" style={{ background: '#555', left: '60%' }} />
+
+            <Handle type="target" position={Position.Left} id="left" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Left} id="left-source" style={{ background: '#555', top: '60%' }} />
 
             {labelExtra}
             {isBottleneck && (
@@ -127,9 +130,12 @@ const ProcessNode = ({ data, selected, showDetails }) => {
                 </div>
             )}
 
-            {/* Output Handles */}
-            <Handle type="source" position={Position.Bottom} id="b" style={{ background: '#555' }} />
-            <Handle type="source" position={Position.Right} id="r" style={{ background: '#555' }} />
+            {/* Output Handles - All sides can be sources */}
+            <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: '#555' }} />
+            <Handle type="target" position={Position.Bottom} id="bottom-target" style={{ background: '#555', left: '60%' }} />
+
+            <Handle type="source" position={Position.Right} id="right" style={{ background: '#555' }} />
+            <Handle type="target" position={Position.Right} id="right-target" style={{ background: '#555', top: '60%' }} />
         </div>
     );
 };

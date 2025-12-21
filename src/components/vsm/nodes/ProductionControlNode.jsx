@@ -4,10 +4,17 @@ import { Handle, Position } from 'reactflow';
 const ProductionControlNode = ({ data, selected, showDetails }) => {
     return (
         <div style={{ position: 'relative', minWidth: '160px' }}>
-            <Handle type="target" position={Position.Top} id="t" style={{ background: '#555' }} />
-            <Handle type="target" position={Position.Left} id="l" style={{ background: '#555' }} />
-            <Handle type="target" position={Position.Right} id="r" style={{ background: '#555' }} />
-            <Handle type="target" position={Position.Bottom} id="b" style={{ background: '#555' }} />
+            <Handle type="target" position={Position.Top} id="top" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Top} id="top-source" style={{ background: '#555', left: '60%' }} />
+
+            <Handle type="target" position={Position.Left} id="left" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Left} id="left-source" style={{ background: '#555', top: '60%' }} />
+
+            <Handle type="target" position={Position.Right} id="right-target" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Right} id="right" style={{ background: '#555', top: '60%' }} />
+
+            <Handle type="target" position={Position.Bottom} id="bottom-target" style={{ background: '#555' }} />
+            <Handle type="source" position={Position.Bottom} id="bottom" style={{ background: '#555', left: '60%' }} />
 
             <div style={{
                 border: '2px solid white',
@@ -24,11 +31,6 @@ const ProductionControlNode = ({ data, selected, showDetails }) => {
             }}>
                 {data.name || 'Production Control'}
             </div>
-
-            <Handle type="source" position={Position.Top} id="st" style={{ background: '#555', top: 0 }} />
-            <Handle type="source" position={Position.Left} id="sl" style={{ background: '#555', left: 0 }} />
-            <Handle type="source" position={Position.Right} id="sr" style={{ background: '#555', right: 0 }} />
-            <Handle type="source" position={Position.Bottom} id="sb" style={{ background: '#555', bottom: 0 }} />
         </div>
     );
 };

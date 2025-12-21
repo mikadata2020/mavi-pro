@@ -35,6 +35,9 @@ export const VSMSymbols = {
     TIMELINE: 'timeline', // NEW: Lead time timeline
 
     // Custom
+    WAREHOUSE_RECEIVING: 'warehouse_receiving', // NEW: Receiving dock/warehouse
+    FORKLIFT: 'forklift', // NEW: Forklift transport
+    TROLLEY: 'trolley', // NEW: Trolley transport
     CUSTOM: 'custom',
 };
 
