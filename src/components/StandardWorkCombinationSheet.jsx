@@ -18,7 +18,13 @@ function StandardWorkCombinationSheet({ currentProject }) {
         taktTime: '',
         date: new Date().toISOString().split('T')[0],
         preparedBy: '',
-        approvedBy: ''
+        approvedBy: '',
+        // TPS Additional Fields
+        processName: '',
+        station: '',
+        revision: '1.0',
+        standardWIP: 0,
+        targetOutput: ''
     });
 
     useEffect(() => {
@@ -173,7 +179,25 @@ function StandardWorkCombinationSheet({ currentProject }) {
 
     const [mode, setMode] = useState('project'); // 'project' or 'manual'
     const [manualMeasurements, setManualMeasurements] = useState([
-        { elementName: 'Elemen 1', manualTime: 0, autoTime: 0, walkTime: 0, timingMode: 'series', offset: 0 }
+        {
+            elementName: 'Elemen 1',
+            manualTime: 0,
+            autoTime: 0,
+            walkTime: 0,
+            waitingTime: 0,
+            timingMode: 'series',
+            offset: 0,
+            // TPS Fields
+            qualityCheck: false,
+            qualityCheckDescription: '',
+            safetyPoint: false,
+            safetyPointDescription: '',
+            valueType: { manual: 'VA', auto: 'VA', walk: 'NVA', waiting: 'NNVA' },
+            equipment: '',
+            skillLevel: 1,
+            kaizenFlag: false,
+            kaizenNote: ''
+        }
     ]);
 
     // ... (existing useEffects)
@@ -185,13 +209,80 @@ function StandardWorkCombinationSheet({ currentProject }) {
         man: 45,
         auto: 45,
         walk: 45,
+        waiting: 45,
+        manVT: 55,
+        autoVT: 55,
+        walkVT: 55,
         total: 45,
+        quality: 30,
+        safety: 30,
+        kaizen: 30,
         timing: 80,
         offset: 50,
         start: 50,
         finish: 50,
         delete: 30
     });
+
+    // Column visibility state
+    const [columnVisibility, setColumnVisibility] = useState({
+        no: true,
+        name: true,
+        man: true,
+        auto: true,
+        walk: true,
+        waiting: true,
+        manVT: true,
+        autoVT: true,
+        walkVT: true,
+        total: true,
+        quality: true,
+        safety: true,
+        kaizen: true,
+        timing: true,
+        offset: true,
+        start: true,
+        finish: true
+    });
+
+    const [showColumnSettings, setShowColumnSettings] = useState(false);
+
+    const toggleColumn = (columnId) => {
+        setColumnVisibility(prev => ({
+            ...prev,
+            [columnId]: !prev[columnId]
+        }));
+    };
+
+    const showAllColumns = () => {
+        const allVisible = {};
+        Object.keys(columnVisibility).forEach(key => {
+            allVisible[key] = true;
+        });
+        setColumnVisibility(allVisible);
+    };
+
+    const hideOptionalColumns = () => {
+        setColumnVisibility({
+            no: true,
+            name: true,
+            man: true,
+            auto: true,
+            walk: true,
+            waiting: false,
+            manVT: false,
+            autoVT: false,
+            walkVT: false,
+            total: true,
+            quality: false,
+            safety: false,
+            kaizen: false,
+            timing: false,
+            offset: false,
+            start: true,
+            finish: true
+        });
+    };
 
     const handleColumnResize = (column, newWidth) => {
         setColumnWidths(prev => ({
@@ -218,14 +309,46 @@ function StandardWorkCombinationSheet({ currentProject }) {
         const newMeasurements = [...manualMeasurements];
         if (field === 'elementName' || field === 'timingMode') {
             newMeasurements[index] = { ...newMeasurements[index], [field]: value };
+        } else if (field === 'qualityCheck' || field === 'safetyPoint' || field === 'kaizenFlag') {
+            // Boolean fields
+            newMeasurements[index] = { ...newMeasurements[index], [field]: value };
+        } else if (field.startsWith('valueType.')) {
+            // Handle nested valueType updates (e.g., 'valueType.manual')
+            const timeType = field.split('.')[1]; // 'manual', 'auto', 'walk'
+            newMeasurements[index] = {
+                ...newMeasurements[index],
+                valueType: {
+                    ...newMeasurements[index].valueType,
+                    [timeType]: value
+                }
+            };
         } else {
+            // Numeric fields
             newMeasurements[index] = { ...newMeasurements[index], [field]: parseFloat(value) || 0 };
         }
         setManualMeasurements(newMeasurements);
     };
 
     const addManualRow = () => {
-        setManualMeasurements([...manualMeasurements, { elementName: '', manualTime: 0, autoTime: 0, walkTime: 0, timingMode: 'series', offset: 0 }]);
+        setManualMeasurements([...manualMeasurements, {
+            elementName: '',
+            manualTime: 0,
+            autoTime: 0,
+            walkTime: 0,
+            waitingTime: 0,
+            timingMode: 'series',
+            offset: 0,
+            // TPS Fields
+            qualityCheck: false,
+            qualityCheckDescription: '',
+            safetyPoint: false,
+            safetyPointDescription: '',
+            valueType: { manual: 'VA', auto: 'VA', walk: 'NVA', waiting: 'NNVA' },
+            equipment: '',
+            skillLevel: 1,
+            kaizenFlag: false,
+            kaizenNote: ''
+        }]);
     };
 
     const deleteManualRow = (index) => {
@@ -250,7 +373,8 @@ function StandardWorkCombinationSheet({ currentProject }) {
             const manual = parseFloat(m.manualTime) || 0;
             const auto = parseFloat(m.autoTime) || 0;
             const walk = parseFloat(m.walkTime) || 0;
-            const duration = manual + auto + walk;
+            const waiting = parseFloat(m.waitingTime) || 0;
+            const duration = manual + auto + walk + waiting;
 
             let startTime = 0;
 
@@ -275,13 +399,13 @@ function StandardWorkCombinationSheet({ currentProject }) {
             }
 
             // Calculate component starts relative to row startTime
-            // Standard SWCS Pattern: Manual -> Auto (parallel with next?) -> Walk
-            // Usually: Manual happens, then Auto machine runs (operator moves away?), Walk happens
+            // Standard SWCS Pattern: Manual -> Auto (parallel with next?) -> Walk -> Waiting
+            // Usually: Manual happens, then Auto machine runs (operator moves away?), Walk happens, then Waiting
             // Visualizing:
             // Manual Bar: Starts at startTime
             // Auto Bar: Starts at startTime + manual (if auto follows manual)
             // Walk Bar: Starts at startTime + manual (if walk follows manual) OR startTime + manual + auto?
-            // Let's assume: Manual -> Operator Walks. Auto runs after Manual.
+            // Waiting Bar: Starts after walk (waste time - operator idle)
 
             const rowStart = startTime;
             const manualStart = rowStart;
@@ -293,31 +417,148 @@ function StandardWorkCombinationSheet({ currentProject }) {
             const walkStart = manualEnd; // Operator walks after loading
             const walkEnd = walkStart + walk;
 
+            const waitingStart = walkEnd; // Waiting starts after walk
+            const waitingEnd = waitingStart + waiting;
+
             // For the next row calculations
             lastRowStart = rowStart;
-            // The "Operator" is free after Manual + Walk? Or just Manual? 
+            // The "Operator" is free after Manual + Walk + Waiting
             // In SWCS, the "Time Line" usually follows the Operator.
             // So the next element starts when the Operator is available.
-            // Operator time = Manual + Walk.
-            lastFinishTime = Math.max(manualEnd, autoEnd, walkEnd);
+            // Operator time = Manual + Walk + Waiting.
+            lastFinishTime = Math.max(manualEnd, autoEnd, walkEnd, waitingEnd);
 
             return {
                 ...m,
                 _calculated: {
                     startTime: rowStart,
-                    finishTime: Math.max(manualEnd, autoEnd, walkEnd), // Total duration of this row's activity
+                    finishTime: Math.max(manualEnd, autoEnd, walkEnd, waitingEnd), // Total duration of this row's activity
                     manualStart,
                     manualEnd,
                     autoStart,
                     autoEnd,
                     walkStart,
-                    walkEnd
+                    walkEnd,
+                    waitingStart,
+                    waitingEnd
                 }
             };
         });
     };
 
     const timedMeasurements = calculateTimedMeasurements();
+
+    // TPS Analysis Calculations
+    const calculateTPSAnalysis = () => {
+        const measurements = timedMeasurements;
+        if (!measurements || measurements.length === 0) {
+            return {
+                cycleTime: 0,
+                taktTime: parseFloat(headerInfo.taktTime) || 0,
+                capacity: 0,
+                vaTime: 0,
+                nvaTime: 0,
+                nnvaTime: 0,
+                vaPercentage: 0,
+                nvaPercentage: 0,
+                nnvaPercentage: 0,
+                bottleneckIndex: -1,
+                bottleneckTime: 0,
+                kaizenCount: 0,
+                qualityCheckCount: 0,
+                safetyPointCount: 0
+            };
+        }
+
+        // Calculate cycle time (total operator time)
+        let totalManual = 0;
+        let totalAuto = 0;
+        let totalWalk = 0;
+        let totalWaiting = 0;
+        let vaTime = 0;
+        let nvaTime = 0;
+        let nnvaTime = 0;
+        let bottleneckIndex = -1;
+        let bottleneckTime = 0;
+        let kaizenCount = 0;
+        let qualityCheckCount = 0;
+        let safetyPointCount = 0;
+
+        measurements.forEach((m, idx) => {
+            const manual = parseFloat(m.manualTime) || 0;
+            const auto = parseFloat(m.autoTime) || 0;
+            const walk = parseFloat(m.walkTime) || 0;
+            const waiting = parseFloat(m.waitingTime) || 0;
+            const elementTotal = manual + auto + walk + waiting;
+
+            totalManual += manual;
+            totalAuto += auto;
+            totalWalk += walk;
+            totalWaiting += waiting;
+
+            // Find bottleneck (slowest element)
+            if (elementTotal > bottleneckTime) {
+                bottleneckTime = elementTotal;
+                bottleneckIndex = idx;
+            }
+
+            // Count TPS markers
+            if (m.kaizenFlag) kaizenCount++;
+            if (m.qualityCheck) qualityCheckCount++;
+            if (m.safetyPoint) safetyPointCount++;
+
+            // Calculate VA/NVA/NNVA time
+            if (m.valueType) {
+                if (m.valueType.manual === 'VA') vaTime += manual;
+                else if (m.valueType.manual === 'NVA') nvaTime += manual;
+                else if (m.valueType.manual === 'NNVA') nnvaTime += manual;
+
+                if (m.valueType.auto === 'VA') vaTime += auto;
+                else if (m.valueType.auto === 'NVA') nvaTime += auto;
+                else if (m.valueType.auto === 'NNVA') nnvaTime += auto;
+
+                if (m.valueType.walk === 'VA') vaTime += walk;
+                else if (m.valueType.walk === 'NVA') nvaTime += walk;
+                else if (m.valueType.walk === 'NNVA') nnvaTime += walk;
+
+                if (m.valueType.waiting === 'VA') vaTime += waiting;
+                else if (m.valueType.waiting === 'NVA') nvaTime += waiting;
+                else if (m.valueType.waiting === 'NNVA') nnvaTime += waiting;
+            } else {
+                // Default categorization if not specified
+                vaTime += manual + auto;
+                nvaTime += walk;
+                nnvaTime += waiting; // Waiting is always waste by default
+            }
+        });
+
+        const cycleTime = totalManual + totalWalk + totalWaiting; // Operator cycle time includes waiting
+        const taktTime = parseFloat(headerInfo.taktTime) || 0;
+        const capacity = taktTime > 0 ? (cycleTime / taktTime) * 100 : 0;
+        const totalTime = vaTime + nvaTime + nnvaTime;
+        const vaPercentage = totalTime > 0 ? (vaTime / totalTime) * 100 : 0;
+        const nvaPercentage = totalTime > 0 ? (nvaTime / totalTime) * 100 : 0;
+        const nnvaPercentage = totalTime > 0 ? (nnvaTime / totalTime) * 100 : 0;
+
+        return {
+            cycleTime,
+            taktTime,
+            capacity,
+            vaTime,
+            nvaTime,
+            nnvaTime,
+            vaPercentage,
+            nvaPercentage,
+            nnvaPercentage,
+            bottleneckIndex,
+            bottleneckTime,
+            kaizenCount,
+            qualityCheckCount,
+            safetyPointCount
+        };
+    };
+
+    const tpsAnalysis = calculateTPSAnalysis();
 
     const [annotations, setAnnotations] = useState([]);
 
@@ -505,8 +746,21 @@ function StandardWorkCombinationSheet({ currentProject }) {
 
                         const elements = [];
 
+                        // Check if this is the bottleneck
+                        const isBottleneck = index === tpsAnalysis.bottleneckIndex;
+
+                        // Get value type colors
+                        const getValueColor = (baseColor, valueType) => {
+                            if (!valueType) return baseColor;
+                            if (valueType === 'VA') return '#4CAF50'; // Green
+                            if (valueType === 'NVA') return '#FFA500'; // Orange
+                            if (valueType === 'NNVA') return '#FF4444'; // Red
+                            return baseColor;
+                        };
+
                         // Manual
                         if (manualWidth > 0) {
+                            const manualColor = getValueColor('green', m.valueType?.manual);
                             elements.push(
                                 <line
                                     key={`manual-${index}`}
@@ -514,15 +768,31 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                     y1={y}
                                     x2={manualEnd * pixelsPerSecond}
                                     y2={y}
-                                    stroke="green"
-                                    strokeWidth="6"
+                                    stroke={manualColor}
+                                    strokeWidth={isBottleneck ? "8" : "6"}
                                     strokeLinecap="round"
                                 />
                             );
+                            if (isBottleneck) {
+                                elements.push(
+                                    <line
+                                        key={`manual-bottleneck-${index}`}
+                                        x1={manualStart * pixelsPerSecond}
+                                        y1={y}
+                                        x2={manualEnd * pixelsPerSecond}
+                                        y2={y}
+                                        stroke="red"
+                                        strokeWidth="10"
+                                        strokeLinecap="round"
+                                        opacity="0.3"
+                                    />
+                                );
+                            }
                         }
 
                         // Auto
                         if (autoWidth > 0) {
+                            const autoColor = getValueColor('darkblue', m.valueType?.auto);
                             elements.push(
                                 <line
                                     key={`auto-${index}`}
@@ -530,8 +800,8 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                     y1={y}
                                     x2={autoEnd * pixelsPerSecond}
                                     y2={y}
-                                    stroke="darkblue"
-                                    strokeWidth="4"
+                                    stroke={autoColor}
+                                    strokeWidth={isBottleneck ? "6" : "4"}
                                     strokeDasharray="5,3"
                                 />
                             );
@@ -539,14 +809,73 @@ function StandardWorkCombinationSheet({ currentProject }) {
 
                         // Walk
                         if (walkWidth > 0) {
+                            const walkColor = getValueColor('red', m.valueType?.walk);
                             elements.push(
                                 <path
                                     key={`walk-${index}`}
                                     d={generateWavyPath(walkStart * pixelsPerSecond, y, walkEnd * pixelsPerSecond)}
-                                    stroke="red"
+                                    stroke={walkColor}
                                     strokeWidth="2"
                                     fill="none"
                                 />
+                            );
+                        }
+
+                        // Waiting (Waste Time)
+                        const { waitingStart, waitingEnd } = m._calculated;
+                        const waitingWidth = (waitingEnd - waitingStart) * pixelsPerSecond;
+                        if (waitingWidth > 0) {
+                            const waitingColor = getValueColor('#FF6B6B', m.valueType?.waiting); // Bright red for waste
+                            elements.push(
+                                <line
+                                    key={`waiting-${index}`}
+                                    x1={waitingStart * pixelsPerSecond}
+                                    y1={y}
+                                    x2={waitingEnd * pixelsPerSecond}
+                                    y2={y}
+                                    stroke={waitingColor}
+                                    strokeWidth="4"
+                                    strokeDasharray="2,2"
+                                    strokeLinecap="round"
+                                />
+                            );
+                        }
+
+                        // Quality Check Marker
+                        if (m.qualityCheck) {
+                            const qcX = manualEnd * pixelsPerSecond;
+                            elements.push(
+                                <g key={`qc-${index}`}>
+                                    <circle cx={qcX} cy={y - 15} r="8" fill="#4CAF50" stroke="white" strokeWidth="2" />
+                                    <text x={qcX} y={y - 11} fontSize="10" fill="white" fontWeight="bold" textAnchor="middle">✓</text>
+                                </g>
+                            );
+                        }
+
+                        // Safety Point Marker
+                        if (m.safetyPoint) {
+                            const spX = manualStart * pixelsPerSecond;
+                            elements.push(
+                                <g key={`sp-${index}`}>
+                                    <polygon
+                                        points={`${spX},${y - 20} ${spX - 8},${y - 8} ${spX + 8},${y - 8}`}
+                                        fill="#FFC107"
+                                        stroke="white"
+                                        strokeWidth="2"
+                                    />
+                                    <text x={spX} y={y - 11} fontSize="10" fill="black" fontWeight="bold" textAnchor="middle">⚠</text>
+                                </g>
+                            );
+                        }
+
+                        // Kaizen Flag Marker
+                        if (m.kaizenFlag) {
+                            const kzX = (manualStart + manualEnd) * pixelsPerSecond / 2;
+                            elements.push(
+                                <g key={`kz-${index}`}>
+                                    <circle cx={kzX} cy={y + 15} r="8" fill="#2196F3" stroke="white" strokeWidth="2" />
+                                    <text x={kzX} y={y + 19} fontSize="10" fill="white" fontWeight="bold" textAnchor="middle">💡</text>
+                                </g>
                             );
                         }
 
@@ -580,6 +909,17 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                     fill={index % 2 === 0 ? '#f9f9f9' : '#fff'}
                                     opacity="0.5"
                                 />
+                                {/* Bottleneck Background Highlight */}
+                                {isBottleneck && (
+                                    <rect
+                                        x="0"
+                                        y={headerHeight + index * rowHeight}
+                                        width={chartWidth}
+                                        height={rowHeight}
+                                        fill="#ffebee"
+                                        opacity="0.5"
+                                    />
+                                )}
                                 {elements}
                             </g>
                         );
@@ -703,9 +1043,115 @@ function StandardWorkCombinationSheet({ currentProject }) {
                             >
                                 📏 Fit Width
                             </button>
+                            <button
+                                onClick={() => setShowColumnSettings(!showColumnSettings)}
+                                style={{
+                                    padding: '5px 12px',
+                                    backgroundColor: showColumnSettings ? '#0078d4' : '#666',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                    marginLeft: '10px'
+                                }}
+                                title="Column Visibility"
+                            >
+                                👁️ Columns
+                            </button>
                         </>
                     )}
                 </div>
+
+                {/* Column Settings Panel */}
+                {mode === 'manual' && showColumnSettings && (
+                    <div style={{
+                        backgroundColor: '#2d2d2d',
+                        padding: '15px',
+                        marginBottom: '10px',
+                        borderRadius: '4px',
+                        border: '1px solid #555'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <h4 style={{ margin: 0, color: 'white' }}>Column Visibility</h4>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button
+                                    onClick={showAllColumns}
+                                    style={{
+                                        padding: '5px 10px',
+                                        backgroundColor: '#0078d4',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '3px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.85rem'
+                                    }}
+                                >
+                                    Show All
+                                </button>
+                                <button
+                                    onClick={hideOptionalColumns}
+                                    style={{
+                                        padding: '5px 10px',
+                                        backgroundColor: '#666',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '3px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.85rem'
+                                    }}
+                                >
+                                    Hide Optional
+                                </button>
+                            </div>
+                        </div>
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                            gap: '8px',
+                            color: 'white'
+                        }}>
+                            {[
+                                { id: 'no', label: 'No' },
+                                { id: 'name', label: 'Element Name' },
+                                { id: 'man', label: 'Manual Time' },
+                                { id: 'auto', label: 'Auto Time' },
+                                { id: 'walk', label: 'Walk Time' },
+                                { id: 'waiting', label: 'Waiting Time' },
+                                { id: 'manVT', label: 'Manual Value Type' },
+                                { id: 'autoVT', label: 'Auto Value Type' },
+                                { id: 'walkVT', label: 'Walk Value Type' },
+                                { id: 'total', label: 'Total Time' },
+                                { id: 'quality', label: 'Quality ✓' },
+                                { id: 'safety', label: 'Safety ⚠' },
+                                { id: 'kaizen', label: 'Kaizen 💡' },
+                                { id: 'timing', label: 'Timing Mode' },
+                                { id: 'offset', label: 'Offset' },
+                                { id: 'start', label: 'Start Time' },
+                                { id: 'finish', label: 'Finish Time' }
+                            ].map(col => (
+                                <label
+                                    key={col.id}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        cursor: 'pointer',
+                                        fontSize: '0.9rem'
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={columnVisibility[col.id]}
+                                        onChange={() => toggleColumn(col.id)}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                    <span>{col.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             <div style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center' }}>
@@ -728,68 +1174,125 @@ function StandardWorkCombinationSheet({ currentProject }) {
                         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '1.5rem', marginBottom: '10px', borderBottom: '1px solid #ccc', paddingBottom: '5px' }}>
                             STANDARD WORK COMBINATION SHEET
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', fontSize: '0.9rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px', fontSize: '0.85rem' }}>
                             <div>
                                 <div style={{ display: 'flex', marginBottom: '5px' }}>
-                                    <span style={{ width: '100px', fontWeight: 'bold' }}>Part Name:</span>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Process:</span>
+                                    <input
+                                        type="text"
+                                        value={headerInfo.processName}
+                                        onChange={(e) => handleHeaderChange('processName', e.target.value)}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', marginBottom: '5px' }}>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Part Name:</span>
                                     <input
                                         type="text"
                                         value={headerInfo.partName}
                                         onChange={(e) => handleHeaderChange('partName', e.target.value)}
-                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none' }}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ display: 'flex', marginBottom: '5px' }}>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Station:</span>
+                                    <input
+                                        type="text"
+                                        value={headerInfo.station}
+                                        onChange={(e) => handleHeaderChange('station', e.target.value)}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
                                     />
                                 </div>
                                 <div style={{ display: 'flex', marginBottom: '5px' }}>
-                                    <span style={{ width: '100px', fontWeight: 'bold' }}>Part No:</span>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Part No:</span>
                                     <input
                                         type="text"
                                         value={headerInfo.partNo}
                                         onChange={(e) => handleHeaderChange('partNo', e.target.value)}
-                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none' }}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
                                     />
                                 </div>
                             </div>
                             <div>
                                 <div style={{ display: 'flex', marginBottom: '5px' }}>
-                                    <span style={{ width: '100px', fontWeight: 'bold' }}>Work Scope:</span>
-                                    <input
-                                        type="text"
-                                        value={headerInfo.workScope}
-                                        onChange={(e) => handleHeaderChange('workScope', e.target.value)}
-                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none' }}
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', marginBottom: '5px' }}>
-                                    <span style={{ width: '100px', fontWeight: 'bold' }}>Takt Time (s):</span>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Takt Time:</span>
                                     <input
                                         type="number"
                                         value={headerInfo.taktTime}
                                         onChange={(e) => handleHeaderChange('taktTime', e.target.value)}
-                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none' }}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
+                                        placeholder="seconds"
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', marginBottom: '5px' }}>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Std WIP:</span>
+                                    <input
+                                        type="number"
+                                        value={headerInfo.standardWIP}
+                                        onChange={(e) => handleHeaderChange('standardWIP', e.target.value)}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
+                                        placeholder="units"
                                     />
                                 </div>
                             </div>
                             <div>
                                 <div style={{ display: 'flex', marginBottom: '5px' }}>
-                                    <span style={{ width: '100px', fontWeight: 'bold' }}>Date:</span>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Date:</span>
                                     <input
                                         type="date"
                                         value={headerInfo.date}
                                         onChange={(e) => handleHeaderChange('date', e.target.value)}
-                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none' }}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
                                     />
                                 </div>
                                 <div style={{ display: 'flex', marginBottom: '5px' }}>
-                                    <span style={{ width: '100px', fontWeight: 'bold' }}>Prepared By:</span>
+                                    <span style={{ width: '90px', fontWeight: 'bold', fontSize: '0.8rem' }}>Revision:</span>
                                     <input
                                         type="text"
-                                        value={headerInfo.preparedBy}
-                                        onChange={(e) => handleHeaderChange('preparedBy', e.target.value)}
-                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none' }}
+                                        value={headerInfo.revision}
+                                        onChange={(e) => handleHeaderChange('revision', e.target.value)}
+                                        style={{ border: 'none', borderBottom: '1px solid #ccc', flex: 1, outline: 'none', fontSize: '0.8rem' }}
                                     />
                                 </div>
                             </div>
                         </div>
+
+                        {/* TPS Analysis Panel */}
+                        {hasData && (
+                            <div style={{ marginTop: '10px', padding: '8px', backgroundColor: '#f5f5f5', borderRadius: '4px', border: '1px solid #ddd' }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: '5px', fontSize: '0.85rem' }}>📊 TPS Analysis</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px', fontSize: '0.75rem' }}>
+                                    <div style={{ padding: '4px', backgroundColor: 'white', borderRadius: '3px', textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#666' }}>Cycle Time</div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{tpsAnalysis.cycleTime.toFixed(1)}s</div>
+                                    </div>
+                                    <div style={{ padding: '4px', backgroundColor: 'white', borderRadius: '3px', textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#666' }}>Capacity</div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold', color: tpsAnalysis.capacity > 100 ? 'red' : 'green' }}>
+                                            {tpsAnalysis.capacity.toFixed(1)}%
+                                        </div>
+                                    </div>
+                                    <div style={{ padding: '4px', backgroundColor: 'white', borderRadius: '3px', textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#4CAF50' }}>VA Time</div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{tpsAnalysis.vaPercentage.toFixed(1)}%</div>
+                                    </div>
+                                    <div style={{ padding: '4px', backgroundColor: 'white', borderRadius: '3px', textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#FFA500' }}>NVA Time</div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{tpsAnalysis.nvaPercentage.toFixed(1)}%</div>
+                                    </div>
+                                    <div style={{ padding: '4px', backgroundColor: 'white', borderRadius: '3px', textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#FF4444' }}>Waste</div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{tpsAnalysis.nnvaPercentage.toFixed(1)}%</div>
+                                    </div>
+                                    <div style={{ padding: '4px', backgroundColor: 'white', borderRadius: '3px', textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 'bold', color: '#2196F3' }}>Kaizen</div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{tpsAnalysis.kaizenCount}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Content Section */}
@@ -826,8 +1329,12 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                             { id: 'man', label: 'Man', width: columnWidths.man },
                                             { id: 'auto', label: 'Auto', width: columnWidths.auto },
                                             { id: 'walk', label: 'Walk', width: columnWidths.walk },
+                                            { id: 'waiting', label: 'Wait', width: columnWidths.waiting, title: 'Waiting Time (Waste)' },
+                                            { id: 'manVT', label: 'M-VT', width: columnWidths.manVT, title: 'Manual Value Type', bg: '#e8f5e9' },
+                                            { id: 'autoVT', label: 'A-VT', width: columnWidths.autoVT, title: 'Auto Value Type', bg: '#e8f5e9' },
+                                            { id: 'walkVT', label: 'W-VT', width: columnWidths.walkVT, title: 'Walk Value Type', bg: '#fff3e0' },
                                             { id: 'total', label: 'Total', width: columnWidths.total },
-                                        ].map((col) => (
+                                        ].filter(col => columnVisibility[col.id]).map((col) => (
                                             <th key={col.id} style={{
                                                 borderBottom: '1px solid black',
                                                 borderRight: '1px solid black',
@@ -837,8 +1344,10 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                                 boxSizing: 'border-box',
                                                 height: '40px',
                                                 whiteSpace: 'nowrap',
-                                                position: 'relative'
-                                            }}>
+                                                position: 'relative',
+                                                backgroundColor: col.bg || 'inherit',
+                                                fontSize: '0.75rem'
+                                            }} title={col.title}>
                                                 {col.label}
                                                 <div
                                                     onMouseDown={(e) => {
@@ -851,12 +1360,15 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                             </th>
                                         ))}
                                         {mode === 'manual' && [
+                                            { id: 'quality', label: '✓', width: columnWidths.quality, title: 'Quality Check' },
+                                            { id: 'safety', label: '⚠', width: columnWidths.safety, title: 'Safety Point' },
+                                            { id: 'kaizen', label: '💡', width: columnWidths.kaizen, title: 'Kaizen' },
                                             { id: 'timing', label: 'Timing', width: columnWidths.timing },
                                             { id: 'offset', label: 'Offset', width: columnWidths.offset },
                                             { id: 'start', label: 'Start', width: columnWidths.start, bg: '#e6f7ff' },
                                             { id: 'finish', label: 'Finish', width: columnWidths.finish, bg: '#e6f7ff' },
                                             { id: 'delete', label: '', width: columnWidths.delete },
-                                        ].map((col) => (
+                                        ].filter(col => col.id === 'delete' || columnVisibility[col.id]).map((col) => (
                                             <th key={col.id} style={{
                                                 borderBottom: '1px solid black',
                                                 borderRight: col.id === 'delete' ? 'none' : '1px solid black',
@@ -867,8 +1379,9 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                                 height: '40px',
                                                 boxSizing: 'border-box',
                                                 whiteSpace: 'nowrap',
-                                                position: 'relative'
-                                            }}>
+                                                position: 'relative',
+                                                fontSize: col.id === 'quality' || col.id === 'safety' || col.id === 'kaizen' ? '1rem' : 'inherit'
+                                            }} title={col.title}>
                                                 {col.label}
                                                 {col.id !== 'delete' && (
                                                     <div
@@ -929,11 +1442,99 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                                     />
                                                 ) : (m.walkTime ? m.walkTime.toFixed(1) : '')}
                                             </td>
+                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.waiting, backgroundColor: '#fff5f5' }}>
+                                                {mode === 'manual' ? (
+                                                    <input
+                                                        type="number"
+                                                        value={m.waitingTime || 0}
+                                                        onChange={(e) => handleManualChange(idx, 'waitingTime', e.target.value)}
+                                                        style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                        placeholder="0"
+                                                        title="Waiting Time (Waste)"
+                                                    />
+                                                ) : (m.waitingTime ? m.waitingTime.toFixed(1) : '')}
+                                            </td>
+                                            {/* Value Type Dropdowns */}
+                                            {columnVisibility.manVT && (
+                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.manVT, backgroundColor: m.valueType?.manual === 'VA' ? '#e8f5e9' : m.valueType?.manual === 'NVA' ? '#fff3e0' : '#ffebee' }}>
+                                                    {mode === 'manual' ? (
+                                                        <select
+                                                            value={m.valueType?.manual || 'VA'}
+                                                            onChange={(e) => handleManualChange(idx, 'valueType.manual', e.target.value)}
+                                                            style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '0.7rem', cursor: 'pointer' }}
+                                                            title="Manual Value Type"
+                                                        >
+                                                            <option value="VA">VA</option>
+                                                            <option value="NVA">NVA</option>
+                                                            <option value="NNVA">NNVA</option>
+                                                        </select>
+                                                    ) : (m.valueType?.manual || 'VA')}
+                                                </td>
+                                            )}
+                                            {columnVisibility.autoVT && (
+                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.autoVT, backgroundColor: m.valueType?.auto === 'VA' ? '#e8f5e9' : m.valueType?.auto === 'NVA' ? '#fff3e0' : '#ffebee' }}>
+                                                    {mode === 'manual' ? (
+                                                        <select
+                                                            value={m.valueType?.auto || 'VA'}
+                                                            onChange={(e) => handleManualChange(idx, 'valueType.auto', e.target.value)}
+                                                            style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '0.7rem', cursor: 'pointer' }}
+                                                            title="Auto Value Type"
+                                                        >
+                                                            <option value="VA">VA</option>
+                                                            <option value="NVA">NVA</option>
+                                                            <option value="NNVA">NNVA</option>
+                                                        </select>
+                                                    ) : (m.valueType?.auto || 'VA')}
+                                                </td>
+                                            )}
+                                            {columnVisibility.walkVT && (
+                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.walkVT, backgroundColor: m.valueType?.walk === 'VA' ? '#e8f5e9' : m.valueType?.walk === 'NVA' ? '#fff3e0' : '#ffebee' }}>
+                                                    {mode === 'manual' ? (
+                                                        <select
+                                                            value={m.valueType?.walk || 'NVA'}
+                                                            onChange={(e) => handleManualChange(idx, 'valueType.walk', e.target.value)}
+                                                            style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '0.7rem', cursor: 'pointer' }}
+                                                            title="Walk Value Type"
+                                                        >
+                                                            <option value="VA">VA</option>
+                                                            <option value="NVA">NVA</option>
+                                                            <option value="NNVA">NNVA</option>
+                                                        </select>
+                                                    ) : (m.valueType?.walk || 'NVA')}
+                                                </td>
+                                            )}
                                             <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', fontWeight: 'bold', height: '40px', boxSizing: 'border-box', width: columnWidths.total }}>
-                                                {((parseFloat(m.manualTime) || 0) + (parseFloat(m.autoTime) || 0) + (parseFloat(m.walkTime) || 0)).toFixed(1)}
+                                                {((parseFloat(m.manualTime) || 0) + (parseFloat(m.autoTime) || 0) + (parseFloat(m.walkTime) || 0) + (parseFloat(m.waitingTime) || 0)).toFixed(1)}
                                             </td>
                                             {mode === 'manual' && (
                                                 <>
+                                                    <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.quality }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={m.qualityCheck || false}
+                                                            onChange={(e) => handleManualChange(idx, 'qualityCheck', e.target.checked)}
+                                                            style={{ cursor: 'pointer' }}
+                                                            title="Quality Check Point"
+                                                        />
+                                                    </td>
+                                                    <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.safety }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={m.safetyPoint || false}
+                                                            onChange={(e) => handleManualChange(idx, 'safetyPoint', e.target.checked)}
+                                                            style={{ cursor: 'pointer' }}
+                                                            title="Safety Point"
+                                                        />
+                                                    </td>
+                                                    <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.kaizen }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={m.kaizenFlag || false}
+                                                            onChange={(e) => handleManualChange(idx, 'kaizenFlag', e.target.checked)}
+                                                            style={{ cursor: 'pointer' }}
+                                                            title="Kaizen Opportunity"
+                                                        />
+                                                    </td>
                                                     <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.timing }}>
                                                         <select
                                                             value={m.timingMode}
@@ -979,7 +1580,7 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                     ))}
                                     {mode === 'manual' && (
                                         <tr style={{ height: '40px' }}>
-                                            <td colSpan={11} style={{ borderBottom: '1px solid black', padding: '0', textAlign: 'center', height: '40px' }}>
+                                            <td colSpan={14} style={{ borderBottom: '1px solid black', padding: '0', textAlign: 'center', height: '40px' }}>
                                                 <button
                                                     onClick={addManualRow}
                                                     style={{ border: 'none', background: '#f5f5f5', width: '100%', height: '100%', padding: '0', cursor: 'pointer', color: '#666', fontSize: '0.8rem' }}
@@ -1001,10 +1602,16 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                         <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', width: columnWidths.walk }}>
                                             {timedMeasurements.reduce((sum, m) => sum + (parseFloat(m.walkTime) || 0), 0).toFixed(1)}
                                         </td>
-                                        <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', width: columnWidths.total }}>
-                                            {timedMeasurements.reduce((sum, m) => sum + (parseFloat(m.manualTime) || 0) + (parseFloat(m.autoTime) || 0) + (parseFloat(m.walkTime) || 0), 0).toFixed(1)}
+                                        <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', width: columnWidths.waiting, backgroundColor: '#fff5f5' }}>
+                                            {timedMeasurements.reduce((sum, m) => sum + (parseFloat(m.waitingTime) || 0), 0).toFixed(1)}
                                         </td>
-                                        {mode === 'manual' && <td colSpan={5} style={{ borderBottom: '1px solid black', height: '40px' }}></td>}
+                                        {columnVisibility.manVT && <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', height: '40px', width: columnWidths.manVT }}></td>}
+                                        {columnVisibility.autoVT && <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', height: '40px', width: columnWidths.autoVT }}></td>}
+                                        {columnVisibility.walkVT && <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', height: '40px', width: columnWidths.walkVT }}></td>}
+                                        <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', width: columnWidths.total }}>
+                                            {timedMeasurements.reduce((sum, m) => sum + (parseFloat(m.manualTime) || 0) + (parseFloat(m.autoTime) || 0) + (parseFloat(m.walkTime) || 0) + (parseFloat(m.waitingTime) || 0), 0).toFixed(1)}
+                                        </td>
+                                        {mode === 'manual' && <td colSpan={8} style={{ borderBottom: '1px solid black', height: '40px' }}></td>}
                                     </tr>
                                 </tbody>
                             </table>
@@ -1015,19 +1622,20 @@ function StandardWorkCombinationSheet({ currentProject }) {
                             {renderChart()}
                             <div style={{ marginTop: 'auto', paddingTop: '10px', display: 'flex', gap: '20px', fontSize: '0.8rem', borderTop: '1px solid #ccc', justifyContent: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <div style={{ width: '20px', height: '6px', backgroundColor: 'green', borderRadius: '2px' }}></div> Manual
+                                    <div style={{ width: '20px', height: '6px', backgroundColor: 'green', borderRadius: '2px' }}></div> Manual (Solid)
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <div style={{ width: '20px', height: '4px', borderTop: '2px dashed darkblue' }}></div> Auto
+                                    <div style={{ width: '20px', height: '4px', borderTop: '2px dashed darkblue' }}></div> Auto (Dashed)
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                    <svg width="20" height="10"><path d="M 0 5 Q 5 0 10 5 T 20 5" stroke="red" strokeWidth="2" fill="none" /></svg> Walk
+                                    <svg width="20" height="10"><path d="M 0 5 Q 5 0 10 5 T 20 5" stroke="red" strokeWidth="2" fill="none" /></svg> Walk (Wavy)
                                 </div>
-                                {headerInfo.taktTime && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <div style={{ width: '20px', height: '0', borderTop: '2px dashed red' }}></div> Takt Time
-                                    </div>
-                                )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: '10px', paddingLeft: '10px', borderLeft: '1px solid #ccc' }}>
+                                    <span style={{ fontWeight: 'bold', color: '#666' }}>Colors:</span>
+                                    <span style={{ color: '#4CAF50', fontWeight: 'bold' }}>VA (Green)</span>
+                                    <span style={{ color: '#FFA500', fontWeight: 'bold' }}>NVA (Orange)</span>
+                                    <span style={{ color: '#FF4444', fontWeight: 'bold' }}>Waste (Red)</span>
+                                </div>
                             </div>
                         </div>
                     </div>
