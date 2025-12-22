@@ -25,6 +25,7 @@ const MENU_ITEMS = [
     { path: '/cycle-segmentation', icon: '🔄', labelKey: 'header.cycleSegmentation', title: 'Cycle Segmentation' },
     { path: '/files', icon: '📂', labelKey: 'header.files', title: 'File Explorer' },
     { path: '/diagnostics', icon: '🩺', labelKey: 'header.diagnostics', title: 'System Diagnostics' },
+    { path: '/swcs', icon: '📋', labelKey: 'header.swcs', title: 'Standard Work Combination Sheet' },
     { path: '/help', icon: '❓', labelKey: 'header.help' },
 ];
 
