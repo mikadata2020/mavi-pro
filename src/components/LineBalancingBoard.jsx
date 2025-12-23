@@ -43,6 +43,17 @@ function SortableTask({ id, task }) {
         alignItems: 'center'
     };
 
+    // Calculate Operator Time
+    const man = parseFloat(task.manualTime) || 0;
+    const walk = parseFloat(task.walkTime) || 0;
+    const wait = parseFloat(task.waitingTime) || 0;
+    const auto = parseFloat(task.autoTime) || 0;
+
+    let operatorTime = man + walk + wait;
+    if (operatorTime === 0 && auto === 0 && task.duration > 0) {
+        operatorTime = task.duration;
+    }
+
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
             <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '10px' }}>
@@ -50,7 +61,7 @@ function SortableTask({ id, task }) {
                 <div style={{ color: '#888', fontSize: '0.75rem' }}>{task.category}</div>
             </div>
             <div style={{ color: '#00ff00', fontWeight: 'bold', fontSize: '0.9rem', minWidth: '50px', textAlign: 'right' }}>
-                {task.duration.toFixed(2)}s
+                {operatorTime.toFixed(2)}s
             </div>
         </div>
     );
@@ -246,7 +257,15 @@ export default function LineBalancingBoard({ measurements, onUpdateMeasurements,
                         id={station}
                         title={station}
                         tasks={items[station]}
-                        totalTime={items[station].reduce((sum, t) => sum + t.duration, 0)}
+                        totalTime={items[station].reduce((sum, t) => {
+                            const man = parseFloat(t.manualTime) || 0;
+                            const walk = parseFloat(t.walkTime) || 0;
+                            const wait = parseFloat(t.waitingTime) || 0;
+                            const auto = parseFloat(t.autoTime) || 0;
+                            let opTime = man + walk + wait;
+                            if (opTime === 0 && auto === 0 && t.duration > 0) opTime = t.duration;
+                            return sum + opTime;
+                        }, 0)}
                         taktTime={taktTime}
                     />
                 ))}

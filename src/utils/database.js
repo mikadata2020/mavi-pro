@@ -4,10 +4,11 @@
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 
 const DB_NAME = 'MotionAnalysisDB';
-const DB_VERSION = 3; // Updated version for folders
+const DB_VERSION = 4; // Updated version for cameras support
 const STORE_NAME = 'measurements';
 const PROJECTS_STORE = 'projects';
 const FOLDERS_STORE = 'folders';
+const CAMERAS_STORE = 'cameras';
 
 // Supabase table names
 const SUPABASE_PROJECTS_TABLE = 'projects';
@@ -46,6 +47,13 @@ export const initDB = () => {
                 if (!projectStore.indexNames.contains('folderId')) {
                     projectStore.createIndex('folderId', 'folderId', { unique: false });
                 }
+            }
+
+            // Version 4: Multi-Camera Support
+            if (!db.objectStoreNames.contains(CAMERAS_STORE)) {
+                const cameraStore = db.createObjectStore(CAMERAS_STORE, { keyPath: 'id', autoIncrement: true });
+                cameraStore.createIndex('name', 'name', { unique: false });
+                cameraStore.createIndex('projectId', 'projectId', { unique: false });
             }
 
             // Create folders store
@@ -470,4 +478,42 @@ export const getFolderBreadcrumbs = async (folderId) => {
         }
     }
     return crumbs;
+};
+
+// --- Multi-Camera Management ---
+
+export const getAllCameras = async () => {
+    const db = await initDB();
+    const CAMERAS_STORE = 'cameras';
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([CAMERAS_STORE], 'readonly');
+        const store = transaction.objectStore(CAMERAS_STORE);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+export const saveCamera = async (cameraData) => {
+    const db = await initDB();
+    const CAMERAS_STORE = 'cameras';
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([CAMERAS_STORE], 'readwrite');
+        const store = transaction.objectStore(CAMERAS_STORE);
+        const request = store.put(cameraData);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+export const deleteCamera = async (id) => {
+    const db = await initDB();
+    const CAMERAS_STORE = 'cameras';
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([CAMERAS_STORE], 'readwrite');
+        const store = transaction.objectStore(CAMERAS_STORE);
+        const request = store.delete(id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
 };

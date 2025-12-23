@@ -11,6 +11,7 @@ export const translations = {
         header: {
             video: 'Video',
             aiProcess: 'Proses AI',
+            realtimeCompliance: 'Kepatuhan Real-time',
             analysis: 'Analisis',
             rearrange: 'Susun Ulang',
             cycleAnalysis: 'Analisis Cycle',
@@ -224,6 +225,7 @@ export const translations = {
         header: {
             video: 'Video',
             aiProcess: 'AI Process',
+            realtimeCompliance: 'Real-time Compliance',
             analysis: 'Analysis',
             rearrange: 'Rearrange',
             cycleAnalysis: 'Cycle Analysis',
@@ -437,6 +439,7 @@ export const translations = {
         header: {
             video: 'ビデオ',
             aiProcess: 'AIプロセス',
+            realtimeCompliance: 'リアルタイム・コンプライアンス',
             analysis: '分析',
             rearrange: '再配置',
             cycleAnalysis: 'サイクル分析',

@@ -54,6 +54,8 @@ const CycleSegmentation = React.lazy(() => import('./components/CycleSegmentatio
 const ValueStreamMap = React.lazy(() => import('./components/ValueStreamMap'));
 const AIProcessWorkspace = React.lazy(() => import('./components/AIProcessWorkspace'));
 
+const RealtimeCompliance = React.lazy(() => import('./components/RealtimeCompliance'));
+
 // Loading component
 const LoadingSpinner = () => (
   <div style={{
@@ -518,6 +520,9 @@ function AppContent() {
 
               {/* AI Process Studio */}
               <Route path="/ai-process" element={<div style={{ overflow: 'hidden', height: '100%' }}><AIProcessWorkspace measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} onVideoChange={setVideoSrc} videoName={videoName} onVideoNameChange={setVideoName} /></div>} />
+
+              {/* Real-time Compliance */}
+              <Route path="/realtime-compliance" element={<RealtimeCompliance projectName={currentProject?.name} />} />
 
               {/* Admin Panel */}
               <Route path="/admin" element={<div style={{ overflow: 'hidden', height: '100%' }}><AdminPanel /></div>} />

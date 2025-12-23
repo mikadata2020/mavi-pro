@@ -8,6 +8,7 @@ const MENU_ITEMS = [
     { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' },
     { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
     { path: '/ai-process', icon: '🧠', title: 'AI Process', labelKey: 'header.aiProcess' },
+    { path: '/realtime-compliance', icon: '🛡️', title: 'Real-time Compliance', labelKey: 'header.realtimeCompliance' },
     { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange' },
     { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste' },
     { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis' },

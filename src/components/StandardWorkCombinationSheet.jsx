@@ -210,17 +210,15 @@ function StandardWorkCombinationSheet({ currentProject }) {
         auto: 45,
         walk: 45,
         waiting: 45,
-        manVT: 55,
-        autoVT: 55,
-        walkVT: 55,
+        start: 50,
+        finish: 50,
+        duration: 50,
         total: 45,
         quality: 30,
         safety: 30,
         kaizen: 30,
         timing: 80,
         offset: 50,
-        start: 50,
-        finish: 50,
         delete: 30
     });
 
@@ -232,18 +230,41 @@ function StandardWorkCombinationSheet({ currentProject }) {
         auto: true,
         walk: true,
         waiting: true,
-        manVT: true,
-        autoVT: true,
-        walkVT: true,
-        total: true,
+        start: true,
+        finish: true,
+        duration: true,
+        total: false,
         quality: true,
         safety: true,
         kaizen: true,
         timing: true,
-        offset: true,
-        start: true,
-        finish: true
+        offset: true
     });
+
+    const [projectMeasurements, setProjectMeasurements] = useState([]);
+
+    useEffect(() => {
+        if (selectedProject) {
+            // Initialize editable buffer with project data
+            const measurements = selectedProject.measurements || [];
+            // Map duration to manualTime if missing (similar to render logic, but persisted in state)
+            const initializedMeasurements = measurements.map(m => {
+                const manual = parseFloat(m.manualTime) || 0;
+                const auto = parseFloat(m.autoTime) || 0;
+                const walk = parseFloat(m.walkTime) || 0;
+                const waiting = parseFloat(m.waitingTime) || 0;
+
+                if (manual === 0 && auto === 0 && walk === 0 && waiting === 0) {
+                    const dur = parseFloat(m.duration) || (m.endTime && m.startTime ? m.endTime - m.startTime : 0) || 0;
+                    if (dur > 0) return { ...m, manualTime: dur };
+                }
+                return m;
+            });
+            setProjectMeasurements(initializedMeasurements);
+        } else {
+            setProjectMeasurements([]);
+        }
+    }, [selectedProject]);
 
     const [showColumnSettings, setShowColumnSettings] = useState(false);
 
@@ -270,17 +291,15 @@ function StandardWorkCombinationSheet({ currentProject }) {
             auto: true,
             walk: true,
             waiting: false,
-            manVT: false,
-            autoVT: false,
-            walkVT: false,
-            total: true,
+            start: true,
+            finish: true,
+            duration: true,
+            total: false,
             quality: false,
             safety: false,
             kaizen: false,
             timing: false,
-            offset: false,
-            start: true,
-            finish: true
+            offset: false
         });
     };
 
@@ -293,7 +312,7 @@ function StandardWorkCombinationSheet({ currentProject }) {
 
     const autoFitColumns = () => {
         const newWidths = { ...columnWidths };
-        const data = mode === 'project' ? (selectedProject ? selectedProject.measurements : []) : manualMeasurements;
+        const data = mode === 'project' ? projectMeasurements : manualMeasurements;
 
         // Measure Element Name max width
         let maxChars = 12; // Default for 'Element Name'
@@ -306,7 +325,10 @@ function StandardWorkCombinationSheet({ currentProject }) {
     };
 
     const handleManualChange = (index, field, value) => {
-        const newMeasurements = [...manualMeasurements];
+        const isProjectMode = mode === 'project';
+        const currentData = isProjectMode ? projectMeasurements : manualMeasurements;
+        const newMeasurements = [...currentData]; // Clone array
+
         if (field === 'elementName' || field === 'timingMode') {
             newMeasurements[index] = { ...newMeasurements[index], [field]: value };
         } else if (field === 'qualityCheck' || field === 'safetyPoint' || field === 'kaizenFlag') {
@@ -323,10 +345,41 @@ function StandardWorkCombinationSheet({ currentProject }) {
                 }
             };
         } else {
-            // Numeric fields
-            newMeasurements[index] = { ...newMeasurements[index], [field]: parseFloat(value) || 0 };
+            // Numeric fields - VALIDATION LOGIC
+            const numericValue = parseFloat(value) || 0;
+            const currentItem = newMeasurements[index];
+
+            // Calculate potential new sum
+            let proposedManual = currentItem.manualTime || 0;
+            let proposedAuto = currentItem.autoTime || 0;
+            let proposedWalk = currentItem.walkTime || 0;
+            let proposedWaiting = currentItem.waitingTime || 0;
+
+            if (field === 'manualTime') proposedManual = numericValue;
+            if (field === 'autoTime') proposedAuto = numericValue;
+            if (field === 'walkTime') proposedWalk = numericValue;
+            if (field === 'waitingTime') proposedWaiting = numericValue;
+
+            const newTotal = proposedManual + proposedAuto + proposedWalk + proposedWaiting;
+
+            // Get constraints (original duration)
+            const originalDuration = currentItem.duration ||
+                (currentItem.endTime && currentItem.startTime ? (currentItem.endTime - currentItem.startTime) : 0);
+
+            // If original duration exists, ensure we don't exceed it (allowing small float tolerance)
+            if (originalDuration > 0 && newTotal > (originalDuration + 0.1)) {
+                alert(`Total duration (${newTotal.toFixed(1)}s) cannot exceed the original element duration (${originalDuration.toFixed(1)}s).`);
+                return; // Revert change
+            }
+
+            newMeasurements[index] = { ...newMeasurements[index], [field]: numericValue };
         }
-        setManualMeasurements(newMeasurements);
+
+        if (isProjectMode) {
+            setProjectMeasurements(newMeasurements);
+        } else {
+            setManualMeasurements(newMeasurements);
+        }
     };
 
     const addManualRow = () => {
@@ -363,25 +416,39 @@ function StandardWorkCombinationSheet({ currentProject }) {
     // Calculate start and end times for rendering
     const calculateTimedMeasurements = () => {
         const rawMeasurements = mode === 'project'
-            ? (selectedProject ? selectedProject.measurements : [])
+            ? projectMeasurements
             : manualMeasurements;
 
         let lastFinishTime = 0;
         let lastRowStart = 0;
 
         return rawMeasurements.map((m, index) => {
-            const manual = parseFloat(m.manualTime) || 0;
-            const auto = parseFloat(m.autoTime) || 0;
-            const walk = parseFloat(m.walkTime) || 0;
-            const waiting = parseFloat(m.waitingTime) || 0;
+            let manual = parseFloat(m.manualTime) || 0;
+            let auto = parseFloat(m.autoTime) || 0;
+            let walk = parseFloat(m.walkTime) || 0;
+            let waiting = parseFloat(m.waitingTime) || 0;
+
+            // Adapt data from VideoIntelligence/Project if SWCS fields are missing but duration/times exist
+            if (manual === 0 && auto === 0 && walk === 0 && waiting === 0) {
+                if (m.duration !== undefined || (m.endTime !== undefined && m.startTime !== undefined)) {
+                    const dur = parseFloat(m.duration) || (parseFloat(m.endTime) - parseFloat(m.startTime)) || 0;
+                    // Map to Manual Time by default so it appears on chart/table
+                    manual = dur;
+                }
+            }
+
             const duration = manual + auto + walk + waiting;
 
             let startTime = 0;
 
             if (mode === 'project') {
-                // Project mode: purely sequential for now (standard behavior)
-                startTime = lastFinishTime; // Or just accumulate? usually SWCS is sequential
-                // For existing projects, we assume Series with 0 offset
+                // Use explicit start time from project data if available (e.g. from VideoIntelligence)
+                if (m.startTime !== undefined && m.startTime !== null && !isNaN(parseFloat(m.startTime))) {
+                    startTime = parseFloat(m.startTime);
+                } else {
+                    // Project mode: purely sequential fallback
+                    startTime = lastFinishTime;
+                }
             } else {
                 // Manual mode with advanced timing
                 const timingMode = m.timingMode || 'series';
@@ -399,7 +466,7 @@ function StandardWorkCombinationSheet({ currentProject }) {
             }
 
             // Calculate component starts relative to row startTime
-            // Standard SWCS Pattern: Manual -> Auto (parallel with next?) -> Walk -> Waiting
+            // Standard SWCS Pattern: Manual -> Auto -> Walk -> Waiting
             // Usually: Manual happens, then Auto machine runs (operator moves away?), Walk happens, then Waiting
             // Visualizing:
             // Manual Bar: Starts at startTime
@@ -422,14 +489,15 @@ function StandardWorkCombinationSheet({ currentProject }) {
 
             // For the next row calculations
             lastRowStart = rowStart;
-            // The "Operator" is free after Manual + Walk + Waiting
-            // In SWCS, the "Time Line" usually follows the Operator.
-            // So the next element starts when the Operator is available.
-            // Operator time = Manual + Walk + Waiting.
+            // Next element starts when Operator is free (Manual + Walk + Waiting) or purely based on max time
             lastFinishTime = Math.max(manualEnd, autoEnd, walkEnd, waitingEnd);
 
             return {
                 ...m,
+                manualTime: manual, // Ensure mapped duration is reflected in the object
+                autoTime: auto,
+                walkTime: walk,
+                waitingTime: waiting,
                 _calculated: {
                     startTime: rowStart,
                     finishTime: Math.max(manualEnd, autoEnd, walkEnd, waitingEnd), // Total duration of this row's activity
@@ -1118,17 +1186,15 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                 { id: 'auto', label: 'Auto Time' },
                                 { id: 'walk', label: 'Walk Time' },
                                 { id: 'waiting', label: 'Waiting Time' },
-                                { id: 'manVT', label: 'Manual Value Type' },
-                                { id: 'autoVT', label: 'Auto Value Type' },
-                                { id: 'walkVT', label: 'Walk Value Type' },
+                                { id: 'start', label: 'Start Time' },
+                                { id: 'finish', label: 'Finish Time' },
+                                { id: 'duration', label: 'Duration' },
                                 { id: 'total', label: 'Total Time' },
                                 { id: 'quality', label: 'Quality ✓' },
                                 { id: 'safety', label: 'Safety ⚠' },
                                 { id: 'kaizen', label: 'Kaizen 💡' },
                                 { id: 'timing', label: 'Timing Mode' },
-                                { id: 'offset', label: 'Offset' },
-                                { id: 'start', label: 'Start Time' },
-                                { id: 'finish', label: 'Finish Time' }
+                                { id: 'offset', label: 'Offset' }
                             ].map(col => (
                                 <label
                                     key={col.id}
@@ -1330,9 +1396,9 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                             { id: 'auto', label: 'Auto', width: columnWidths.auto },
                                             { id: 'walk', label: 'Walk', width: columnWidths.walk },
                                             { id: 'waiting', label: 'Wait', width: columnWidths.waiting, title: 'Waiting Time (Waste)' },
-                                            { id: 'manVT', label: 'M-VT', width: columnWidths.manVT, title: 'Manual Value Type', bg: '#e8f5e9' },
-                                            { id: 'autoVT', label: 'A-VT', width: columnWidths.autoVT, title: 'Auto Value Type', bg: '#e8f5e9' },
-                                            { id: 'walkVT', label: 'W-VT', width: columnWidths.walkVT, title: 'Walk Value Type', bg: '#fff3e0' },
+                                            { id: 'start', label: 'Start', width: columnWidths.start, title: 'Start Time', bg: '#e6f7ff' },
+                                            { id: 'finish', label: 'Finish', width: columnWidths.finish, title: 'Finish Time', bg: '#e6f7ff' },
+                                            { id: 'duration', label: 'Duration', width: columnWidths.duration, title: 'Duration', bg: '#fff' },
                                             { id: 'total', label: 'Total', width: columnWidths.total },
                                         ].filter(col => columnVisibility[col.id]).map((col) => (
                                             <th key={col.id} style={{
@@ -1365,8 +1431,6 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                             { id: 'kaizen', label: '💡', width: columnWidths.kaizen, title: 'Kaizen' },
                                             { id: 'timing', label: 'Timing', width: columnWidths.timing },
                                             { id: 'offset', label: 'Offset', width: columnWidths.offset },
-                                            { id: 'start', label: 'Start', width: columnWidths.start, bg: '#e6f7ff' },
-                                            { id: 'finish', label: 'Finish', width: columnWidths.finish, bg: '#e6f7ff' },
                                             { id: 'delete', label: '', width: columnWidths.delete },
                                         ].filter(col => col.id === 'delete' || columnVisibility[col.id]).map((col) => (
                                             <th key={col.id} style={{
@@ -1413,94 +1477,57 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                                 ) : <div style={{ padding: '0 5px', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.elementName}</div>}
                                             </td>
                                             <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.man }}>
-                                                {mode === 'manual' ? (
-                                                    <input
-                                                        type="number"
-                                                        value={m.manualTime}
-                                                        onChange={(e) => handleManualChange(idx, 'manualTime', e.target.value)}
-                                                        style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
-                                                    />
-                                                ) : (m.manualTime ? m.manualTime.toFixed(1) : '')}
+                                                <input
+                                                    type="number"
+                                                    value={m.manualTime}
+                                                    onChange={(e) => handleManualChange(idx, 'manualTime', e.target.value)}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                />
                                             </td>
                                             <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.auto }}>
-                                                {mode === 'manual' ? (
-                                                    <input
-                                                        type="number"
-                                                        value={m.autoTime}
-                                                        onChange={(e) => handleManualChange(idx, 'autoTime', e.target.value)}
-                                                        style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
-                                                    />
-                                                ) : (m.autoTime ? m.autoTime.toFixed(1) : '')}
+                                                <input
+                                                    type="number"
+                                                    value={m.autoTime}
+                                                    onChange={(e) => handleManualChange(idx, 'autoTime', e.target.value)}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                />
                                             </td>
                                             <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.walk }}>
-                                                {mode === 'manual' ? (
-                                                    <input
-                                                        type="number"
-                                                        value={m.walkTime}
-                                                        onChange={(e) => handleManualChange(idx, 'walkTime', e.target.value)}
-                                                        style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
-                                                    />
-                                                ) : (m.walkTime ? m.walkTime.toFixed(1) : '')}
+                                                <input
+                                                    type="number"
+                                                    value={m.walkTime}
+                                                    onChange={(e) => handleManualChange(idx, 'walkTime', e.target.value)}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                />
                                             </td>
                                             <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.waiting, backgroundColor: '#fff5f5' }}>
-                                                {mode === 'manual' ? (
-                                                    <input
-                                                        type="number"
-                                                        value={m.waitingTime || 0}
-                                                        onChange={(e) => handleManualChange(idx, 'waitingTime', e.target.value)}
-                                                        style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
-                                                        placeholder="0"
-                                                        title="Waiting Time (Waste)"
-                                                    />
-                                                ) : (m.waitingTime ? m.waitingTime.toFixed(1) : '')}
+                                                <input
+                                                    type="number"
+                                                    value={m.waitingTime || 0}
+                                                    onChange={(e) => handleManualChange(idx, 'waitingTime', e.target.value)}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                    placeholder="0"
+                                                    title="Waiting Time (Waste)"
+                                                />
                                             </td>
-                                            {/* Value Type Dropdowns */}
-                                            {columnVisibility.manVT && (
-                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.manVT, backgroundColor: m.valueType?.manual === 'VA' ? '#e8f5e9' : m.valueType?.manual === 'NVA' ? '#fff3e0' : '#ffebee' }}>
-                                                    {mode === 'manual' ? (
-                                                        <select
-                                                            value={m.valueType?.manual || 'VA'}
-                                                            onChange={(e) => handleManualChange(idx, 'valueType.manual', e.target.value)}
-                                                            style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '0.7rem', cursor: 'pointer' }}
-                                                            title="Manual Value Type"
-                                                        >
-                                                            <option value="VA">VA</option>
-                                                            <option value="NVA">NVA</option>
-                                                            <option value="NNVA">NNVA</option>
-                                                        </select>
-                                                    ) : (m.valueType?.manual || 'VA')}
+                                            {/* Revised Columns: Start, Finish, Duration */}
+                                            {columnVisibility.start && (
+                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '0.8rem', height: '40px', boxSizing: 'border-box', width: columnWidths.start }}>
+                                                    <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {m._calculated ? m._calculated.startTime.toFixed(1) : '-'}
+                                                    </div>
                                                 </td>
                                             )}
-                                            {columnVisibility.autoVT && (
-                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.autoVT, backgroundColor: m.valueType?.auto === 'VA' ? '#e8f5e9' : m.valueType?.auto === 'NVA' ? '#fff3e0' : '#ffebee' }}>
-                                                    {mode === 'manual' ? (
-                                                        <select
-                                                            value={m.valueType?.auto || 'VA'}
-                                                            onChange={(e) => handleManualChange(idx, 'valueType.auto', e.target.value)}
-                                                            style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '0.7rem', cursor: 'pointer' }}
-                                                            title="Auto Value Type"
-                                                        >
-                                                            <option value="VA">VA</option>
-                                                            <option value="NVA">NVA</option>
-                                                            <option value="NNVA">NNVA</option>
-                                                        </select>
-                                                    ) : (m.valueType?.auto || 'VA')}
+                                            {columnVisibility.finish && (
+                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '0.8rem', height: '40px', boxSizing: 'border-box', width: columnWidths.finish }}>
+                                                    <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        {m._calculated ? m._calculated.finishTime.toFixed(1) : '-'}
+                                                    </div>
                                                 </td>
                                             )}
-                                            {columnVisibility.walkVT && (
-                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.walkVT, backgroundColor: m.valueType?.walk === 'VA' ? '#e8f5e9' : m.valueType?.walk === 'NVA' ? '#fff3e0' : '#ffebee' }}>
-                                                    {mode === 'manual' ? (
-                                                        <select
-                                                            value={m.valueType?.walk || 'NVA'}
-                                                            onChange={(e) => handleManualChange(idx, 'valueType.walk', e.target.value)}
-                                                            style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '0.7rem', cursor: 'pointer' }}
-                                                            title="Walk Value Type"
-                                                        >
-                                                            <option value="VA">VA</option>
-                                                            <option value="NVA">NVA</option>
-                                                            <option value="NNVA">NNVA</option>
-                                                        </select>
-                                                    ) : (m.valueType?.walk || 'NVA')}
+                                            {columnVisibility.duration && (
+                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', fontWeight: 'bold', height: '40px', boxSizing: 'border-box', width: columnWidths.duration }}>
+                                                    {((parseFloat(m.manualTime) || 0) + (parseFloat(m.autoTime) || 0) + (parseFloat(m.walkTime) || 0) + (parseFloat(m.waitingTime) || 0)).toFixed(1)}
                                                 </td>
                                             )}
                                             <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', fontWeight: 'bold', height: '40px', boxSizing: 'border-box', width: columnWidths.total }}>
@@ -1554,16 +1581,6 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                                             style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
                                                             placeholder="0"
                                                         />
-                                                    </td>
-                                                    <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '0.8rem', height: '40px', boxSizing: 'border-box', width: columnWidths.start }}>
-                                                        <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                            {m._calculated ? m._calculated.startTime.toFixed(1) : '-'}
-                                                        </div>
-                                                    </td>
-                                                    <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '0.8rem', height: '40px', boxSizing: 'border-box', width: columnWidths.finish }}>
-                                                        <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                            {m._calculated ? m._calculated.finishTime.toFixed(1) : '-'}
-                                                        </div>
                                                     </td>
                                                     <td style={{ borderBottom: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.delete }}>
                                                         <button

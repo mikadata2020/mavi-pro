@@ -10,7 +10,14 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
     const [selectedProjects, setSelectedProjects] = useState([]); // Array of project names
     const [taktTime, setTaktTime] = useState(30); // Default takt time in seconds
     const [showTaktLine, setShowTaktLine] = useState(true);
+    const [targetCycleRatio, setTargetCycleRatio] = useState(0.95); // 95% of Takt Time
     const [isBalancingMode, setIsBalancingMode] = useState(false);
+
+    // Kaizen Simulation State
+    const [isSimulating, setIsSimulating] = useState(false);
+    const [eliminateWaste, setEliminateWaste] = useState(false);
+    const [simplifyNNVA, setSimplifyNNVA] = useState(0); // 0% reduction
+
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
 
@@ -69,8 +76,34 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                 if (!categories[category]) {
                     categories[category] = 0;
                 }
-                categories[category] += item.duration;
-                totalTime += item.duration;
+
+                // TPS Standard: Operator Yamazumi only includes Manual, Walk, and Waiting time.
+                // Exclude Auto time (Machine time).
+                const man = parseFloat(item.manualTime) || 0;
+                const walk = parseFloat(item.walkTime) || 0;
+                const wait = parseFloat(item.waitingTime) || 0;
+                const auto = parseFloat(item.autoTime) || 0;
+
+                let operatorTime = man + walk + wait;
+
+                // Fallback for legacy data (if no breakdown exists but duration does)
+                if (operatorTime === 0 && auto === 0 && item.duration > 0) {
+                    operatorTime = item.duration;
+                }
+                // Kaizen Simulation Logic
+                if (isSimulating) {
+                    if (category === 'Waste' && eliminateWaste) {
+                        operatorTime = 0;
+                    } else if (category === 'Non value-added' && simplifyNNVA > 0) {
+                        // For NNVA, we reduce the time based on the slider
+                        operatorTime = operatorTime * (1 - (simplifyNNVA / 100));
+                    }
+                }
+
+                if (operatorTime > 0) {
+                    categories[category] += operatorTime;
+                    totalTime += operatorTime;
+                }
             });
 
             // Add categories to station data
@@ -83,7 +116,7 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
 
             return stationData;
         }).sort((a, b) => a.station.localeCompare(b.station));
-    }, [measurements, taktTime]);
+    }, [measurements, taktTime, isSimulating, eliminateWaste, simplifyNNVA]);
 
     // Get unique categories for stacking
     const categories = useMemo(() => {
@@ -99,11 +132,12 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
     }, [chartData]);
 
     // Color mapping for categories
+    // Color mapping for categories (TPS Standard)
     const getCategoryColor = (category) => {
         const colorMap = {
-            'Value-added': '#005a9e',
-            'Non value-added': '#bfa900',
-            'Waste': '#c50f1f',
+            'Value-added': '#107c41',      // Green (VA)
+            'Non value-added': '#ffaa00',  // Orange/Yellow (NNVA - Incidental Work)
+            'Waste': '#c50f1f',            // Red (Waste - One Point Lesson)
             'Other': '#666'
         };
         return colorMap[category] || '#888';
@@ -116,17 +150,28 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
         const totalTimes = chartData.map(d => d.total);
         const maxTime = Math.max(...totalTimes);
         const minTime = Math.min(...totalTimes);
-        const avgTime = totalTimes.reduce((a, b) => a + b, 0) / totalTimes.length;
+        const sumTime = totalTimes.reduce((a, b) => a + b, 0);
+        const avgTime = sumTime / (totalTimes.length || 1);
         const bottlenecks = chartData.filter(d => d.isBottleneck).length;
+
+        const totalWorkContent = sumTime; // Sum of all operator work
+        const theoreticalMen = taktTime > 0 ? Math.ceil(totalWorkContent / taktTime) : 0;
+
+        // TPS Standard Line Balance Efficiency = (Σ Station Times) / (Number of Stations * Max Station Time)
+        const lineBalanceEfficiency = (maxTime > 0 && totalTimes.length > 0)
+            ? (sumTime / (totalTimes.length * maxTime) * 100)
+            : 0;
 
         return {
             maxTime: maxTime.toFixed(2),
             minTime: minTime.toFixed(2),
             avgTime: avgTime.toFixed(2),
             bottlenecks,
-            balance: ((minTime / maxTime) * 100).toFixed(1)
+            balance: lineBalanceEfficiency.toFixed(1),
+            totalWorkContent: totalWorkContent.toFixed(1),
+            theoreticalMen
         };
-    }, [chartData]);
+    }, [chartData, taktTime]);
 
     // Custom tooltip
     const CustomTooltip = ({ active, payload }) => {
@@ -459,6 +504,28 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                         Show Takt Line
                     </label>
 
+                    {showTaktLine && (
+                        <label style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            T.C.T:
+                            <input
+                                type="number"
+                                min="80"
+                                max="100"
+                                value={targetCycleRatio * 100}
+                                onChange={(e) => setTargetCycleRatio((parseFloat(e.target.value) || 0) / 100)}
+                                style={{
+                                    padding: '4px 6px',
+                                    width: '50px',
+                                    backgroundColor: 'var(--bg-tertiary)',
+                                    color: '#00ff00',
+                                    border: '1px solid var(--border-color)',
+                                    borderRadius: '4px'
+                                }}
+                            />
+                            %
+                        </label>
+                    )}
+
                     <button
                         onClick={() => setShowChat(!showChat)}
                         style={{
@@ -476,8 +543,78 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                     >
                         🤖 AI
                     </button>
+                    {/* Kaizen Simulation Toggle */}
+                    <button
+                        onClick={() => {
+                            setIsSimulating(!isSimulating);
+                            // Reset sim params on close
+                            if (isSimulating) {
+                                setEliminateWaste(false);
+                                setSimplifyNNVA(0);
+                            }
+                        }}
+                        style={{
+                            padding: '6px 12px',
+                            backgroundColor: isSimulating ? 'var(--accent-purple)' : 'var(--bg-tertiary)',
+                            color: 'white',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                        }}
+                    >
+                        {isSimulating ? '🧪 Simulating...' : '🧪 Kaizen Sim'}
+                    </button>
                 </div>
             </div>
+
+            {/* Simulation Controls */}
+            {isSimulating && (
+                <div style={{
+                    marginBottom: '20px',
+                    padding: '15px',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--accent-purple)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '20px',
+                    flexWrap: 'wrap'
+                }}>
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🧪 ECRS Simulation
+                    </h3>
+
+                    {/* Eliminate Waste */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#fff' }}>
+                        <input
+                            type="checkbox"
+                            checked={eliminateWaste}
+                            onChange={(e) => setEliminateWaste(e.target.checked)}
+                        />
+                        <span style={{ fontWeight: eliminateWaste ? 'bold' : 'normal', color: eliminateWaste ? '#c50f1f' : '#fff' }}>
+                            Eliminate Waste (Muda)
+                        </span>
+                    </label>
+
+                    {/* Simplify NNVA */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ color: '#ffaa00' }}>Simplify NNVA:</span>
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="10"
+                            value={simplifyNNVA}
+                            onChange={(e) => setSimplifyNNVA(Number(e.target.value))}
+                            style={{ width: '100px' }}
+                        />
+                        <span style={{ color: '#fff', minWidth: '40px' }}>-{simplifyNNVA}%</span>
+                    </div>
+                </div>
+            )}
 
             {/* Line Balancing Board */}
             {
@@ -522,6 +659,12 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                             <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Stations</div>
                             <div style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 'bold' }}>{chartData.length}</div>
                         </div>
+                        <div style={{ backgroundColor: '#1a1a1a', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Theoretical Men</div>
+                            <div style={{ fontSize: '1.5rem', color: '#fff', fontWeight: 'bold' }}>
+                                {stats.theoreticalMen} <span style={{ fontSize: '0.8rem', fontWeight: 'normal' }}>(Takt: {taktTime}s)</span>
+                            </div>
+                        </div>
                     </div>
                 )
             }
@@ -547,7 +690,6 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                             <Tooltip content={<CustomTooltip />} />
                             <Legend wrapperStyle={{ paddingTop: '20px' }} />
 
-                            {/* Takt Time Reference Line */}
                             {showTaktLine && (
                                 <ReferenceLine
                                     y={taktTime}
@@ -555,6 +697,17 @@ function YamazumiChart({ measurements: propMeasurements = [] }) {
                                     strokeDasharray="5 5"
                                     strokeWidth={2}
                                     label={{ value: `Takt Time: ${taktTime}s`, position: 'right', fill: '#ff0000' }}
+                                />
+                            )}
+
+                            {/* Target Cycle Time Line (95% of Takt) */}
+                            {showTaktLine && (
+                                <ReferenceLine
+                                    y={taktTime * targetCycleRatio}
+                                    stroke="#00ff00"
+                                    strokeDasharray="5 5"
+                                    strokeWidth={3}
+                                    label={{ value: `T.C.T: ${(taktTime * targetCycleRatio).toFixed(1)}s`, position: 'right', fill: '#00ff00' }}
                                 />
                             )}
 
