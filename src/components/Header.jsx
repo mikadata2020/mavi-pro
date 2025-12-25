@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -6,6 +6,7 @@ import GlobalSettingsDialog from './GlobalSettingsDialog';
 
 const MENU_ITEMS = [
     { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' },
+    { path: '/mavi-class', icon: '🎓', title: 'MAVi Class', labelKey: 'header.maviClass' },
     { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
     { path: '/ai-process', icon: '🧠', title: 'AI Process', labelKey: 'header.aiProcess' },
     { path: '/realtime-compliance', icon: '🛡️', title: 'Real-time Compliance', labelKey: 'header.realtimeCompliance' },
@@ -33,6 +34,15 @@ const MENU_ITEMS = [
 function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme, onLogout, sidebarCollapsed }) {
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+    // Listen for global event to open AI settings
+    useEffect(() => {
+        const handleOpenAISettings = () => {
+            setIsSettingsOpen(true);
+        };
+        window.addEventListener('open-ai-settings', handleOpenAISettings);
+        return () => window.removeEventListener('open-ai-settings', handleOpenAISettings);
+    }, []);
 
     return (
         <header style={{

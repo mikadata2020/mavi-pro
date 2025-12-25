@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { chatWithAI } from '../../utils/aiGenerator';
+import { chatWithAI, getStoredApiKey } from '../../utils/aiGenerator';
 
 function AIChatOverlay({
     visible,
     onClose,
+    onOpenSettings,
     contextData,
     systemPrompt = "You are an expert Industrial Engineer assistant.",
     title = "Mavi Engineer",
@@ -13,8 +14,25 @@ function AIChatOverlay({
     const [chatInput, setChatInput] = useState('');
     const [isAiThinking, setIsAiThinking] = useState(false);
     const [isChatFullscreen, setIsChatFullscreen] = useState(false);
+    const [hasApiKey, setHasApiKey] = useState(false);
 
     const messagesEndRef = useRef(null);
+
+    // Check if API key is configured
+    useEffect(() => {
+        const apiKey = getStoredApiKey();
+        setHasApiKey(!!apiKey);
+    }, [visible]);
+
+    // Default handler for opening AI settings
+    const handleOpenSettings = () => {
+        if (onOpenSettings) {
+            onOpenSettings();
+        } else {
+            // Dispatch global event to open AI settings
+            window.dispatchEvent(new CustomEvent('open-ai-settings'));
+        }
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -138,6 +156,38 @@ function AIChatOverlay({
 
             {/* Chat Messages */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* API Key Warning */}
+                {!hasApiKey && (
+                    <div style={{
+                        backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                        border: '1px solid #ff9800',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        marginBottom: '10px'
+                    }}>
+                        <div style={{ color: '#ff9800', fontWeight: 'bold', marginBottom: '8px', fontSize: '0.9rem' }}>
+                            ⚠️ AI Belum Terhubung
+                        </div>
+                        <p style={{ color: '#ccc', fontSize: '0.8rem', margin: '0 0 10px 0' }}>
+                            Silakan konfigurasi API Key di AI Settings untuk menggunakan chatbot.
+                        </p>
+                        <button
+                            onClick={handleOpenSettings}
+                            style={{
+                                padding: '6px 12px',
+                                backgroundColor: '#ff9800',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            ⚙️ Buka AI Settings
+                        </button>
+                    </div>
+                )}
                 {chatHistory.length === 0 ? (
                     <div style={{ color: '#666', textAlign: 'center', marginTop: '20px', fontSize: '0.85rem' }}>
                         <p>👋 Halo! Saya {title}.</p>

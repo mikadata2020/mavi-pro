@@ -214,6 +214,47 @@ export const translations = {
                 legal: 'Legal',
                 rights: '© 2025 Mavi Systems Inc. Hak cipta dilindungi undang-undang.'
             }
+        },
+        sensei: {
+            welcome: '👋 Halo! Saya **MAVi Sensei**, asisten AI yang siap membantu kamu belajar menggunakan aplikasi MAVi.\n\nKamu bisa bertanya tentang:\n- Cara menggunakan fitur tertentu\n- Penjelasan tentang TPS tools\n- Tips & tricks\n- Troubleshooting\n\nApa yang ingin kamu pelajari hari ini?',
+            placeholder: 'Tanya Sensei...',
+            thinking: 'Sensei sedang berpikir...',
+            mute: 'Mute Sensei',
+            unmute: 'Unmute Sensei',
+            apiKeyMissing: '⚠️ **API Key belum diatur.**',
+            apiKeyWarning: 'Silakan set Gemini API Key di **Settings** untuk menggunakan fitur AI penuh.',
+            openSettings: 'Buka AI Settings',
+            onlineStatus: 'Online & Siap Membantu',
+            errorTechnical: 'Maaf, ada kendala teknis. Pastikan API Key sudah benar dan koneksi internet stabil.'
+        },
+        maviClass: {
+            title: 'MAVi Class',
+            subtitle: 'Belajar MAVi dari awal sampai mahir',
+            progress: 'Progress',
+            lessons: 'Pelajaran',
+            totalDuration: 'Total Durasi',
+            modules: 'Modul',
+            moduleLabel: 'Modul',
+            cobaSekarang: 'Coba Sekarang',
+            tontonVideo: 'Tonton Video',
+            keyPoints: 'Poin Kunci',
+            congratulations: 'Selamat!',
+            congratsMessage: 'Anda telah menyelesaikan semua materi MAVi Class. Selamat menjadi MAVi Expert!',
+            resetProgress: 'Reset Progress',
+            resetConfirm: 'Reset semua progress? Tindakan ini tidak bisa dibatalkan.',
+            basicResponses: {
+                help: 'Saya bisa membantu kamu belajar fitur-fitur MAVi seperti Yamazumi, VSM, dan lainnya.',
+                features: 'MAVi memiliki fitur AI Analysis, Time Study, dan TPS Tools.',
+                yamazumi: '🏔️ Yamazumi Chart:\n1. Buka menu **Yamazumi** (/yamazumi)\n2. Import data dari measurement\n3. Lihat stack bar per operator/station\n4. Bandingkan dengan takt time',
+                vsm: '🗺️ Value Stream Map:\n1. Buka menu **Value Stream Map** (/value-stream-map)\n2. Buat Current State Map\n3. Identifikasi waste\n4. Design Future State Map',
+                uploadVideo: '📹 Untuk upload video:\n1. Buka **Video Workspace** (menu 🎬)\n2. Klik tombol Upload atau drag & drop file\n3. Format yang didukung: MP4, WebM, AVI',
+                measureTime: '⏱️ Untuk mengukur waktu:\n1. Di Video Workspace, gunakan **Element Editor**\n2. Klik "Start Measurement" saat memulai\n3. Klik "End Measurement" saat selesai\n4. Beri nama element dan pilih tipe Therblig',
+                aiFeatures: '🧠 Fitur AI tersedia di:\n- **AI Process Studio** (/ai-process): Auto cycle detection, video intelligence\n- **Action Recognition**: Deteksi aksi otomatis\n- **Real-time Compliance**: Monitor kepatuhan SOP',
+                wasteElimination: '🗑️ 7 Waste (Muda):\n- Transport, Inventory, Motion, Waiting\n- Over-processing, Over-production, Defects\n\nGunakan menu **Waste Elimination** (/waste-elimination) untuk identifikasi',
+                therblig: '📍 18 Gerakan Therblig:\n- Transport Empty, Grasp, Transport Loaded\n- Position, Release, Use, Assemble, dll\n\nBuka **Therblig Analysis** (/therblig) untuk detail',
+                createWorkInstruction: '📘 Membuat Work Instruction:\n1. Buka **Manual Creation** (/manual-creation)\n2. Capture frame dari video\n3. Gunakan AI untuk generate instruksi\n4. Export ke PDF/Word/PowerPoint',
+                fallback: '🤔 Hmm, saya perlu lebih banyak konteks. Coba tanyakan tentang upload video atau fitur AI.'
+            }
         }
     },
     en: {
@@ -428,6 +469,47 @@ export const translations = {
                 legal: 'Legal',
                 rights: '© 2025 Mavi Systems Inc. All rights reserved.'
             }
+        },
+        sensei: {
+            welcome: "👋 Hello! I am **MAVi Sensei**, an AI assistant ready to help you learn how to use the MAVi application.\n\nYou can ask about:\n- How to use specific features\n- Explanation of TPS tools\n- Tips & tricks\n- Troubleshooting\n\nWhat would you like to learn today?",
+            placeholder: 'Ask Sensei...',
+            thinking: 'Sensei is thinking...',
+            mute: 'Mute Sensei',
+            unmute: 'Unmute Sensei',
+            apiKeyMissing: '⚠️ **API Key not set.**',
+            apiKeyWarning: 'Please set the Gemini API Key in **Settings** to use full AI features.',
+            openSettings: 'Open AI Settings',
+            onlineStatus: 'Online & Ready to Help',
+            errorTechnical: 'Sorry, there is a technical issue. Make sure the API Key is correct and your internet connection is stable.'
+        },
+        maviClass: {
+            title: 'MAVi Class',
+            subtitle: 'Learn MAVi from beginner to expert',
+            progress: 'Progress',
+            lessons: 'Lessons',
+            totalDuration: 'Total Duration',
+            modules: 'Modules',
+            moduleLabel: 'Module',
+            cobaSekarang: 'Try It Now',
+            tontonVideo: 'Watch Video',
+            keyPoints: 'Key Points',
+            congratulations: 'Congratulations!',
+            congratsMessage: 'You have completed all MAVi Class materials. Congratulations on becoming a MAVi Expert!',
+            resetProgress: 'Reset Progress',
+            resetConfirm: 'Reset all progress? This action cannot be undone.',
+            basicResponses: {
+                help: 'I can help you learn MAVi features like Yamazumi, VSM, and others.',
+                features: 'MAVi features AI Analysis, Time Study, and TPS Tools.',
+                yamazumi: '🏔️ Yamazumi Chart:\n1. Open **Yamazumi** menu (/yamazumi)\n2. Import data from measurement\n3. View stacked bars per operator/station\n4. Compare with takt time',
+                vsm: '🗺️ Value Stream Map:\n1. Open **Value Stream Map** menu (/value-stream-map)\n2. Create Current State Map\n3. Identify wastes\n4. Design Future State Map',
+                uploadVideo: '📹 To upload video:\n1. Open **Video Workspace** (🎬 menu)\n2. Click Upload or drag & drop file\n3. Supported formats: MP4, WebM, AVI',
+                measureTime: '⏱️ To measure time:\n1. In Video Workspace, use **Element Editor**\n2. Click "Start Measurement" to begin\n3. Click "End Measurement" to finish\n4. Name the element and select Therblig type',
+                aiFeatures: '🧠 AI Features available at:\n- **AI Process Studio** (/ai-process): Auto cycle detection, video intelligence\n- **Action Recognition**: Automatic action detection\n- **Real-time Compliance**: SOP compliance monitoring',
+                wasteElimination: '🗑️ 7 Wastes (Muda):\n- Transport, Inventory, Motion, Waiting\n- Over-processing, Over-production, Defects\n\nUse **Waste Elimination** menu (/waste-elimination) for identification',
+                therblig: '📍 18 Therblig Motions:\n- Transport Empty, Grasp, Transport Loaded\n- Position, Release, Use, Assemble, etc.\n\nOpen **Therblig Analysis** (/therblig) for details',
+                createWorkInstruction: '📘 Create Work Instruction:\n1. Open **Manual Creation** (/manual-creation)\n2. Capture frame from video\n3. Use AI to generate instructions\n4. Export to PDF/Word/PowerPoint',
+                fallback: "🤔 Hmm, I need more context. Try asking about video upload or AI features."
+            }
         }
     },
     jp: {
@@ -641,6 +723,47 @@ export const translations = {
                 resources: 'リソース',
                 legal: '法的事項',
                 rights: '© 2025 Mavi Systems Inc. All rights reserved.'
+            }
+        },
+        sensei: {
+            welcome: "👋 こんにちは！私は**MAVi Sensei**です。MAVi アプリケーションの使い方を学ぶお手伝いをする AI アシスタントです。\n\n以下のことについて質問できます：\n- 特定機能の使い方\n- TPS ツールの説明\n- ヒントとコツ\n- トラブルシューティング\n\n今日は何を学びたいですか？",
+            placeholder: 'Sensei に聞く...',
+            thinking: 'Sensei が考えています...',
+            mute: '消音',
+            unmute: '音声を出す',
+            apiKeyMissing: '⚠️ **API キーが設定されていません。**',
+            apiKeyWarning: 'すべての AI 機能を使用するには、**設定**で Gemini API キーを設定してください。',
+            openSettings: 'AI 設定を開く',
+            onlineStatus: 'オンライン ・ 準備完了',
+            errorTechnical: '申し訳ありません。技術的な問題が発生しました。API キーが正しいことと、インターネット接続が安定していることを確認してください。'
+        },
+        maviClass: {
+            title: 'MAVi クラス',
+            subtitle: '初心者からエキスパートまで MAVi を学ぶ',
+            progress: '進捗',
+            lessons: 'レッスン',
+            totalDuration: '合計時間',
+            modules: 'モジュール',
+            moduleLabel: 'モジュール',
+            cobaSekarang: '今すぐ試す',
+            tontonVideo: 'ビデオを見る',
+            keyPoints: '重要なポイント',
+            congratulations: 'おめでとうございます！',
+            congratsMessage: 'すべての MAVi クラス教材を完了しました。MAVi エキスパートへの就任おめでとうございます！',
+            resetProgress: '進捗をリセット',
+            resetConfirm: 'すべての進捗をリセットしますか？この操作は取り消せません。',
+            basicResponses: {
+                help: '山積み表、VSM、その他の MAVi 機能の学習をお手伝いできます。',
+                features: 'MAVi には AI 分析、タイムスタディ、TPS ツールが搭載されています。',
+                yamazumi: '🏔️ 山積み表:\n1. **山積み表**メニュー (/yamazumi) を開く\n2. 計測からデータをインポート\n3. オペレーター/ステーションごとの積み上げバーを表示\n4. タクトタイムと比較',
+                vsm: '🗺️ バリューストリームマップ:\n1. **バリューストリームマップ**メニュー (/value-stream-map) を開く\n2. 現状マップを作成\n3. ムダを特定\n4. 将来マップを設計',
+                uploadVideo: '📹 ビデオのアップロード:\n1. **ビデオワークスペース** (🎬 メニュー) を開く\n2. アップロードをクリックするかファイルをドラッグ＆ドロップ\n3. 対応フォーマット: MP4, WebM, AVI',
+                measureTime: '⏱️ 時間の計測:\n1. ビデオワークスペースで **Element Editor** を使用\n2. 開始時に "Start Measurement" をクリック\n3. 終了時に "End Measurement" をクリック\n4. 要素に名前を付け、サーブリッグタイプを選択',
+                aiFeatures: '🧠 AI 機能の場所:\n- **AI Process Studio** (/ai-process): 自動サイクル検出、ビデオインテリジェンス\n- **Action Recognition**: 自動アクション検出\n- **Real-time Compliance**: SOP コンプライアンス監視',
+                wasteElimination: '🗑️ 7つの無駄 (ムダ):\n- 運搬、在庫、動作、待ち\n- 加工、作りすぎ、不良\n\n特定には **無駄の排除** メニュー (/waste-elimination) を使用',
+                therblig: '📍 18のサーブリッグ動素:\n- 空手移動、掴む、持運ぶ\n- 位置決め、放す、使う、組立てなど\n\n詳細は **サーブリッグ分析** (/therblig) を参照',
+                createWorkInstruction: '📘 作業指示書の作成:\n1. **マニュアル作成** (/manual-creation) を開く\n2. ビデオからフレームをキャプチャ\n3. AI を使用して指示を生成\n4. PDF/Word/PowerPoint にエクスポート',
+                fallback: '🤔 うーん、もう少し詳しく教えてください。ビデオのアップロードや AI 機能について聞いてみてください。'
             }
         }
     }

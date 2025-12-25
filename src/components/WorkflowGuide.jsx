@@ -441,6 +441,145 @@ const WorkflowGuide = () => {
                     </div>
                 )}
 
+                {/* Quick Access Menu - All Features */}
+                <div style={{
+                    backgroundColor: '#141414',
+                    borderRadius: '16px',
+                    padding: '32px',
+                    border: '1px solid #222',
+                    marginBottom: '40px'
+                }}>
+                    <h3 style={{ marginBottom: '24px', color: '#667eea', fontSize: '1.5rem' }}>
+                        📌 Quick Access Menu - Semua Fitur
+                    </h3>
+                    <p style={{ color: '#888', marginBottom: '24px', fontSize: '0.95rem' }}>
+                        Akses cepat ke semua fitur dan menu yang tersedia di aplikasi MAVi
+                    </p>
+
+                    {/* Menu Categories */}
+                    {[
+                        {
+                            category: '🎬 Core Workspace',
+                            color: '#4CAF50',
+                            items: [
+                                { icon: '🎬', name: 'Video Workspace', path: '/', desc: 'Upload & analisis video' },
+                                { icon: '✏️', name: 'Element Editor', path: '/', desc: 'Breakdown work elements' },
+                                { icon: '📂', name: 'File Explorer', path: '/files', desc: 'Kelola file project' },
+                                { icon: '🔄', name: 'Cycle Segmentation', path: '/cycle-segmentation', desc: 'Segmentasi siklus kerja' },
+                            ]
+                        },
+                        {
+                            category: '🧠 AI & Analysis',
+                            color: '#2196F3',
+                            items: [
+                                { icon: '🧠', name: 'AI Process Studio', path: '/ai-process', desc: 'Centralized AI analysis' },
+                                { icon: '🤖', name: 'Action Recognition', path: '/action-recognition', desc: 'Deteksi aksi otomatis' },
+                                { icon: '🛡️', name: 'Real-time Compliance', path: '/realtime-compliance', desc: 'Monitor kepatuhan SOP' },
+                                { icon: '📹', name: 'Multi-Camera Fusion', path: '/multi-camera', desc: 'Analisis 3D multi-kamera' },
+                            ]
+                        },
+                        {
+                            category: '📊 TPS Tools',
+                            color: '#FF9800',
+                            items: [
+                                { icon: '🏭', name: 'Value Stream Map', path: '/value-stream-map', desc: 'Pemetaan alur nilai' },
+                                { icon: '🏔️', name: 'Yamazumi Chart', path: '/yamazumi', desc: 'Work balancing chart' },
+                                { icon: '📋', name: 'SWCS', path: '/swcs', desc: 'Standard Work Combination Sheet' },
+                                { icon: '🗑️', name: 'Waste Elimination', path: '/waste-elimination', desc: 'Identifikasi 7 waste' },
+                                { icon: '📍', name: 'Therblig Analysis', path: '/therblig', desc: 'Analisis gerakan dasar' },
+                            ]
+                        },
+                        {
+                            category: '📉 Statistical & Comparison',
+                            color: '#9C27B0',
+                            items: [
+                                { icon: '📉', name: 'Statistical Analysis', path: '/statistical-analysis', desc: 'Analisis statistik data' },
+                                { icon: '🏆', name: 'Best/Worst Cycle', path: '/best-worst', desc: 'Perbandingan cycle terbaik' },
+                                { icon: '🎥', name: 'Video Comparison', path: '/comparison', desc: 'Bandingkan 2 video' },
+                                { icon: '🔄', name: 'Element Rearrangement', path: '/rearrangement', desc: 'Susun ulang elemen' },
+                            ]
+                        },
+                        {
+                            category: '📘 Documentation & Training',
+                            color: '#00BCD4',
+                            items: [
+                                { icon: '📘', name: 'Manual Creation', path: '/manual-creation', desc: 'Buat SOP & Work Instruction' },
+                                { icon: '📚', name: 'Knowledge Base', path: '/knowledge-base', desc: 'Repository best practices' },
+                                { icon: '🥽', name: 'VR Training', path: '/vr-training', desc: 'Simulasi training VR' },
+                                { icon: '📡', name: 'Broadcast', path: '/broadcast', desc: 'Live streaming & sharing' },
+                            ]
+                        },
+                        {
+                            category: '⚙️ System & Settings',
+                            color: '#607D8B',
+                            items: [
+                                { icon: '🩺', name: 'System Diagnostics', path: '/diagnostics', desc: 'Cek status sistem' },
+                                { icon: '❓', name: 'Help & Documentation', path: '/help', desc: 'Panduan penggunaan' },
+                            ]
+                        }
+                    ].map((menuGroup, groupIdx) => (
+                        <div key={groupIdx} style={{ marginBottom: '28px' }}>
+                            <h4 style={{
+                                color: menuGroup.color,
+                                fontSize: '1.1rem',
+                                marginBottom: '16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                borderBottom: `2px solid ${menuGroup.color}40`,
+                                paddingBottom: '8px'
+                            }}>
+                                {menuGroup.category}
+                            </h4>
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                                gap: '12px'
+                            }}>
+                                {menuGroup.items.map((item, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => navigate(item.path)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            padding: '14px 16px',
+                                            backgroundColor: '#1a1a1a',
+                                            border: `1px solid ${menuGroup.color}30`,
+                                            borderRadius: '10px',
+                                            cursor: 'pointer',
+                                            textAlign: 'left',
+                                            transition: 'all 0.2s ease',
+                                            width: '100%'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = `${menuGroup.color}20`;
+                                            e.currentTarget.style.borderColor = menuGroup.color;
+                                            e.currentTarget.style.transform = 'translateY(-2px)';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#1a1a1a';
+                                            e.currentTarget.style.borderColor = `${menuGroup.color}30`;
+                                            e.currentTarget.style.transform = 'translateY(0)';
+                                        }}
+                                    >
+                                        <span style={{ fontSize: '1.5rem' }}>{item.icon}</span>
+                                        <div>
+                                            <div style={{ color: '#fff', fontSize: '0.95rem', fontWeight: '500' }}>
+                                                {item.name}
+                                            </div>
+                                            <div style={{ color: '#888', fontSize: '0.75rem', marginTop: '2px' }}>
+                                                {item.desc}
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
                 {/* Quick Start Guide */}
                 <div style={{
                     backgroundColor: '#141414',

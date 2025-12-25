@@ -45,6 +45,7 @@ const MachineLearningData = React.lazy(() => import('./components/MachineLearnin
 const ActionRecognition = React.lazy(() => import('./components/ActionRecognition'));
 const SpaghettiChart = React.lazy(() => import('./components/SpaghettiChart'));
 const WorkflowGuide = React.lazy(() => import('./components/WorkflowGuide'));
+const MaviClass = React.lazy(() => import('./components/MaviClass'));
 const FileExplorer = React.lazy(() => import('./components/FileExplorer'));
 const PublicManualViewer = React.lazy(() => import('./components/PublicManualViewer'));
 const SystemDiagnostics = React.lazy(() => import('./components/SystemDiagnostics'));
@@ -514,6 +515,9 @@ function AppContent() {
 
               {/* Workflow Guide */}
               <Route path="/workflow-guide" element={<div style={{ overflow: 'hidden', height: '100%' }}><WorkflowGuide /></div>} />
+
+              {/* MAVi Class */}
+              <Route path="/mavi-class" element={<div style={{ overflow: 'hidden', height: '100%' }}><MaviClass /></div>} />
 
               {/* File Explorer */}
               <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
