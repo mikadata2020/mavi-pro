@@ -479,13 +479,38 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>3. Saat Dijalankan (Live Engine)</h3>
                     <p>Sistem akan memantau CCTV/Webcam secara terus menerus. Jika operator melakukan gerakan yang memenuhi syarat Rule (misal: mengangkat tangan), sistem otomatis pindah Status dan mencatat <strong>Cycle Time</strong> secara akurat.</p>
 
-                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>4. Tipe Rule (Aturan)</h3>
-                    <ul style={{ marginLeft: '20px', listStyleType: 'disc', color: '#d1d5db' }}>
-                        <li><strong>Pose Angle:</strong> Sudut sendi (Contoh: Siku &lt; 90).</li>
-                        <li><strong>Pose Relation:</strong> Posisi relatif (Wrist Y &lt; Shoulder Y).</li>
-                        <li><strong>Pose Velocity:</strong> Kecepatan gerak (Speed &gt; 0.5).</li>
-                        <li><strong>Object Proximity:</strong> Jarak ke alat/part.</li>
-                    </ul>
+                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>4. Tipe Rule (Aturan) & Penggunaannya</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #3b82f6' }}>
+                            <strong style={{ color: '#60a5fa' }}>Joint Angle (Sudut Sendi)</strong>
+                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Menghitung sudut derajat antara 3 titik tubuh (misal: Bahu-Siku-Pergelangan Tangan).</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Lengan lurus (Angle &gt; 160°) atau menekuk (Angle &lt; 90°).</p>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #10b981' }}>
+                            <strong style={{ color: '#10b981' }}>Pose Relation (Hubungan XYZ)</strong>
+                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Membandingkan posisi satu titik terhadap titik lain atau nilai koordinat tertentu.</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Pergelangan tangan di atas hidung (Wrist.y &lt; Nose.y) untuk pekerjaan di atas kepala.</p>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
+                            <strong style={{ color: '#f59e0b' }}>Pose Velocity (Kecepatan)</strong>
+                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Mengukur seberapa cepat satu titik tubuh bergerak (pixel/detik).</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Mendeteksi mulai gerak (Speed &gt; 100) atau berhenti (Speed &lt; 10).</p>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ef4444' }}>
+                            <strong style={{ color: '#ef4444' }}>Object Proximity (Kedekatan Objek)</strong>
+                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Mengukur jarak antara titik tubuh (tangan) dengan objek yang terdeteksi AI.</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Tangan menyentuh "Part Box" (Distance &lt; 50px).</p>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
+                            <strong style={{ color: '#8b5cf6' }}>Golden Pose Match (Referensi Emas)</strong>
+                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Membandingkan seluruh pose saat ini dengan rekaman pose ideal (Pose Emas).</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Verifikasi postur berdiri standar (Similarity &gt; 90%).</p>
+                        </div>
+                    </div>
 
                     <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>5. 📚 Contoh Skenario: Deteksi Pengangkatan Aman</h3>
                     <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
@@ -621,6 +646,27 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
     return (
         <div style={styles.container}>
+            <style>
+                {`
+                    .custom-scrollbar::-webkit-scrollbar {
+                        width: 8px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-track {
+                        background: rgba(0, 0, 0, 0.1);
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: #4b5563;
+                        border-radius: 4px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: #6b7280;
+                    }
+                    .custom-scrollbar {
+                        scrollbar-width: thin;
+                        scrollbar-color: #4b5563 transparent;
+                    }
+                `}
+            </style>
             <StudioAssistant model={currentModel} />
             {showHelp && <HelpModal />}
             {/* Header */}
@@ -1024,7 +1070,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         </div>
                     </div>
 
-                    <div style={styles.content}>
+                    <div style={styles.content} className="custom-scrollbar">
                         {activeTab === 'test' && (
                             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                                 <div style={{

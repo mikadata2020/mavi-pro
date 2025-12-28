@@ -68,7 +68,11 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         container: {
             padding: '20px',
             color: 'white',
-            fontFamily: 'Inter, sans-serif'
+            fontFamily: 'Inter, sans-serif',
+            height: '100%',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column'
         },
         createSection: {
             backgroundColor: '#1f2937',
@@ -142,7 +146,11 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
             fontSize: '0.9rem'
         },
         rulesContainer: {
-            padding: '16px'
+            padding: '16px',
+            maxHeight: '350px',
+            overflowY: 'scroll',
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#4b5563 transparent'
         },
         ruleItem: {
             backgroundColor: '#111827',
@@ -153,9 +161,9 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         },
         ruleControls: {
             display: 'grid',
-            gridTemplateColumns: '120px 1fr 40px', // Adjusted for flexible content
+            gridTemplateColumns: '130px 1fr 30px',
             gap: '8px',
-            alignItems: 'center',
+            alignItems: 'start',
             marginTop: '8px'
         },
         paramSelect: {
@@ -179,6 +187,32 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
 
     const objectClasses = getDetectableClasses();
 
+    const getRuleDescription = (rule) => {
+        if (!rule || !rule.params) return 'Invalid rule';
+
+        switch (rule.type) {
+            case 'POSE_ANGLE':
+                return `Angle ${rule.params.jointA}-${rule.params.jointB}-${rule.params.jointC} ${rule.params.operator || '<'} ${rule.params.value || 90}°`;
+
+            case 'POSE_RELATION':
+                const comp = rule.params.component || 'y';
+                if (rule.params.targetType === 'POINT' && rule.params.jointB) {
+                    return `${rule.params.jointA}.${comp} ${rule.params.operator || '<'} ${rule.params.jointB}.${comp}`;
+                } else {
+                    return `${rule.params.jointA}.${comp} ${rule.params.operator || '<'} ${rule.params.value || 0}`;
+                }
+
+            case 'POSE_VELOCITY':
+                return `${rule.params.joint} velocity ${rule.params.operator || '>'} ${rule.params.value || 0} u/s`;
+
+            case 'OBJECT_PROXIMITY':
+                return `${rule.params.joint} to ${rule.params.objectClass} ${rule.params.operator || '<'} ${rule.params.value || 0}`;
+
+            default:
+                return `Unknown rule type: ${rule.type}`;
+        }
+    };
+
     const renderRuleParams = (rule, transitionId) => {
         const type = RULE_TYPES[rule.type];
 
@@ -196,7 +230,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
 
                 {/* Dynamic params based on type */}
                 {rule.type === 'POSE_ANGLE' && (
-                    <div style={{ display: 'flex', gap: '4px', gridColumn: 'span 4' }}>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         <select
                             style={styles.paramSelect}
                             value={rule.params.jointA}
@@ -223,7 +257,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                 )}
 
                 {rule.type === 'POSE_RELATION' && (
-                    <div style={{ display: 'flex', gap: '4px', gridColumn: 'span 4', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                         {/* Point A */}
                         <select
                             style={styles.paramSelect}
@@ -288,7 +322,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                 )}
 
                 {rule.type === 'POSE_VELOCITY' && (
-                    <div style={{ display: 'flex', gap: '4px', gridColumn: 'span 4' }}>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         <select
                             style={styles.paramSelect}
                             value={rule.params.joint}
@@ -318,7 +352,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                 )}
 
                 {rule.type === 'OBJECT_PROXIMITY' && (
-                    <div style={{ display: 'flex', gap: '4px', gridColumn: 'span 4' }}>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
                         <select
                             style={styles.paramSelect}
                             value={rule.params.joint}
@@ -365,7 +399,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
     };
 
     return (
-        <div style={styles.container}>
+        <div style={styles.container} className="custom-scrollbar">
             {/* Create Transition */}
             <div style={styles.createSection}>
                 <h3 style={styles.sectionTitle}>Add State Transition</h3>
@@ -421,7 +455,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                 </button>
                             </div>
 
-                            <div style={styles.rulesContainer}>
+                            <div style={styles.rulesContainer} className="custom-scrollbar">
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', paddingBottom: '12px', borderBottom: '1px dashed #374151' }}>
                                     <span style={{ fontSize: '0.85rem', color: '#eab308' }}>⚡ Hysteresis (Hold Time):</span>
                                     <input
@@ -464,50 +498,50 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                     </div>
 
                                     {transition.condition.rules.map((rule, idx) => (
-                                        <div key={idx} style={{
-                                            display: 'flex', alignItems: 'center', gap: '8px',
-                                            backgroundColor: '#111827', padding: '8px', borderRadius: '6px', marginBottom: '6px',
-                                            borderLeft: rule.invert ? '3px solid #f59e0b' : '3px solid #3b82f6'
-                                        }}>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    {getRuleDescription(rule)}
-                                                    {rule.invert && <span style={{ fontSize: '0.65rem', backgroundColor: '#f59e0b', color: 'black', padding: '0 4px', borderRadius: '2px', fontWeight: 'bold' }}>NOT</span>}
+                                        <div key={rule.id || idx} style={styles.ruleItem}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #374151', paddingBottom: '4px' }}>
+                                                <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#60a5fa' }}>
+                                                    Rule #{idx + 1}: {rule.type}
                                                 </div>
-                                                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>
-                                                    {rule.type}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#9ca3af', cursor: 'pointer' }}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={!!rule.invert}
+                                                            onChange={(e) => handleUpdateRule(transition.id, rule.id, { invert: e.target.checked })}
+                                                            style={{ cursor: 'pointer', accentColor: '#f59e0b' }}
+                                                        />
+                                                        Invert (NOT)
+                                                    </label>
                                                 </div>
                                             </div>
-
-                                            {/* Invert Toggle */}
-                                            <div title="Invert Condition (NOT)">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={!!rule.invert}
-                                                    onChange={(e) => {
-                                                        const newRules = [...transition.condition.rules];
-                                                        newRules[idx] = { ...newRules[idx], invert: e.target.checked };
-                                                        onUpdateTransition(transition.id, { condition: { ...transition.condition, rules: newRules } });
-                                                    }}
-                                                    style={{ cursor: 'pointer', accentColor: '#f59e0b' }}
-                                                />
-                                            </div>
-
-                                            <button
-                                                onClick={() => {
-                                                    const newRules = transition.condition.rules.filter((_, i) => i !== idx);
-                                                    onUpdateTransition(transition.id, { condition: { ...transition.condition, rules: newRules } });
-                                                }}
-                                                style={{
-                                                    background: 'transparent', border: 'none', color: '#ef4444',
-                                                    cursor: 'pointer', fontSize: '1rem', padding: '4px'
-                                                }}
-                                            >
-                                                &times;
-                                            </button>
+                                            {renderRuleParams(rule, transition.id)}
                                         </div>
                                     ))}
                                     {transition.condition.rules.length === 0 && <div style={{ color: '#6b7280', fontSize: '0.8rem', fontStyle: 'italic' }}>No conditions added.</div>}
+
+                                    {/* Add Rule Button */}
+                                    <button
+                                        onClick={() => handleAddRule(transition.id)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '8px',
+                                            marginTop: '8px',
+                                            background: 'rgba(37, 99, 235, 0.1)',
+                                            color: '#60a5fa',
+                                            border: '1px dashed #2563eb',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '6px',
+                                            fontSize: '0.85rem',
+                                            fontWeight: '500'
+                                        }}
+                                    >
+                                        <Plus size={14} /> Add Rule
+                                    </button>
                                 </div>
                             </div>
                         </div>

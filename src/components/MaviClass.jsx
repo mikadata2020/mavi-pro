@@ -787,12 +787,12 @@ const MaviClass = () => {
                     content: {
                         description: 'Atur aturan transisi antar state menggunakan Rule Builder.',
                         keyPoints: [
-                            'Pose Angle: Sudut sendi tubuh (contoh: elbow > 90°)',
-                            'Pose Relation: Posisi relatif body parts',
-                            'Pose Velocity: Kecepatan gerakan',
-                            'Object Proximity: Jarak ke objek tertentu',
-                            'Hand Gesture: Deteksi gesture tangan',
-                            'Kombinasikan rules dengan AND/OR logic'
+                            'Joint Angle: Sudut sendi tubuh (Contoh: Siku &lt; 90°)',
+                            'Pose Relation: Posisi relatif terhadap titik lain (Contoh: Tangan di atas Hidung)',
+                            'Pose Velocity: Kecepatan gerakan (Contoh: Mendeteksi gerak tiba-tiba)',
+                            'Object Proximity: Jarak ke objek AI (Contoh: Tangan menyentuh alat)',
+                            'Golden Pose: Kecocokan dengan pose referensi ideal yang direkam',
+                            'Logic Operator: Gunakan AND/OR untuk menggabungkan banyak aturan'
                         ],
                         tryIt: '/studio-model',
                         videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
@@ -1017,7 +1017,7 @@ INSTRUKSI:
 3. Sebutkan lokasi menu/path jika relevan
 4. Gunakan emoji untuk membuat respons lebih engaging
 5. Jika tidak yakin, akui keterbatasan dan sarankan untuk cek menu Help
-6. Jawab secara ringkas tapi informatif (maksimal 200 kata)
+6. Jawab secara informatif dan mendalam jika diperlukan, tanpa batasan kata yang kaku.
 
 JAWABAN:`;
 
@@ -1030,7 +1030,7 @@ JAWABAN:`;
                         contents: [{ parts: [{ text: prompt }] }],
                         generationConfig: {
                             temperature: 0.7,
-                            maxOutputTokens: 500
+                            maxOutputTokens: 2048
                         }
                     })
                 }
@@ -1574,7 +1574,8 @@ JAWABAN:`;
                     bottom: '100px',
                     right: '90px',
                     width: '380px',
-                    height: '500px',
+                    height: '650px',
+                    maxHeight: '85vh',
                     backgroundColor: '#141414',
                     borderRadius: '16px',
                     border: '1px solid #333',
@@ -1624,14 +1625,18 @@ JAWABAN:`;
                     </div>
 
                     {/* Chat Messages */}
-                    <div style={{
-                        flex: 1,
-                        padding: '16px',
-                        overflowY: 'auto',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '12px'
-                    }}>
+                    <div
+                        className="custom-scrollbar"
+                        style={{
+                            flex: 1,
+                            minHeight: 0,
+                            padding: '16px',
+                            overflowY: 'auto',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px'
+                        }}
+                    >
                         {chatMessages.map((msg, idx) => (
                             <div
                                 key={idx}
@@ -1669,8 +1674,12 @@ JAWABAN:`;
                                     whiteSpace: 'pre-wrap',
                                     border: msg.role === 'user' ? 'none' : '1px solid #333'
                                 }}>
-                                    {msg.content.split('**').map((part, i) =>
-                                        i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+                                    {typeof msg.content === 'string' ? (
+                                        msg.content.split('**').map((part, i) =>
+                                            i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+                                        )
+                                    ) : (
+                                        msg.content
                                     )}
                                 </div>
                             </div>
@@ -1692,6 +1701,7 @@ JAWABAN:`;
                                 </div>
                             </div>
                         )}
+                        <div style={{ height: '20px', flexShrink: 0 }} />
                         <div ref={chatEndRef} />
                     </div>
 
@@ -1738,8 +1748,9 @@ JAWABAN:`;
                         </button>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 };
 
