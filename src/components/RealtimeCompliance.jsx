@@ -4,9 +4,11 @@ import {
     Video as VideoIcon, Camera, Settings, Plus, X, Maximize2, Trash2, LayoutGrid, Monitor
 } from 'lucide-react';
 import { initializePoseDetector, detectPose, drawPoseSkeleton } from '../utils/poseDetector';
+import { initializeHandDetector, detectHands, drawHandSkeleton } from '../utils/handDetector';
 import { ProjectActionMatcher } from '../utils/projectActionMatcher';
 import { ComplianceEngine } from '../utils/complianceEngine';
-import { getProjectByName, getAllProjects, getAllCameras, saveCamera, deleteCamera } from '../utils/database';
+import { getProjectByName, getAllProjects, getAllCameras, saveCamera, deleteCamera, getAllStudioModels } from '../utils/database'; // Added getAllStudioModels
+import InferenceEngine from '../utils/studio/InferenceEngine'; // Import Studio Engine
 
 const RealtimeCompliance = ({ projectName: initialProjectName }) => {
     // --- State ---
@@ -14,6 +16,7 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
     const [activeCameraId, setActiveCameraId] = useState(null);
     const [isManaging, setIsManaging] = useState(false);
     const [availableProjects, setAvailableProjects] = useState([]);
+    const [availableStudioModels, setAvailableStudioModels] = useState([]); // New State
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'focus'
 
@@ -27,11 +30,13 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
     useEffect(() => {
         const init = async () => {
             try {
-                const [allProjects, allCams] = await Promise.all([
+                const [allProjects, allCams, studioModels] = await Promise.all([
                     getAllProjects(),
-                    getAllCameras()
+                    getAllCameras(),
+                    getAllStudioModels()
                 ]);
                 setAvailableProjects(allProjects);
+                setAvailableStudioModels(studioModels);
                 setCameras(allCams);
 
                 // Auto-create default if empty (backward compatibility)
@@ -50,6 +55,7 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                 }
 
                 await initializePoseDetector();
+                await initializeHandDetector();
             } catch (err) {
                 console.error("Compliance Init Error:", err);
             } finally {
@@ -69,6 +75,7 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
             const newStates = { ...cameraStates };
             for (const cam of cameras) {
                 if (!newStates[cam.id] && cam.projectName) {
+                    // Try Standard Work Project first
                     const proj = await getProjectByName(cam.projectName);
                     if (proj) {
                         const matcher = new ProjectActionMatcher(proj);
@@ -78,9 +85,24 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                             status: engine.getStatus(0),
                             isMonitoring: false,
                             scoreHistory: [],
-                            type: cam.type || 'webcam'
+                            type: cam.type || 'webcam',
+                            modelType: 'standard'
                         };
                         poseSequenceRefs.current[cam.id] = [];
+                    } else {
+                        // Try finding in Studio Models
+                        const studioModel = getAllStudioModels().find(m => m.name === cam.projectName);
+                        if (studioModel) {
+                            const engine = new InferenceEngine();
+                            engine.loadModel(studioModel);
+                            newStates[cam.id] = {
+                                engine,
+                                status: { currentStep: { elementName: 'Initializing...' }, match: { score: 100 } },
+                                isMonitoring: false,
+                                type: cam.type || 'webcam',
+                                modelType: 'studio'
+                            };
+                        }
                     }
                 }
             }
@@ -99,26 +121,61 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
             // For IP cameras, if streaming via <img>, we might need a different pose detection method
             // but for now we assume they are compatible with detectPose if correctly loaded
             const poses = await detectPose(video);
+            const hands = await detectHands(video);
             if (poses && poses.length > 0) {
-                const pose = poses[0];
-                const seq = poseSequenceRefs.current[cameraId] || [];
-                seq.push(pose);
-                if (seq.length > 60) seq.shift();
-                poseSequenceRefs.current[cameraId] = seq;
+                if (camState.modelType === 'studio') {
+                    // --- STUDIO MODEL ENGINE ---
+                    // InferenceEngine expects { poses, objects, hands, timestamp }
+                    // It returns { tracks, logs, timelineEvents }
+                    const result = camState.engine.processFrame({
+                        poses: poses,
+                        hands: hands,
+                        timestamp: Date.now()
+                    });
 
-                if (seq.length >= 15) {
-                    const engine = camState.engine;
-                    const match = engine.matcher.match(seq, engine.currentStepIndex);
-                    const currentStatus = engine.update(match);
+                    // Adapt result for UI (Simplified mapping)
+                    const primaryTrack = result.tracks[0];
+                    const currentStatusName = primaryTrack ? primaryTrack.state : 'No Subject';
 
                     setCameraStates(prev => ({
                         ...prev,
                         [cameraId]: {
                             ...prev[cameraId],
-                            status: currentStatus,
-                            scoreHistory: [...(prev[cameraId].scoreHistory || []), currentStatus.match?.score || 0].slice(-10)
+                            status: {
+                                currentStep: { elementName: currentStatusName },
+                                match: { score: primaryTrack ? 100 : 0 },
+                                actualCT: primaryTrack ? parseFloat(primaryTrack.duration) : 0,
+                                actualCT: primaryTrack ? parseFloat(primaryTrack.duration) : 0,
+                                history: result.timelineEvents.map(e => ({
+                                    elementName: e.state,
+                                    actualCT: (e.duration / 1000).toFixed(1)
+                                })).reverse().slice(0, 10), // Show last 10 events
+                                isSequenceMismatch: false
+                            }
                         }
                     }));
+
+                } else {
+                    // --- STANDARD WORK ENGINE ---
+                    const seq = poseSequenceRefs.current[cameraId] || [];
+                    seq.push(pose);
+                    if (seq.length > 60) seq.shift();
+                    poseSequenceRefs.current[cameraId] = seq;
+
+                    if (seq.length >= 15) {
+                        const engine = camState.engine;
+                        const match = engine.matcher.match(seq, engine.currentStepIndex);
+                        const currentStatus = engine.update(match);
+
+                        setCameraStates(prev => ({
+                            ...prev,
+                            [cameraId]: {
+                                ...prev[cameraId],
+                                status: currentStatus,
+                                scoreHistory: [...(prev[cameraId].scoreHistory || []), currentStatus.match?.score || 0].slice(-10)
+                            }
+                        }));
+                    }
                 }
             }
         } catch (err) {
@@ -147,13 +204,13 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
     };
 
     // --- Camera Management ---
-    const [newCam, setNewCam] = useState({ name: '', url: '', projectName: '', type: 'webcam' });
+    const [newCam, setNewCam] = useState({ name: '', url: '', projectName: '', type: 'webcam', modelType: 'standard' });
 
     const handleAddCamera = async () => {
         if (!newCam.name || !newCam.projectName) return;
         const id = await saveCamera(newCam);
         setCameras([...cameras, { ...newCam, id }]);
-        setNewCam({ name: '', url: '', projectName: '', type: 'webcam' });
+        setNewCam({ name: '', url: '', projectName: '', type: 'webcam', modelType: 'standard' });
         setIsManaging(false);
     };
 
@@ -433,14 +490,14 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                                 </div>
                             )}
                             <div>
-                                <label style={{ display: 'block', fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Base Project (Standard Work)</label>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: '#888', marginBottom: '5px' }}>Base Model</label>
                                 <select
                                     value={newCam.projectName}
                                     onChange={e => setNewCam({ ...newCam, projectName: e.target.value })}
                                     style={{ width: '100%', padding: '10px', backgroundColor: '#1a1a1a', border: '1px solid #444', color: '#fff', borderRadius: '6px' }}
                                 >
-                                    <option value="">-- Select Project --</option>
-                                    {availableProjects.map(p => <option key={p.id} value={p.projectName}>{p.projectName}</option>)}
+                                    <option value="">-- Select Model --</option>
+                                    {availableStudioModels.map(m => <option key={'m_' + m.id} value={m.name}>{m.name}</option>)}
                                 </select>
                             </div>
                             <button

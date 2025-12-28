@@ -401,30 +401,95 @@ ${elementList}
             chatHistory.slice(-5).map(msg => `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content}`).join('\n');
     }
 
-    const prompt = `
-        You are "Mavi", an expert Industrial Engineer and the official assistant for the "Motion Study Application".
-        
-        **YOUR KNOWLEDGE BASE (How this app works):**
-        ${appKnowledge}
+    let prompt;
 
-        **CURRENT ANALYSIS CONTEXT:**
-        ${contextSummary}
-        
+    // OVERRIDE: If a custom system prompt is provided in context (e.g. for Studio Model), use it exclusively.
+    // This allows creating isolated personas without polluting with general app knowledge.
+    if (context.systemPrompt) {
+        prompt = `
+            ${context.systemPrompt}
+
+            **HISTORY:**
+            ${historyContext}
+            
+            **USER MESSAGE:** 
+            ${userMessage}
+            
+            Respond directly without JSON formatting.
+        `;
+    } else {
+        // DEFAULT MAVI PERSONA
+        const promptContextSummary = contextSummary; // use the one built above
+
+        const prompt = `
+            You are "Mavi", an expert Industrial Engineer and the official assistant for the "Motion Study Application".
+            
+            **YOUR KNOWLEDGE BASE (How this app works):**
+            ${appKnowledge}
+    
+            **CURRENT ANALYSIS CONTEXT:**
+            ${promptContextSummary}
+            
+            **HISTORY:**
+            ${historyContext}
+            
+            **USER QUESTION:** 
+            ${userMessage}
+            
+            **INSTRUCTIONS:**
+            1. Always answer based on the "Application User Guide" if the user asks about features.
+            2. If asked about Industrial Engineering (Time Study, Line Balancing, etc.), use your general expert knowledge.
+            3. Be helpful, professional, and concise.
+            4. Provide specific recommendations based on the measurement data if available.
+            5. Respond in the SAME LANGUAGE as the user (Indonesian or English).
+            
+            Respond directly without JSON formatting.
+        `;
+        // Assignment to outer var
+    }
+
+    // Re-assign explicitly because I split the if/else block awkwardly above? 
+    // Wait, I can just define 'prompt' inside the else block and have 'let prompt' outside?
+    // Let's rewrite the block cleanly.
+
+    if (context.systemPrompt) {
+        prompt = `
+        ${context.systemPrompt}
+
         **HISTORY:**
         ${historyContext}
         
-        **USER QUESTION:** 
+        **USER MESSAGE:** 
         ${userMessage}
         
-        **INSTRUCTIONS:**
-        1. Always answer based on the "Application User Guide" if the user asks about features.
-        2. If asked about Industrial Engineering (Time Study, Line Balancing, etc.), use your general expert knowledge.
-        3. Be helpful, professional, and concise.
-        4. Provide specific recommendations based on the measurement data if available.
-        5. Respond in the SAME LANGUAGE as the user (Indonesian or English).
-        
         Respond directly without JSON formatting.
-    `;
+        `;
+    } else {
+        prompt = `
+            You are "Mavi", an expert Industrial Engineer and the official assistant for the "Motion Study Application".
+            
+            **YOUR KNOWLEDGE BASE (How this app works):**
+            ${appKnowledge}
+    
+            **CURRENT ANALYSIS CONTEXT:**
+            ${contextSummary}
+            
+            **HISTORY:**
+            ${historyContext}
+            
+            **USER QUESTION:** 
+            ${userMessage}
+            
+            **INSTRUCTIONS:**
+            1. Always answer based on the "Application User Guide" if the user asks about features.
+            2. If asked about Industrial Engineering (Time Study, Line Balancing, etc.), use your general expert knowledge.
+            3. Be helpful, professional, and concise.
+            4. Provide specific recommendations based on the measurement data if available.
+            5. Respond in the SAME LANGUAGE as the user (Indonesian or English).
+            
+            Respond directly without JSON formatting.
+        `;
+    }
 
     console.log('AI Chat Request:', { userMessage, context: contextSummary });
 

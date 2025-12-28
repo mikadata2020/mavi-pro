@@ -7,8 +7,9 @@ import CycleDetectionPanel from './features/CycleDetectionPanel';
 import ObjectTracking from './ObjectTracking';
 import MachineLearningData from './MachineLearningData';
 import VideoIntelligence from './VideoIntelligence';
+import StudioRuntime from './studio/StudioRuntime';
 // Icons
-import { Brain, Box, Activity, Layers, MessageSquare, Upload } from 'lucide-react';
+import { Brain, Box, Activity, Layers, MessageSquare, Upload, Play } from 'lucide-react';
 
 const AIProcessWorkspace = ({
     measurements,
@@ -138,6 +139,14 @@ const AIProcessWorkspace = ({
                         </div>
                     </div>
                 );
+            case 'studio':
+                return (
+                    <StudioRuntime
+                        videoRef={videoRef}
+                        isPlaying={!videoState.paused}
+                        currentTime={videoState.currentTime}
+                    />
+                );
             case 'gemini':
                 return (
                     <div style={{
@@ -215,7 +224,8 @@ const AIProcessWorkspace = ({
                                 { id: 'cycle', icon: <Activity size={16} />, label: 'Auto Cycle' },
                                 { id: 'object', icon: <Box size={16} />, label: 'Object Tracking' },
                                 { id: 'ml', icon: <Layers size={16} />, label: 'Motion Analysis' },
-                                { id: 'gemini', icon: <MessageSquare size={16} />, label: 'Video Intelligence (AI Elements)' }
+                                { id: 'studio', icon: <Play size={16} />, label: 'Studio Runtime' },
+                                { id: 'gemini', icon: <MessageSquare size={16} />, label: 'Video Intelligence' }
                             ].map(mode => (
                                 <button
                                     key={mode.id}

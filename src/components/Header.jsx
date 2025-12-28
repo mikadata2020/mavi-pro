@@ -11,6 +11,7 @@ const MENU_ITEMS = [
     { path: '/ai-process', icon: '🧠', title: 'AI Process', labelKey: 'header.aiProcess' },
     { path: '/realtime-compliance', icon: '🛡️', title: 'Real-time Compliance', labelKey: 'header.realtimeCompliance' },
     { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange' },
+    { path: '/studio-model', icon: '🎨', title: 'Studio Model', labelKey: 'header.studioModel' },
     { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste' },
     { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis' },
     { path: '/statistical-analysis', icon: '📉', labelKey: 'header.statisticalAnalysis', title: 'Statistical Analysis' },

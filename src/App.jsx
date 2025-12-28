@@ -56,6 +56,7 @@ const ValueStreamMap = React.lazy(() => import('./components/ValueStreamMap'));
 const AIProcessWorkspace = React.lazy(() => import('./components/AIProcessWorkspace'));
 
 const RealtimeCompliance = React.lazy(() => import('./components/RealtimeCompliance'));
+const StudioModel = React.lazy(() => import('./components/studio/StudioModel'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -533,6 +534,9 @@ function AppContent() {
 
               {/* System Diagnostics */}
               <Route path="/diagnostics" element={<div style={{ overflow: 'hidden', height: '100%' }}><SystemDiagnostics /></div>} />
+
+              {/* Studio Model */}
+              <Route path="/studio-model" element={<div style={{ overflow: 'hidden', height: '100%' }}><StudioModel /></div>} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

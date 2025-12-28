@@ -517,3 +517,14 @@ export const deleteCamera = async (id) => {
         request.onerror = () => reject(request.error);
     });
 };
+
+// Studio Model Helper
+export const getAllStudioModels = () => {
+    try {
+        const models = localStorage.getItem('motionModels');
+        return models ? JSON.parse(models) : [];
+    } catch (e) {
+        console.error("Failed to load studio models", e);
+        return [];
+    }
+};
