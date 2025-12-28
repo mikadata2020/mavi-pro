@@ -19,12 +19,14 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
     const [availableStudioModels, setAvailableStudioModels] = useState([]); // New State
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'focus'
+    const [showOverlay, setShowOverlay] = useState(true); // Overlay visibility toggle
 
     // Camera Operational States (Map: cameraId -> state)
     const [cameraStates, setCameraStates] = useState({});
     const poseSequenceRefs = useRef({}); // Map: cameraId -> array
     const requestRefs = useRef({}); // Map: cameraId -> animationFrameId
     const videoRefs = useRef({}); // Map: cameraId -> videoElement
+    const canvasRefs = useRef({}); // Map: cameraId -> canvasElement
 
     // --- Initialization ---
     useEffect(() => {
@@ -122,6 +124,32 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
             // but for now we assume they are compatible with detectPose if correctly loaded
             const poses = await detectPose(video);
             const hands = await detectHands(video);
+
+            // Draw overlay if enabled
+            if (showOverlay) {
+                const canvas = canvasRefs.current[cameraId];
+                if (canvas && video) {
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = video.videoWidth || video.width || 640;
+                    canvas.height = video.videoHeight || video.height || 480;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // Draw pose skeleton
+                    if (poses && poses.length > 0) {
+                        poses.forEach(pose => {
+                            drawPoseSkeleton(ctx, pose, canvas.width, canvas.height);
+                        });
+                    }
+
+                    // Draw hand landmarks
+                    if (hands && hands.length > 0) {
+                        hands.forEach(hand => {
+                            drawHandSkeleton(ctx, hand, canvas.width, canvas.height);
+                        });
+                    }
+                }
+            }
+
             if (poses && poses.length > 0) {
                 if (camState.modelType === 'studio') {
                     // --- STUDIO MODEL ENGINE ---
@@ -145,18 +173,19 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                                 currentStep: { elementName: currentStatusName },
                                 match: { score: primaryTrack ? 100 : 0 },
                                 actualCT: primaryTrack ? parseFloat(primaryTrack.duration) : 0,
-                                actualCT: primaryTrack ? parseFloat(primaryTrack.duration) : 0,
                                 history: result.timelineEvents.map(e => ({
                                     elementName: e.state,
                                     actualCT: (e.duration / 1000).toFixed(1)
                                 })).reverse().slice(0, 10), // Show last 10 events
                                 isSequenceMismatch: false
-                            }
+                            },
+                            timelineEvents: result.timelineEvents || [] // Store full timeline
                         }
                     }));
 
                 } else {
                     // --- STANDARD WORK ENGINE ---
+                    const pose = poses[0]; // Fix: Define pose from poses array
                     const seq = poseSequenceRefs.current[cameraId] || [];
                     seq.push(pose);
                     if (seq.length > 60) seq.shift();
@@ -185,16 +214,56 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
         requestRefs.current[cameraId] = requestAnimationFrame(() => monitorCamera(cameraId));
     }, [cameraStates]);
 
-    const handleToggleMonitoring = (cameraId) => {
+    const handleToggleMonitoring = async (cameraId) => {
+        const cam = cameras.find(c => c.id === cameraId);
+        if (!cam) return;
+
         setCameraStates(prev => {
             const isStarting = !prev[cameraId].isMonitoring;
             if (isStarting) {
                 prev[cameraId].engine.reset();
                 poseSequenceRefs.current[cameraId] = [];
-                // Delay monitoring start to allow video load
-                setTimeout(() => monitorCamera(cameraId), 1000);
+
+                // Initialize webcam stream if needed
+                if (cam.type === 'webcam') {
+                    const video = videoRefs.current[cameraId];
+                    if (video && !video.srcObject) {
+                        navigator.mediaDevices.getUserMedia({
+                            video: {
+                                width: { ideal: 1280 },
+                                height: { ideal: 720 },
+                                facingMode: 'user'
+                            }
+                        })
+                            .then(stream => {
+                                video.srcObject = stream;
+                                video.play();
+                                // Delay monitoring start to allow video load
+                                setTimeout(() => monitorCamera(cameraId), 1000);
+                            })
+                            .catch(err => {
+                                console.error('Webcam access error:', err);
+                                alert('Unable to access webcam. Please check permissions.');
+                            });
+                    } else {
+                        // Stream already active
+                        setTimeout(() => monitorCamera(cameraId), 1000);
+                    }
+                } else {
+                    // IP Camera - already streaming via img src
+                    setTimeout(() => monitorCamera(cameraId), 1000);
+                }
             } else {
                 if (requestRefs.current[cameraId]) cancelAnimationFrame(requestRefs.current[cameraId]);
+
+                // Stop webcam stream
+                if (cam.type === 'webcam') {
+                    const video = videoRefs.current[cameraId];
+                    if (video && video.srcObject) {
+                        video.srcObject.getTracks().forEach(track => track.stop());
+                        video.srcObject = null;
+                    }
+                }
             }
             return {
                 ...prev,
@@ -266,6 +335,18 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                                     crossOrigin="anonymous"
                                 />
                             )}
+
+                            {/* Canvas Overlay */}
+                            <canvas
+                                ref={el => canvasRefs.current[cam.id] = el}
+                                style={{
+                                    position: 'absolute',
+                                    top: 0, left: 0,
+                                    width: '100%', height: '100%',
+                                    pointerEvents: 'none',
+                                    display: showOverlay ? 'block' : 'none'
+                                }}
+                            />
 
                             <div style={{
                                 position: 'absolute', top: '10px', left: '10px',
@@ -353,6 +434,18 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                                 crossOrigin="anonymous"
                             />
                         )}
+
+                        {/* Canvas Overlay */}
+                        <canvas
+                            ref={el => canvasRefs.current[cam.id] = el}
+                            style={{
+                                position: 'absolute',
+                                top: 0, left: 0,
+                                width: '100%', height: '100%',
+                                pointerEvents: 'none',
+                                display: showOverlay ? 'block' : 'none'
+                            }}
+                        />
                         <div style={{ position: 'absolute', top: 20, left: 20, display: 'flex', gap: '10px' }}>
                             <div style={{
                                 padding: '10px 15px', borderRadius: '8px', backgroundColor: state.isMonitoring ? 'rgba(16, 124, 65, 0.9)' : 'rgba(51, 51, 51, 0.9)',
@@ -360,6 +453,18 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                             }}>
                                 <VideoIcon size={18} /> {cam.name.toUpperCase()}
                             </div>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setShowOverlay(!showOverlay); }}
+                                style={{
+                                    padding: '10px 15px', borderRadius: '8px',
+                                    backgroundColor: showOverlay ? 'rgba(0, 210, 255, 0.9)' : 'rgba(51, 51, 51, 0.9)',
+                                    border: 'none', color: '#fff', fontWeight: 'bold', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', gap: '8px'
+                                }}
+                                title={showOverlay ? 'Hide Overlay' : 'Show Overlay'}
+                            >
+                                <Activity size={18} /> {showOverlay ? 'ON' : 'OFF'}
+                            </button>
                         </div>
                     </div>
 
@@ -392,21 +497,66 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                         </div>
                     </div>
 
-                    <div style={{ flex: 1, backgroundColor: '#252526', borderRadius: '12px', padding: '20px', border: '1px solid #333' }}>
-                        <h3 style={{ margin: '0 0 15px 0', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <List size={16} color="#00d2ff" /> Standard Work Sequence
-                        </h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {status?.history?.map((h, i) => (
-                                <div key={i} style={{ padding: '8px', backgroundColor: 'rgba(16, 124, 65, 0.1)', border: '1px solid #107c41', borderRadius: '4px', fontSize: '0.8rem' }}>
-                                    ✓ {h.elementName} ({h.actualCT}s)
-                                </div>
-                            ))}
-                            <div style={{ padding: '8px', backgroundColor: '#1e1e1e', border: '1px solid #00d2ff', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                                → {status?.currentStep?.elementName}
+                    {/* Timeline Events Panel (for Studio Models) */}
+                    {state.modelType === 'studio' && state.timelineEvents && state.timelineEvents.length > 0 && (
+                        <div style={{ flex: 1, backgroundColor: '#252526', borderRadius: '12px', padding: '20px', border: '1px solid #333' }}>
+                            <h3 style={{ margin: '0 0 15px 0', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Clock size={16} color="#00d2ff" /> Timeline Events
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                                {state.timelineEvents.slice().reverse().slice(0, 20).map((event, i) => {
+                                    const duration = (event.duration / 1000).toFixed(2);
+                                    const startTime = new Date(event.startTime).toLocaleTimeString();
+                                    return (
+                                        <div key={i} style={{
+                                            padding: '10px',
+                                            backgroundColor: i === 0 ? 'rgba(0, 210, 255, 0.1)' : 'rgba(16, 124, 65, 0.05)',
+                                            border: `1px solid ${i === 0 ? '#00d2ff' : '#107c41'}`,
+                                            borderRadius: '6px',
+                                            fontSize: '0.8rem'
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                <span style={{ fontWeight: 'bold', color: i === 0 ? '#00d2ff' : '#fff' }}>
+                                                    {event.state}
+                                                </span>
+                                                <span style={{ color: '#888', fontSize: '0.75rem' }}>
+                                                    {startTime}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ color: '#888' }}>Duration:</span>
+                                                <span style={{
+                                                    color: parseFloat(duration) > 5 ? '#ff4b4b' : '#4caf50',
+                                                    fontWeight: 'bold'
+                                                }}>
+                                                    {duration}s
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
-                    </div>
+                    )}
+
+                    {/* Standard Work Sequence (for Standard Models) */}
+                    {state.modelType !== 'studio' && (
+                        <div style={{ flex: 1, backgroundColor: '#252526', borderRadius: '12px', padding: '20px', border: '1px solid #333' }}>
+                            <h3 style={{ margin: '0 0 15px 0', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <List size={16} color="#00d2ff" /> Standard Work Sequence
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {status?.history?.map((h, i) => (
+                                    <div key={i} style={{ padding: '8px', backgroundColor: 'rgba(16, 124, 65, 0.1)', border: '1px solid #107c41', borderRadius: '4px', fontSize: '0.8rem' }}>
+                                        ✓ {h.elementName} ({h.actualCT}s)
+                                    </div>
+                                ))}
+                                <div style={{ padding: '8px', backgroundColor: '#1e1e1e', border: '1px solid #00d2ff', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                                    → {status?.currentStep?.elementName}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         );

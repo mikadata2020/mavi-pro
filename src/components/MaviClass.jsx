@@ -720,6 +720,138 @@ const MaviClass = () => {
                     }
                 }
             ]
+        },
+        {
+            id: 'studio-model',
+            title: '🎬 Studio Model & Compliance',
+            description: 'Buat model AI kustom dan monitor compliance real-time',
+            duration: '35 menit',
+            color: '#667eea',
+            lessons: [
+                {
+                    id: 'sm-1',
+                    title: 'Pengenalan Studio Model',
+                    type: 'video',
+                    duration: '5 min',
+                    content: {
+                        description: 'Studio Model memungkinkan Anda membuat model AI kustom untuk mendeteksi gerakan dan state spesifik tanpa coding.',
+                        keyPoints: [
+                            'Buat model berdasarkan video referensi Anda sendiri',
+                            'Definisikan states (kondisi) yang ingin dideteksi',
+                            'Atur rules (aturan) untuk transisi antar state',
+                            'Gunakan untuk compliance monitoring real-time'
+                        ],
+                        tryIt: '/studio-model',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                },
+                {
+                    id: 'sm-2',
+                    title: 'Membuat Model Baru',
+                    type: 'hands-on',
+                    duration: '8 min',
+                    content: {
+                        description: 'Step-by-step membuat Studio Model pertama Anda.',
+                        keyPoints: [
+                            'Klik "Create New Model" di Studio Model page',
+                            'Beri nama model yang deskriptif (contoh: "Assembly Process")',
+                            'Pilih coordinate system: Body-Centric atau Screen-Based',
+                            'Tambahkan deskripsi untuk dokumentasi'
+                        ],
+                        tryIt: '/studio-model',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                },
+                {
+                    id: 'sm-3',
+                    title: 'Definisi States',
+                    type: 'hands-on',
+                    duration: '7 min',
+                    content: {
+                        description: 'Buat states untuk setiap kondisi yang ingin dideteksi.',
+                        keyPoints: [
+                            'State = kondisi/posisi tertentu (contoh: "Idle", "Reaching", "Holding")',
+                            'Capture reference pose dari video untuk setiap state',
+                            'Definisikan ROI (Region of Interest) jika diperlukan',
+                            'Set minimum duration untuk stabilitas deteksi'
+                        ],
+                        tryIt: '/studio-model',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                },
+                {
+                    id: 'sm-4',
+                    title: 'Rule Configuration',
+                    type: 'interactive',
+                    duration: '10 min',
+                    content: {
+                        description: 'Atur aturan transisi antar state menggunakan Rule Builder.',
+                        keyPoints: [
+                            'Pose Angle: Sudut sendi tubuh (contoh: elbow > 90°)',
+                            'Pose Relation: Posisi relatif body parts',
+                            'Pose Velocity: Kecepatan gerakan',
+                            'Object Proximity: Jarak ke objek tertentu',
+                            'Hand Gesture: Deteksi gesture tangan',
+                            'Kombinasikan rules dengan AND/OR logic'
+                        ],
+                        tryIt: '/studio-model',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                },
+                {
+                    id: 'sm-5',
+                    title: 'Test Mode & Validation',
+                    type: 'hands-on',
+                    duration: '5 min',
+                    content: {
+                        description: 'Test model Anda dengan video sebelum deployment.',
+                        keyPoints: [
+                            'Upload test video di Test Mode',
+                            'Lihat timeline events untuk validasi',
+                            'Check apakah state transitions sudah benar',
+                            'Adjust rules jika ada false positive/negative'
+                        ],
+                        tryIt: '/studio-runtime',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                },
+                {
+                    id: 'sm-6',
+                    title: 'Real-time Compliance Setup',
+                    type: 'hands-on',
+                    duration: '8 min',
+                    content: {
+                        description: 'Deploy model untuk monitoring compliance real-time.',
+                        keyPoints: [
+                            'Buka Real-time Compliance dashboard',
+                            'Klik "Add Camera" untuk setup station baru',
+                            'Pilih Studio Model dari dropdown',
+                            'Pilih webcam atau masukkan IP camera URL',
+                            'Klik "Start Monitoring" untuk mulai'
+                        ],
+                        tryIt: '/realtime-compliance',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                },
+                {
+                    id: 'sm-7',
+                    title: 'Timeline Events Analysis',
+                    type: 'interactive',
+                    duration: '5 min',
+                    content: {
+                        description: 'Analisis timeline events untuk performance monitoring.',
+                        keyPoints: [
+                            'Timeline Events panel menampilkan riwayat state transitions',
+                            'Lihat timestamp dan duration setiap state',
+                            'Warna hijau = cepat (<5s), merah = lambat (>5s)',
+                            'Identifikasi bottleneck dari state yang lama',
+                            'Export data untuk analisis lebih lanjut'
+                        ],
+                        tryIt: '/realtime-compliance',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                }
+            ]
         }
     ];
 
