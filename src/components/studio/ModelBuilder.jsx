@@ -393,8 +393,8 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. Draw ROI if active state has one
-        if (selectedStateId) {
+        // 1. Draw ROI
+        if (visOptions.roi && selectedStateId) {
             const state = currentModel.states.find(s => s.id === selectedStateId);
             if (state && state.roi) {
                 ctx.strokeStyle = '#eab308';
@@ -411,10 +411,14 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         }
 
         // 2. Draw Skeleton
-        drawSkeleton(ctx, pose);
+        if (visOptions.skeleton) {
+            drawSkeleton(ctx, pose);
+        }
 
         // 3. Draw Active Rules Visuals
-        drawRulesVisuals(ctx, pose);
+        if (visOptions.rules) {
+            drawRulesVisuals(ctx, pose);
+        }
     };
 
     const drawSkeleton = (ctx, pose) => {
@@ -422,12 +426,16 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         const canvas = canvasRef.current;
 
         const connections = [
-            ['left_shoulder', 'right_shoulder'], ['left_shoulder', 'left_hip'],
-            ['right_shoulder', 'right_hip'], ['left_hip', 'right_hip'],
+            ['nose', 'left_eye_inner'], ['left_eye_inner', 'left_eye'], ['left_eye', 'left_eye_outer'], ['left_eye_outer', 'left_ear'],
+            ['nose', 'right_eye_inner'], ['right_eye_inner', 'right_eye'], ['right_eye', 'right_eye_outer'], ['right_eye_outer', 'right_ear'],
+            ['mouth_left', 'mouth_right'],
+            ['left_shoulder', 'right_shoulder'], ['left_shoulder', 'left_hip'], ['right_shoulder', 'right_hip'], ['left_hip', 'right_hip'],
             ['left_shoulder', 'left_elbow'], ['left_elbow', 'left_wrist'],
             ['right_shoulder', 'right_elbow'], ['right_elbow', 'right_wrist'],
-            ['left_hip', 'left_knee'], ['left_knee', 'left_ankle'],
-            ['right_hip', 'right_knee'], ['right_knee', 'right_ankle']
+            ['left_wrist', 'left_pinky'], ['left_wrist', 'left_index'], ['left_wrist', 'left_thumb'], ['left_pinky', 'left_index'],
+            ['right_wrist', 'right_pinky'], ['right_wrist', 'right_index'], ['right_wrist', 'right_thumb'], ['right_pinky', 'right_index'],
+            ['left_hip', 'left_knee'], ['left_knee', 'left_ankle'], ['left_ankle', 'left_heel'], ['left_heel', 'left_foot_index'], ['left_ankle', 'left_foot_index'],
+            ['right_hip', 'right_knee'], ['right_knee', 'right_ankle'], ['right_ankle', 'right_heel'], ['right_heel', 'right_foot_index'], ['right_ankle', 'right_foot_index']
         ];
 
         // Draw connections
@@ -838,7 +846,6 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             left: 0,
             right: 0,
             bottom: 0,
-            display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
@@ -887,17 +894,77 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             display: 'flex',
             borderBottom: '1px solid #374151'
         },
-        tab: (isActive) => ({
-            flex: 1,
-            padding: '16px',
-            textAlign: 'center',
-            background: isActive ? '#111827' : 'transparent',
-            color: isActive ? '#60a5fa' : '#9ca3af',
+        tab: (active) => ({
+            padding: '12px 16px',
             cursor: 'pointer',
-            borderBottom: isActive ? '2px solid #60a5fa' : 'none',
-            fontWeight: isActive ? '600' : 'normal',
-            fontSize: '0.9rem'
+            color: active ? '#60a5fa' : '#9ca3af',
+            borderBottom: active ? '2px solid #3b82f6' : '2px solid transparent',
+            fontSize: '0.85rem',
+            fontWeight: active ? '600' : '500',
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            backgroundColor: active ? 'rgba(59, 130, 246, 0.05)' : 'transparent',
+            flex: 1,
+            justifyContent: 'center'
         }),
+        emptyState: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: '100%',
+            padding: '40px',
+            textAlign: 'center',
+            color: '#9ca3af',
+            background: 'linear-gradient(180deg, #111827 0%, #1f2937 100%)'
+        },
+        emptyIcon: {
+            width: '80px',
+            height: '80px',
+            borderRadius: '20px',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#3b82f6',
+            marginBottom: '24px'
+        },
+        emptyTitle: {
+            color: 'white',
+            fontSize: '1.5rem',
+            fontWeight: 'bold',
+            marginBottom: '12px'
+        },
+        emptyDesc: {
+            maxWidth: '400px',
+            lineHeight: '1.6',
+            marginBottom: '32px'
+        },
+        emptyCard: {
+            backgroundColor: '#1f2937',
+            border: '1px solid #374151',
+            borderRadius: '12px',
+            padding: '24px',
+            width: '100%',
+            maxWidth: '600px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '16px'
+        },
+        emptyAction: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '20px',
+            backgroundColor: '#374151',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            transition: 'transform 0.2s, background 0.2s',
+            border: '1px solid transparent'
+        },
         content: {
             flex: 1,
             padding: '24px 24px 150px 24px', // Increased bottom padding
@@ -1089,29 +1156,43 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 </div>
                             </>
                         ) : (
-                            <div style={styles.uploadOverlay}>
-                                {/* Show upload logic if no video */}
-                                <h3 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Upload Reference Video</h3>
-                                <p style={{ color: '#9ca3af' }}>Upload a video to start defining motion rules</p>
-                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                                    <button
-                                        style={styles.uploadButton}
-                                        onClick={() => fileInputRef.current.click()}
-                                    >
-                                        📁 Upload File
-                                    </button>
-                                    <button
-                                        style={{ ...styles.uploadButton, background: '#2563eb', border: '1px solid #3b82f6' }}
-                                        onClick={handleOpenProjectPicker}
-                                    >
-                                        📽️ Select from Project
-                                    </button>
-                                    <button
-                                        style={{ ...styles.uploadButton, background: '#10b981', border: '1px solid #059669' }}
-                                        onClick={() => setShowIPCameraModal(true)}
-                                    >
-                                        📹 Record from IP Camera
-                                    </button>
+                            <div style={styles.emptyState}>
+                                <div style={styles.emptyIcon}>
+                                    <Video size={40} />
+                                </div>
+                                <h2 style={styles.emptyTitle}>Create Your Motion Model</h2>
+                                <p style={styles.emptyDesc}>
+                                    Upload a reference video or connect a camera to start defining states and rules for your industrial motion analysis project.
+                                </p>
+
+                                <div style={styles.emptyCard}>
+                                    <div style={styles.emptyAction} onClick={() => fileInputRef.current.click()}>
+                                        <div style={{ ...styles.emptyIcon, width: '40px', height: '40px', marginBottom: '8px' }}>
+                                            <Box size={20} />
+                                        </div>
+                                        <div style={{ fontWeight: '600', color: 'white' }}>Local File</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Upload MP4/WebM</div>
+                                    </div>
+
+                                    <div style={styles.emptyAction} onClick={handleOpenProjectPicker}>
+                                        <div style={{ ...styles.emptyIcon, width: '40px', height: '40px', marginBottom: '8px', color: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)' }}>
+                                            <Layers size={20} />
+                                        </div>
+                                        <div style={{ fontWeight: '600', color: 'white' }}>Project Vault</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Select from Project</div>
+                                    </div>
+
+                                    <div onClick={() => setShowIPCameraModal(true)} style={{ ...styles.emptyAction, gridColumn: 'span 2' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div style={{ ...styles.emptyIcon, width: '40px', height: '40px', marginBottom: 0, color: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.1)' }}>
+                                                <Activity size={20} />
+                                            </div>
+                                            <div style={{ textAlign: 'left' }}>
+                                                <div style={{ fontWeight: '600', color: 'white' }}>Industrial IP Camera</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Connect RTSP/HTTP stream for live training</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}

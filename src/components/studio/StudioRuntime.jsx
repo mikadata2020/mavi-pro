@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Activity, FileText, AlertCircle } from 'lucide-react';
+import { Activity } from 'lucide-react';
+// Pastikan file InferenceEngine.js menggunakan: export const inferenceEngine = ...
 import { inferenceEngine } from '../../utils/studio/InferenceEngine';
 import { initializePoseDetector as loadPoseDetector, detectPose as estimatePose } from '../../utils/poseDetector';
-// import { detectObjects } from '../../utils/objectDetector'; // Assuming this exists
 
 const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
     const [models, setModels] = useState([]);
@@ -11,22 +11,24 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
     const [tracks, setTracks] = useState([]);
     const [isEngineReady, setIsEngineReady] = useState(false);
 
-    // Canvas for overlays
     const canvasRef = useRef(null);
     const requestRef = useRef();
 
     useEffect(() => {
-        // Load models
+        // Load models dari localStorage
         const saved = localStorage.getItem('motionModels');
         if (saved) {
             setModels(JSON.parse(saved));
         }
 
-        // Initialize Detectors
+        // Initialize AI Detectors
         const initAI = async () => {
-            await loadPoseDetector();
-            // await loadObjectDetector();
-            setIsEngineReady(true);
+            try {
+                await loadPoseDetector();
+                setIsEngineReady(true);
+            } catch (err) {
+                console.error("Gagal inisialisasi AI:", err);
+            }
         };
         initAI();
 
@@ -38,34 +40,34 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
     const handleModelSelect = (id) => {
         setSelectedModelId(id);
         const model = models.find(m => m.id === id);
-        if (model) {
+        if (model && inferenceEngine) {
             inferenceEngine.loadModel(model);
         }
     };
 
-    // Main Detection Loop
     const detect = async () => {
-        if (!videoRef.current || videoRef.current.paused || !videoRef.current.readyState === 4) return;
+        // Validasi kesiapan video dan engine
+        if (!videoRef.current || videoRef.current.paused || videoRef.current.readyState !== 4 || !inferenceEngine) return;
 
         const video = videoRef.current;
 
         // Run Detection
         const poses = await estimatePose(video);
-        const objects = []; // await detectObjects(video);
+        const objects = []; 
 
-        // Process
+        // Process via Inference Engine
         const result = inferenceEngine.processFrame({
             poses,
             objects,
-            timestamp: video.currentTime * 1000 // ms
+            timestamp: video.currentTime * 1000
         });
 
-        // Update UI
-        setLogs(result.logs);
-        setTracks(result.tracks);
-
-        // Draw Overlay (Simple ID & State)
-        drawOverlay(poses, result.tracks);
+        // Update UI States
+        if (result) {
+            setLogs(result.logs || []);
+            setTracks(result.tracks || []);
+            drawOverlay(poses, result.tracks || []);
+        }
 
         if (!video.paused) {
             requestRef.current = requestAnimationFrame(detect);
@@ -76,28 +78,34 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
         const ctx = canvasRef.current?.getContext('2d');
         if (!ctx || !videoRef.current) return;
 
-        // Clear and resize
+        // Sync canvas size dengan video
         canvasRef.current.width = videoRef.current.videoWidth;
         canvasRef.current.height = videoRef.current.videoHeight;
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-        // Map tracks to poses (simplified 1-1 assumption for now)
-        if (poses.length > 0 && tracks.length > 0) {
+        if (poses && poses.length > 0 && tracks && tracks.length > 0) {
             const pose = poses[0];
-            const track = tracks[0]; // Assuming ID 1
+            const track = tracks[0]; 
 
-            // Draw Bounding Box around pose
             const keypoints = pose.keypoints;
             const x = Math.min(...keypoints.map(k => k.x));
             const y = Math.min(...keypoints.map(k => k.y));
-            // Simple text
+            
             ctx.fillStyle = '#00ff00';
             ctx.font = '24px Arial';
-            ctx.fillText(`${track.state} (${track.duration})`, x, y - 10);
+            ctx.fillText(`${track.state} (${track.duration || ''})`, x, y - 10);
+            
+            // Opsional: Gambar titik sendi
+            keypoints.forEach(kp => {
+                if (kp.score > 0.5) {
+                    ctx.beginPath();
+                    ctx.arc(kp.x, kp.y, 4, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            });
         }
     };
 
-    // Watch video play state to start/stop loop
     useEffect(() => {
         if (isPlaying && selectedModelId && isEngineReady) {
             detect();
@@ -105,7 +113,6 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
         }
     }, [isPlaying, selectedModelId, isEngineReady]);
-
 
     return (
         <div style={{
@@ -124,13 +131,11 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
             display: 'flex',
             flexDirection: 'column'
         }}>
-            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <Activity color="#60a5fa" />
                 <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Runtime Engine</h3>
             </div>
 
-            {/* Model Selector */}
             <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '4px' }}>
                     Active Model
@@ -152,14 +157,8 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
                         <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                 </select>
-                {models.length === 0 && (
-                    <div style={{ fontSize: '0.8rem', color: '#f87171', marginTop: '4px' }}>
-                        No models found. Create one in Studio.
-                    </div>
-                )}
             </div>
 
-            {/* Active Tracks */}
             <div style={{ marginBottom: '16px', borderTop: '1px solid #4b5563', paddingTop: '12px' }}>
                 <div style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '8px' }}>Active Operators</div>
                 {tracks.length === 0 ? (
@@ -179,8 +178,7 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
                 )}
             </div>
 
-            {/* Logs Window */}
-            <div style={{ flex: 1, minHeight: '150px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: '150px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div style={{ fontSize: '0.9rem', fontWeight: 'bold', marginBottom: '8px' }}>Event Log</div>
                 <div style={{
                     flex: 1,
@@ -191,8 +189,8 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
                     fontSize: '0.85rem',
                     fontFamily: 'monospace'
                 }}>
-                    {logs.map(log => (
-                        <div key={log.id} style={{ marginBottom: '4px', borderBottom: '1px solid #374151', paddingBottom: '2px' }}>
+                    {logs.map((log, index) => (
+                        <div key={index} style={{ marginBottom: '4px', borderBottom: '1px solid #374151', paddingBottom: '2px' }}>
                             <span style={{ color: '#6b7280' }}>[{log.timestamp}]</span>{' '}
                             <span style={{ color: log.type === 'Transition' ? '#34d399' : '#fff' }}>
                                 {log.message}
@@ -203,18 +201,18 @@ const StudioRuntime = ({ videoRef, isPlaying, currentTime }) => {
                 </div>
             </div>
 
-            {/* Invisible Canvas for Overlay Computation if needed, or Absolute Overlay */}
+            {/* Canvas sekarang "block" agar visualisasi AI terlihat di layar */}
             <canvas
                 ref={canvasRef}
                 style={{
-                    position: 'fixed', // Fixed to cover video area if possible, but simpler to use parent relative
+                    position: 'fixed',
                     top: 0,
                     left: 0,
                     pointerEvents: 'none',
                     zIndex: 90,
-                    width: '100%', // This might need careful positioning relative to video player container
+                    width: '100%',
                     height: '100%',
-                    display: 'none' // Currently just calculating, drawing needs overlay approach
+                    display: 'block' 
                 }}
             />
         </div>
