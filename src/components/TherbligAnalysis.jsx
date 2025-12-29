@@ -351,23 +351,24 @@ function TherbligAnalysis({ measurements = [] }) {
                     onMouseMove={handleCanvasMouseMove}
                     onMouseUp={handleCanvasMouseUp}
                     onMouseLeave={handleCanvasMouseUp}
-                    style={{
-                        flex: 1,
-                        backgroundColor: '#1a1a1a',
-                        borderRadius: '8px',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        cursor: selectedTherblig ? 'crosshair' : (draggingId ? 'grabbing' : 'default'),
-                        backgroundImage: backgroundImage ? `url(${backgroundImage})` : 'none',
-                        backgroundSize: 'contain',
-                        backgroundRepeat: 'no-repeat',
-                        backgroundPosition: 'center',
-                        backgroundImage: showGrid ? `
-                            linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-                            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)
-                        ` : 'none',
-                        backgroundSize: showGrid ? '20px 20px' : 'auto'
-                    }}
+                   style={{
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    borderRadius: '8px',
+    position: 'relative',
+    overflow: 'hidden',
+    cursor: selectedTherblig ? 'crosshair' : (draggingId ? 'grabbing' : 'default'),
+    backgroundRepeat: 'no-repeat, repeat', // repeat untuk grid
+    backgroundPosition: 'center',
+    // GABUNGKAN backgroundImage di sini:
+    backgroundImage: `
+        ${showGrid ? `linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), 
+          linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)` : 'none'},
+        ${backgroundImage ? `url(${backgroundImage})` : 'none'}
+    `,
+    // GABUNGKAN backgroundSize di sini:
+    backgroundSize: `${showGrid ? '20px 20px' : 'auto'}, contain`
+}}
                 >
                     {!backgroundImage && icons.length === 0 && (
                         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#555', textAlign: 'center', pointerEvents: 'none' }}>
