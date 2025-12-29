@@ -57,6 +57,30 @@ body {
   background: var(--border-color);
 }
 
+/* Custom Scrollbar Utility */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+
 .btn {
   background-color: var(--bg-tertiary);
   color: var(--text-primary);
@@ -68,4 +92,9 @@ body {
 
 .btn:hover {
   background-color: var(--border-color);
+}
+
+/* Base styles for the resizer in ModelBuilder */
+.resizer-highlight:hover {
+  background-color: rgba(37, 99, 235, 0.3);
 }

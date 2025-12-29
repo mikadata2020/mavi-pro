@@ -493,5 +493,5 @@ export default class InferenceEngine {
     }
 }
 
-// Export instance not needed if we export class default
-// export const inferenceEngine = new InferenceEngine();
+// Export instance for runtime usage
+export const inferenceEngine = new InferenceEngine();

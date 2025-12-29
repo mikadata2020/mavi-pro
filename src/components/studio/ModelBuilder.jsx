@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video } from 'lucide-react';
+import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check } from 'lucide-react';
 import ObjectTracking from '../ObjectTracking'; // Reuse existing component for video + detection
 import RuleEditor from './RuleEditor';
 import { initializePoseDetector, detectPose } from '../../utils/poseDetector';
@@ -20,6 +20,9 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     // RESTORED STATES
     const [activeTab, setActiveTab] = useState('rules'); // rules, states, test
     const [videoSrc, setVideoSrc] = useState(null);
+    const [isMaximized, setIsMaximized] = useState(false); // Maximize editor area
+    const [leftPanelWidth, setLeftPanelWidth] = useState(60); // Percentage
+    const [isResizing, setIsResizing] = useState(false);
 
     // IP Camera Recording States
     const [showIPCameraModal, setShowIPCameraModal] = useState(false);
@@ -27,6 +30,13 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [recordedChunks, setRecordedChunks] = useState([]);
+
+    // VISUALIZATION TOGGLES
+    const [visOptions, setVisOptions] = useState({
+        skeleton: true,
+        rules: true,
+        roi: true
+    });
     const mediaRecorderRef = useRef(null);
     const ipCameraRef = useRef(null);
     const [isDrawingROI, setIsDrawingROI] = useState(false);
@@ -150,6 +160,9 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     // Update active pose with smoothed data
                     setActivePose(smoothedPose);
 
+                    // Draw Visualizations
+                    drawVisualizations(smoothedPose);
+
                     // TEST MODE EXECUTION
                     if (activeTab === 'test') {
                         // Initialize Engine if needed (or if model changed, ideally we reset)
@@ -222,6 +235,29 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
         };
     }, [videoSrc]);
+
+    // Resize Handler
+    useEffect(() => {
+        const handleMouseMove = (e) => {
+            if (!isResizing) return;
+            const percentage = (e.clientX / window.innerWidth) * 100;
+            if (percentage > 20 && percentage < 80) {
+                setLeftPanelWidth(percentage);
+            }
+        };
+
+        const handleMouseUp = () => setIsResizing(false);
+
+        if (isResizing) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isResizing]);
 
     // Reset Engine when switching tabs
     useEffect(() => {
@@ -324,15 +360,182 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         if (poses && poses.length > 0) {
             const pose = poses[0];
 
-            // We store the RAW reference pose. 
-            // The Inference Engine will handle normalization (Body-Centric) during comparison 
-            // if strict matching is enabled.
+            // CAPTURE THUMBNAIL
+            const canvas = document.createElement('canvas');
+            const thumbWidth = 160;
+            const thumbHeight = (videoRef.current.videoHeight / videoRef.current.videoWidth) * thumbWidth;
+            canvas.width = thumbWidth;
+            canvas.height = thumbHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(videoRef.current, 0, 0, thumbWidth, thumbHeight);
+            const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
+
             handleUpdateState(selectedStateId, 'referencePose', pose.keypoints);
             handleUpdateState(selectedStateId, 'referenceImage', videoRef.current.currentTime);
-            alert("Reference pose captured!");
+            handleUpdateState(selectedStateId, 'thumbnail', thumbnail);
+            alert("Gerakan berhasil disimpan sebagai referensi!");
         } else {
-            alert("No pose detected. Make sure person is visible.");
+            alert("Gagal mendeteksi tubuh. Pastikan tubuh terlihat jelas di kamera.");
         }
+    };
+
+    // VISUAL GEOMETRY DRAWING
+    const drawVisualizations = (pose) => {
+        if (!canvasRef.current || !pose) return;
+        const ctx = canvasRef.current.getContext('2d');
+        const canvas = canvasRef.current;
+
+        // Sync canvas size if needed (resize handling)
+        if (videoRef.current && (canvas.width !== videoRef.current.clientWidth || canvas.height !== videoRef.current.clientHeight)) {
+            canvas.width = videoRef.current.clientWidth;
+            canvas.height = videoRef.current.clientHeight;
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. Draw ROI if active state has one
+        if (selectedStateId) {
+            const state = currentModel.states.find(s => s.id === selectedStateId);
+            if (state && state.roi) {
+                ctx.strokeStyle = '#eab308';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.strokeRect(
+                    state.roi.x * canvas.width,
+                    state.roi.y * canvas.height,
+                    state.roi.width * canvas.width,
+                    state.roi.height * canvas.height
+                );
+                ctx.setLineDash([]);
+            }
+        }
+
+        // 2. Draw Skeleton
+        drawSkeleton(ctx, pose);
+
+        // 3. Draw Active Rules Visuals
+        drawRulesVisuals(ctx, pose);
+    };
+
+    const drawSkeleton = (ctx, pose) => {
+        const keypoints = pose.keypoints;
+        const canvas = canvasRef.current;
+
+        const connections = [
+            ['left_shoulder', 'right_shoulder'], ['left_shoulder', 'left_hip'],
+            ['right_shoulder', 'right_hip'], ['left_hip', 'right_hip'],
+            ['left_shoulder', 'left_elbow'], ['left_elbow', 'left_wrist'],
+            ['right_shoulder', 'right_elbow'], ['right_elbow', 'right_wrist'],
+            ['left_hip', 'left_knee'], ['left_knee', 'left_ankle'],
+            ['right_hip', 'right_knee'], ['right_knee', 'right_ankle']
+        ];
+
+        // Draw connections
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 2;
+        connections.forEach(([start, end]) => {
+            const p1 = keypoints.find(k => k.name === start);
+            const p2 = keypoints.find(k => k.name === end);
+            if (p1 && p2 && p1.score > 0.3 && p2.score > 0.3) {
+                ctx.beginPath();
+                ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+                ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+                ctx.stroke();
+            }
+        });
+
+        // Draw keypoints
+        keypoints.forEach(kp => {
+            if (kp.score > 0.3) {
+                ctx.fillStyle = '#60a5fa';
+                ctx.beginPath();
+                ctx.arc(kp.x * canvas.width, kp.y * canvas.height, 4, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        });
+    };
+
+    const drawRulesVisuals = (ctx, pose) => {
+        const keypoints = pose.keypoints;
+        const canvas = canvasRef.current;
+
+        // Find relevant transitions for visualization
+        // In "Rules" tab, we might want to highlight rules from the selected/first transition
+        const relevantTransitions = currentModel.transitions;
+
+        relevantTransitions.forEach(t => {
+            t.condition.rules.forEach(rule => {
+                const getKP = (name) => keypoints.find(k => k.name === name);
+
+                if (rule.type === 'POSE_ANGLE') {
+                    const a = getKP(rule.params.jointA);
+                    const b = getKP(rule.params.jointB);
+                    const c = getKP(rule.params.jointC);
+                    if (a && b && c) {
+                        // Draw lines
+                        ctx.strokeStyle = '#ef4444';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+                        ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+                        ctx.lineTo(c.x * canvas.width, c.y * canvas.height);
+                        ctx.stroke();
+
+                        // Draw angle arc
+                        const ang1 = Math.atan2(a.y - b.y, a.x - b.x);
+                        const ang2 = Math.atan2(c.y - b.y, c.x - b.x);
+                        ctx.beginPath();
+                        ctx.arc(b.x * canvas.width, b.y * canvas.height, 20, ang1, ang2);
+                        ctx.stroke();
+
+                        // Label
+                        ctx.fillStyle = '#ef4444';
+                        ctx.font = 'bold 12px Inter';
+                        const angleDeg = Math.abs((ang2 - ang1) * 180 / Math.PI);
+                        const displayAngle = angleDeg > 180 ? 360 - angleDeg : angleDeg;
+                        ctx.fillText(`${displayAngle.toFixed(1)}°`, b.x * canvas.width + 25, b.y * canvas.height);
+                    }
+                } else if (rule.type === 'POSE_RELATION') {
+                    const a = getKP(rule.params.jointA);
+                    if (a) {
+                        ctx.strokeStyle = '#10b981';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([2, 4]);
+
+                        if (rule.params.targetType === 'POINT') {
+                            const b = getKP(rule.params.jointB);
+                            if (b) {
+                                ctx.beginPath();
+                                ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+                                ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+                                ctx.stroke();
+
+                                // Label distance
+                                const dist = Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+                                ctx.fillStyle = '#10b981';
+                                ctx.font = '10px Inter';
+                                ctx.fillText(`dist: ${dist.toFixed(2)}`, (a.x + b.x) / 2 * canvas.width, (a.y + b.y) / 2 * canvas.height);
+                            }
+                        } else {
+                            // Draw horizontal or vertical line for value comparison
+                            ctx.beginPath();
+                            if (rule.params.component === 'y') {
+                                ctx.moveTo(0, rule.params.value * canvas.height);
+                                ctx.lineTo(canvas.width, rule.params.value * canvas.height);
+                            } else {
+                                ctx.moveTo(rule.params.value * canvas.width, 0);
+                                ctx.lineTo(rule.params.value * canvas.width, canvas.height);
+                            }
+                            ctx.stroke();
+                        }
+                        ctx.setLineDash([]);
+                    }
+                }
+            });
+        });
     };
 
     // ROI Logic
@@ -583,8 +786,44 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         workspace: {
             flex: 1,
             display: 'grid',
-            gridTemplateColumns: '1fr 450px', // Wider right panel for RuleEditor
-            overflow: 'hidden'
+            gridTemplateColumns: isMaximized ? '300px 1fr' : `${leftPanelWidth}% 1px 1fr`,
+            overflow: 'hidden',
+            backgroundColor: '#111827',
+            transition: isMaximized ? 'grid-template-columns 0.4s' : 'none'
+        },
+        resizer: {
+            width: '10px', // Wider hit area
+            marginLeft: '-5px',
+            backgroundColor: isResizing ? '#2563eb' : 'transparent',
+            cursor: 'col-resize',
+            zIndex: 10,
+            transition: 'background-color 0.2s',
+            position: 'relative'
+        },
+        resizerHandle: {
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '18px', // Slightly larger handle
+            height: '60px',
+            backgroundColor: isResizing ? '#2563eb' : '#374151',
+            borderRadius: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '2px solid #4b5563',
+            pointerEvents: 'none',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+            transition: 'all 0.2s'
+        },
+        resizerBar: {
+            width: '2px',
+            height: '12px',
+            backgroundColor: '#6b7280',
+            borderRadius: '1px'
         },
         leftPanel: {
             borderRight: '1px solid #374151',
@@ -620,7 +859,29 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             display: 'flex',
             flexDirection: 'column',
             backgroundColor: '#1f2937',
-            borderLeft: '1px solid #374151'
+            borderLeft: '1px solid #374151',
+            position: 'relative',
+            height: '100%',
+            overflow: 'hidden'
+        },
+        maximizeBtn: {
+            position: 'absolute',
+            left: '-20px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '20px',
+            height: '60px',
+            backgroundColor: '#374151',
+            border: '1px solid #4b5563',
+            borderRight: 'none',
+            borderRadius: '8px 0 0 8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#9ca3af',
+            cursor: 'pointer',
+            zIndex: 100,
+            transition: 'all 0.2s'
         },
         tabs: {
             display: 'flex',
@@ -639,8 +900,9 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         }),
         content: {
             flex: 1,
-            padding: '24px',
-            overflowY: 'auto'
+            padding: '24px 24px 150px 24px', // Increased bottom padding
+            overflowY: 'auto',
+            backgroundColor: '#111827' // Matching RuleEditor background
         }
     };
 
@@ -708,6 +970,27 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             <div style={styles.workspace}>
                 {/* Left Panel: Video & Detection */}
                 <div style={styles.leftPanel}>
+                    {isMaximized && (
+                        <div style={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 10,
+                            zIndex: 100,
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: '4px 12px',
+                            height: '24px',
+                            borderRadius: '10px',
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            letterSpacing: '0.05em',
+                            display: 'flex',
+                            alignItems: 'center'
+                        }}>
+                            VIDEO SIDEBAR
+                        </div>
+                    )}
                     {/* Custom Video Player with ROI Canvas */}
                     <div style={{
                         flex: 1,
@@ -752,9 +1035,58 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 />
                                 {activeTab === 'states' && selectedStateId && (
                                     <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 20 }}>
-                                        {/* Optional overlay indicators */}
                                     </div>
                                 )}
+
+                                {/* VISUALIZATION TOOLBAR */}
+                                <div style={{
+                                    position: 'absolute',
+                                    top: '20px',
+                                    right: '20px',
+                                    zIndex: 50,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                }}>
+                                    <div style={{
+                                        backgroundColor: 'rgba(31, 41, 55, 0.8)',
+                                        backdropFilter: 'blur(4px)',
+                                        borderRadius: '12px',
+                                        padding: '6px',
+                                        border: '1px solid #374151',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '4px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                                    }}>
+                                        {[
+                                            { id: 'skeleton', icon: <Activity size={18} />, label: 'Skeleton' },
+                                            { id: 'rules', icon: <Box size={18} />, label: 'Rules' },
+                                            { id: 'roi', icon: <Square size={18} />, label: 'ROI' }
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.id}
+                                                onClick={() => setVisOptions(prev => ({ ...prev, [opt.id]: !prev[opt.id] }))}
+                                                style={{
+                                                    width: '36px',
+                                                    height: '36px',
+                                                    borderRadius: '8px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    backgroundColor: visOptions[opt.id] ? '#2563eb' : 'transparent',
+                                                    color: visOptions[opt.id] ? 'white' : '#9ca3af',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                title={opt.label}
+                                            >
+                                                {opt.icon}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </>
                         ) : (
                             <div style={styles.uploadOverlay}>
@@ -1035,39 +1367,52 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     />
                 </div>
 
+                {/* Resizer */}
+                {!isMaximized && (
+                    <div
+                        style={styles.resizer}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsResizing(true);
+                        }}
+                    >
+                        <div style={styles.resizerHandle}>
+                            <div style={styles.resizerBar} />
+                            <div style={styles.resizerBar} />
+                            <div style={styles.resizerBar} />
+                        </div>
+                    </div>
+                )}
+
                 {/* Right Panel: Editor */}
                 <div style={styles.rightPanel}>
+                    {/* Maximize Toggle */}
+                    <button
+                        style={styles.maximizeBtn}
+                        onClick={() => setIsMaximized(!isMaximized)}
+                        onMouseOver={e => e.currentTarget.style.color = 'white'}
+                        onMouseOut={e => e.currentTarget.style.color = '#9ca3af'}
+                        title={isMaximized ? "Restore Layout" : "Maximize Editor"}
+                    >
+                        {isMaximized ? <Plus size={14} style={{ transform: 'rotate(45deg)' }} /> : <Plus size={14} />}
+                    </button>
                     <div style={styles.tabs}>
-                        <div
-                            style={styles.tab(activeTab === 'rules')}
-                            onClick={() => setActiveTab('rules')}
-                        >
-                            Rules & Logic
-                        </div>
-                        <div
-                            style={styles.tab(activeTab === 'states')}
-                            onClick={() => setActiveTab('states')}
-                        >
-                            States ({currentModel.states.length})
-                        </div>
-                        <div
-                            style={styles.tab(activeTab === 'extraction')}
-                            onClick={() => setActiveTab('extraction')}
-                        >
-                            Pose Data (33)
-                        </div>
-                        <div
-                            style={styles.tab(activeTab === 'settings')}
-                            onClick={() => setActiveTab('settings')}
-                        >
-                            Settings
-                        </div>
-                        <div
-                            style={{ ...styles.tab(activeTab === 'test'), color: activeTab === 'test' ? '#eab308' : '#9ca3af', borderBottom: activeTab === 'test' ? '2px solid #eab308' : 'none' }}
-                            onClick={() => setActiveTab('test')}
-                        >
-                            ▶ Test Run
-                        </div>
+                        {[
+                            { id: 'rules', label: 'Rules & Logic', icon: <Activity size={16} /> },
+                            { id: 'states', label: `Steps (${currentModel.states.length})`, icon: <Layers size={16} /> },
+                            { id: 'extraction', label: 'Data', icon: <Database size={16} /> },
+                            { id: 'test', label: 'Test Run', icon: <PlayCircle size={16} /> },
+                            { id: 'settings', label: 'Settings', icon: <Settings size={16} /> }
+                        ].map(t => (
+                            <div
+                                key={t.id}
+                                style={styles.tab(activeTab === t.id)}
+                                onClick={() => setActiveTab(t.id)}
+                            >
+                                {t.icon}
+                                {t.label}
+                            </div>
+                        ))}
                     </div>
 
                     <div style={styles.content} className="custom-scrollbar">
@@ -1122,6 +1467,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 onAddTransition={handleAddTransition}
                                 onDeleteTransition={handleDeleteTransition}
                                 onUpdateTransition={handleUpdateTransition}
+                                activePose={activePose}
                             />
                         )}
 
@@ -1206,27 +1552,51 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                                     padding: '12px',
                                                     background: '#111827',
                                                     borderRadius: '8px',
-                                                    border: '1px solid #374151',
+                                                    border: selectedStateId === state.id ? '1px solid #3b82f6' : '1px solid #374151',
                                                     display: 'flex',
                                                     justifyContent: 'space-between',
                                                     alignItems: 'center',
                                                     cursor: 'pointer',
-                                                    transition: 'background 0.2s'
+                                                    transition: 'background 0.2s',
+                                                    boxShadow: selectedStateId === state.id ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none'
                                                 }}
                                                 onMouseOver={(e) => e.currentTarget.style.background = '#1f2937'}
                                                 onMouseOut={(e) => e.currentTarget.style.background = '#111827'}
                                             >
-                                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                                    <span style={{ background: '#374151', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>{idx + 1}</span>
-                                                    <span style={{ fontWeight: '500' }}>{state.name}</span>
+                                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                                    {/* THUMBNAIL */}
+                                                    <div style={{
+                                                        width: '48px',
+                                                        height: '48px',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: '#1f2937',
+                                                        overflow: 'hidden',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        border: '1px solid #374151'
+                                                    }}>
+                                                        {state.thumbnail ? (
+                                                            <img src={state.thumbnail} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <Video size={20} color="#4b5563" />
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem' }}>{state.name}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Step {idx + 1}</div>
+                                                    </div>
                                                 </div>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDeleteState(state.id); }}
-                                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                                                    disabled={idx === 0}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {state.referencePose && <Check size={16} color="#10b981" />}
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteState(state.id); }}
+                                                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                                                        disabled={idx === 0}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                         <button
