@@ -45,6 +45,22 @@ export const detectPose = async (video) => {
 
     try {
         const poses = await detector.estimatePoses(video);
+
+        // Normalize keypoint coordinates to 0-1 range
+        if (poses && poses.length > 0) {
+            const videoWidth = video.videoWidth || video.width || 640;
+            const videoHeight = video.videoHeight || video.height || 480;
+
+            return poses.map(pose => ({
+                ...pose,
+                keypoints: pose.keypoints.map(kp => ({
+                    ...kp,
+                    x: kp.x / videoWidth,
+                    y: kp.y / videoHeight
+                }))
+            }));
+        }
+
         return poses;
     } catch (error) {
         console.error('Error detecting pose:', error);
@@ -56,14 +72,18 @@ export const detectPose = async (video) => {
  * Draw pose skeleton on canvas
  * @param {CanvasRenderingContext2D} ctx 
  * @param {Array} poses 
+ * @param {number} width - Canvas width
+ * @param {number} height - Canvas height
  */
-export const drawPoseSkeleton = (ctx, poses) => {
+export const drawPoseSkeleton = (ctx, poses, width, height) => {
     if (!poses || poses.length === 0) return;
 
     const pose = poses[0];
     if (!pose || !pose.keypoints) return;
 
     const keypoints = pose.keypoints;
+    const canvasWidth = width || ctx.canvas.width;
+    const canvasHeight = height || ctx.canvas.height;
 
     // Draw connections
     const connections = [
@@ -89,8 +109,8 @@ export const drawPoseSkeleton = (ctx, poses) => {
         const kp2 = keypoints[j];
         if (kp1.score > 0.3 && kp2.score > 0.3) {
             ctx.beginPath();
-            ctx.moveTo(kp1.x, kp1.y);
-            ctx.lineTo(kp2.x, kp2.y);
+            ctx.moveTo(kp1.x * canvasWidth, kp1.y * canvasHeight);
+            ctx.lineTo(kp2.x * canvasWidth, kp2.y * canvasHeight);
             ctx.stroke();
         }
     });
@@ -100,7 +120,7 @@ export const drawPoseSkeleton = (ctx, poses) => {
         if (kp.score > 0.3) {
             ctx.fillStyle = '#ff0000';
             ctx.beginPath();
-            ctx.arc(kp.x, kp.y, 4, 0, 2 * Math.PI);
+            ctx.arc(kp.x * canvasWidth, kp.y * canvasHeight, 4, 0, 2 * Math.PI);
             ctx.fill();
         }
     });

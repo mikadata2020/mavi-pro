@@ -83,9 +83,10 @@ function PoseVisualizer({ pose, videoElement, riskScores = {}, width, height }) 
      * Draw a line between two keypoints
      */
     const drawLine = (ctx, start, end, color = '#00ff00') => {
+        const canvas = canvasRef.current;
         ctx.beginPath();
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
+        ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
+        ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
         ctx.stroke();
@@ -95,8 +96,9 @@ function PoseVisualizer({ pose, videoElement, riskScores = {}, width, height }) 
      * Draw a keypoint (circle)
      */
     const drawKeypoint = (ctx, keypoint, color = '#00ff00') => {
+        const canvas = canvasRef.current;
         ctx.beginPath();
-        ctx.arc(keypoint.x, keypoint.y, 5, 0, 2 * Math.PI);
+        ctx.arc(keypoint.x * canvas.width, keypoint.y * canvas.height, 5, 0, 2 * Math.PI);
         ctx.fillStyle = color;
         ctx.fill();
         ctx.strokeStyle = '#ffffff';

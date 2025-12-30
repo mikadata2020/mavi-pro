@@ -38,7 +38,8 @@ export const translations = {
             actionRecognition: 'Pengenalan Aksi',
             cycleSegmentation: 'Segmentasi Cycle',
             files: 'File Explorer',
-            diagnostics: 'Diagnostik Sistem'
+            diagnostics: 'Diagnostik Sistem',
+            pitchDeck: 'Pitch Deck'
         },
         common: {
             save: 'Simpan',
@@ -293,7 +294,8 @@ export const translations = {
             actionRecognition: 'Action Recognition',
             cycleSegmentation: 'Cycle Segmentation',
             files: 'File Explorer',
-            diagnostics: 'System Diagnostics'
+            diagnostics: 'System Diagnostics',
+            pitchDeck: 'Pitch Deck'
         },
         common: {
             save: 'Save',
@@ -548,7 +550,8 @@ export const translations = {
             actionRecognition: 'アクション認識',
             cycleSegmentation: 'サイクルセグメンテーション',
             files: 'ファイルエクスプローラー',
-            diagnostics: 'システム診断'
+            diagnostics: 'システム診断',
+            pitchDeck: 'ピッチデック'
         },
         common: {
             save: '保存',

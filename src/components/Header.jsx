@@ -29,6 +29,7 @@ const MENU_ITEMS = [
     { path: '/files', icon: '📂', labelKey: 'header.files', title: 'File Explorer' },
     { path: '/diagnostics', icon: '🩺', labelKey: 'header.diagnostics', title: 'System Diagnostics' },
     { path: '/swcs', icon: '📋', labelKey: 'header.swcs', title: 'Standard Work Combination Sheet' },
+    { path: '/pitch-deck', icon: '💎', labelKey: 'header.pitchDeck', title: 'Pitch Deck' },
     { path: '/help', icon: '❓', labelKey: 'header.help' },
 ];
 

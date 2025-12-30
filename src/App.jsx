@@ -14,6 +14,7 @@ import { importProject } from './utils/projectExport';
 import StreamHandler from './utils/streamHandler';
 import { LanguageProvider } from './i18n/LanguageContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { initializePoseDetector } from './utils/poseDetector';
 import './index.css';
 
 // Lazy load components
@@ -57,6 +58,7 @@ const AIProcessWorkspace = React.lazy(() => import('./components/AIProcessWorksp
 
 const RealtimeCompliance = React.lazy(() => import('./components/RealtimeCompliance'));
 const StudioModel = React.lazy(() => import('./components/studio/StudioModel'));
+const PitchDeck = React.lazy(() => import('./components/PitchDeck'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -169,6 +171,20 @@ function AppContent() {
   const handleLoginSuccess = () => {
     navigate('/workflow-guide');
   };
+
+  // Pre-load pose detector in background after login
+  // This ensures no loading delay when entering Studio Model
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Load in background with low priority
+      const timer = setTimeout(() => {
+        initializePoseDetector()
+          .then(() => console.log('✅ Pose detector pre-loaded at app startup'))
+          .catch(err => console.warn('Pose detector preload failed:', err));
+      }, 2000); // Wait 2 seconds after login to not interfere with initial load
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated]);
 
   const handleLogout = async () => {
     await signOut();
@@ -537,6 +553,9 @@ function AppContent() {
 
               {/* Studio Model */}
               <Route path="/studio-model" element={<div style={{ overflow: 'hidden', height: '100%' }}><StudioModel /></div>} />
+
+              {/* Pitch Deck */}
+              <Route path="/pitch-deck" element={<PitchDeck onClose={() => navigate('/')} />} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

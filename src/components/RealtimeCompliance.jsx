@@ -137,7 +137,7 @@ const RealtimeCompliance = ({ projectName: initialProjectName }) => {
                     // Draw pose skeleton
                     if (poses && poses.length > 0) {
                         poses.forEach(pose => {
-                            drawPoseSkeleton(ctx, pose, canvas.width, canvas.height);
+                            drawPoseSkeleton(ctx, [pose], canvas.width, canvas.height);
                         });
                     }
 

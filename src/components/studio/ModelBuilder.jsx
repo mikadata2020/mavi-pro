@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check } from 'lucide-react';
+import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler } from 'lucide-react';
 import ObjectTracking from '../ObjectTracking'; // Reuse existing component for video + detection
 import RuleEditor from './RuleEditor';
 import { initializePoseDetector, detectPose } from '../../utils/poseDetector';
@@ -58,13 +58,105 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
 
-    // Initialize Smoother with alpha=0.5 (Adjustable)
-    // 0.1 = Very smooth (slow), 0.9 = Very responsive (jittery)
     const smootherRef = useRef(new PoseSmoother(0.5));
     const engineRef = useRef(null);
     const [testLogs, setTestLogs] = useState([]);
     const [timelineData, setTimelineData] = useState([]);
     const [currentTestState, setCurrentTestState] = useState(null);
+
+    // MEASUREMENT TOOL STATES
+    const [measurementMode, setMeasurementMode] = useState(null); // 'distance' | 'angle' | null
+    const [selectedMeasurePoints, setSelectedMeasurePoints] = useState([]); // Array of keypoint names
+    const [measurementResult, setMeasurementResult] = useState(null); // { type, value, points }
+    const [isVideoPaused, setIsVideoPaused] = useState(true);
+
+    // HELPER: Calculate distance between two points (normalized)
+    const getDistance = (p1, p2) => {
+        if (!p1 || !p2) return 0;
+        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    };
+
+    // HELPER: Calculate angle between three points
+    const getAngle = (p1, p2, p3) => {
+        if (!p1 || !p2 || !p3) return 0;
+        const ang1 = Math.atan2(p1.y - p2.y, p1.x - p2.x);
+        const ang3 = Math.atan2(p3.y - p2.y, p3.x - p2.x);
+        let angle = (ang3 - ang1) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+        return angle > 180 ? 360 - angle : angle;
+    };
+
+    const handleCanvasClick = (e) => {
+        if (!measurementMode || !activePose || !isVideoPaused) return;
+
+        const rect = canvasRef.current.getBoundingClientRect();
+        const clickX = (e.clientX - rect.left) / rect.width;
+        const clickY = (e.clientY - rect.top) / rect.height;
+
+        // Find nearest keypoint
+        let nearest = null;
+        let minDist = 0.05; // Selection radius
+
+        activePose.keypoints.forEach(kp => {
+            if (kp.score > 0.3) {
+                const d = Math.sqrt(Math.pow(kp.x - clickX, 2) + Math.pow(kp.y - clickY, 2));
+                if (d < minDist) {
+                    minDist = d;
+                    nearest = kp.name;
+                }
+            }
+        });
+
+        if (nearest) {
+            // Use functional update to ensure we always have the freshest state
+            setSelectedMeasurePoints(prevPoints => {
+                let nextPoints = [...prevPoints];
+
+                if (nextPoints.includes(nearest)) {
+                    nextPoints = nextPoints.filter(p => p !== nearest);
+                } else {
+                    nextPoints.push(nearest);
+                }
+
+                if (nextPoints.length > 3) {
+                    nextPoints.shift();
+                }
+
+                // Calculate results for the NEW points immediately
+                const results = { distance: null, pixelDistance: null, angle: null };
+                const getKP = (name) => activePose.keypoints.find(k => k.name === name);
+
+                if (nextPoints.length >= 2) {
+                    const p1 = getKP(nextPoints[0]);
+                    const p2 = getKP(nextPoints[1]);
+                    if (p1 && p2) {
+                        const d = getDistance(p1, p2);
+                        results.distance = d * 100;
+                        if (videoRef.current) {
+                            const vw = videoRef.current.videoWidth || 1;
+                            const vh = videoRef.current.videoHeight || 1;
+                            results.pixelDistance = Math.sqrt(Math.pow((p2.x - p1.x) * vw, 2) + Math.pow((p2.y - p1.y) * vh, 2));
+                        }
+                    }
+                }
+
+                if (nextPoints.length === 3) {
+                    const p1 = getKP(nextPoints[0]);
+                    const p2 = getKP(nextPoints[1]);
+                    const p3 = getKP(nextPoints[2]);
+                    if (p1 && p2 && p3) results.angle = getAngle(p1, p2, p3);
+                }
+
+                setMeasurementResult(results);
+
+                // CRITICAL: Draw IMMEDIATELY using the local 'nextPoints' and 'results'
+                // to avoid waiting for state update (which would show old points or none)
+                drawVisualizations(activePose, nextPoints, results);
+
+                return nextPoints;
+            });
+        }
+    };
 
     const handleFileUpload = (event) => {
         const file = event.target.files[0];
@@ -143,11 +235,73 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         }
     };
 
+    // State for detector loading
+    const [detectorReady, setDetectorReady] = useState(false);
+    const [loadingDetector, setLoadingDetector] = useState(false);
+
+    // Pre-initialize pose detector when video source changes
+    useEffect(() => {
+        if (!videoSrc) return;
+
+        const preloadDetector = async () => {
+            setLoadingDetector(true);
+            try {
+                await initializePoseDetector();
+                setDetectorReady(true);
+                console.log('✅ Pose detector pre-loaded for video');
+            } catch (error) {
+                console.error('Failed to pre-load pose detector:', error);
+            }
+            setLoadingDetector(false);
+        };
+
+        preloadDetector();
+    }, [videoSrc]);
+
+    // Detect pose immediately when video metadata is loaded
+    useEffect(() => {
+        if (!videoSrc || !detectorReady) return;
+
+        const handleLoadedMetadata = async () => {
+            if (videoRef.current) {
+                console.log('🎬 Video metadata loaded, detecting initial pose...');
+                try {
+                    const poses = await detectPose(videoRef.current);
+                    if (poses && poses.length > 0) {
+                        const smoothedKeypoints = smootherRef.current.smooth(poses[0].keypoints);
+                        const smoothedPose = { ...poses[0], keypoints: smoothedKeypoints };
+                        setActivePose(smoothedPose);
+                        drawVisualizations(smoothedPose);
+                        console.log('✅ Initial pose detected!');
+                    }
+                } catch (error) {
+                    console.error('Failed to detect initial pose:', error);
+                }
+            }
+        };
+
+        const video = videoRef.current;
+        if (video) {
+            video.addEventListener('loadeddata', handleLoadedMetadata);
+            // Also try immediately if video is already loaded
+            if (video.readyState >= 2) {
+                handleLoadedMetadata();
+            }
+        }
+
+        return () => {
+            if (video) {
+                video.removeEventListener('loadeddata', handleLoadedMetadata);
+            }
+        };
+    }, [videoSrc, detectorReady]);
+
     // Continuous Detection Loop for UI Visualization
     useEffect(() => {
         let animationFrameId;
 
         const detectLoop = async () => {
+            if (!detectorReady) return; // Skip if detector not ready
             if (videoRef.current && !videoRef.current.paused && !videoRef.current.ended) {
                 const poses = await detectPose(videoRef.current);
                 if (poses && poses.length > 0) {
@@ -159,6 +313,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
                     // Update active pose with smoothed data
                     setActivePose(smoothedPose);
+
 
                     // Draw Visualizations
                     drawVisualizations(smoothedPose);
@@ -218,23 +373,25 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         };
 
         if (videoRef.current) {
-            videoRef.current.addEventListener('play', detectLoop);
-            videoRef.current.addEventListener('pause', () => cancelAnimationFrame(animationFrameId));
+            videoRef.current.addEventListener('play', () => {
+                setIsVideoPaused(false);
+                detectLoop();
+            });
+            videoRef.current.addEventListener('pause', () => {
+                setIsVideoPaused(true);
+                cancelAnimationFrame(animationFrameId);
+            });
             videoRef.current.addEventListener('seeked', async () => {
                 const poses = await detectPose(videoRef.current);
                 if (poses && poses.length > 0) {
-                    // Even on seek, we smooth, but might want to reset if jump is large. 
-                    // For now, simple smooth is fine as history will converge quickly.
                     const smoothed = smootherRef.current.smooth(poses[0].keypoints);
-                    setActivePose({ ...poses[0], keypoints: smoothed });
+                    const pose = { ...poses[0], keypoints: smoothed };
+                    setActivePose(pose);
+                    drawVisualizations(pose);
                 }
             });
         }
-
-        return () => {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-        };
-    }, [videoSrc]);
+    }, [videoSrc, visOptions, activeTab, currentModel, detectorReady]);
 
     // Resize Handler
     useEffect(() => {
@@ -380,7 +537,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     };
 
     // VISUAL GEOMETRY DRAWING
-    const drawVisualizations = (pose) => {
+    const drawVisualizations = (pose, overridePoints = null, overrideResults = null) => {
         if (!canvasRef.current || !pose) return;
         const ctx = canvasRef.current.getContext('2d');
         const canvas = canvasRef.current;
@@ -418,6 +575,93 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         // 3. Draw Active Rules Visuals
         if (visOptions.rules) {
             drawRulesVisuals(ctx, pose);
+        }
+
+        // 4. Draw Measurements
+        if (measurementMode) {
+            drawMeasurements(ctx, pose, overridePoints, overrideResults);
+        }
+    };
+
+
+    const drawMeasurements = (ctx, pose, overridePoints = null, overrideResults = null) => {
+        const keypoints = pose.keypoints;
+        const canvas = canvasRef.current;
+        const pointsToDraw = overridePoints || selectedMeasurePoints;
+        const resultsToDraw = overrideResults || measurementResult;
+
+        // Draw selected points
+        pointsToDraw.forEach((name, index) => {
+            const kp = keypoints.find(k => k.name === name);
+            if (kp) {
+                // Outer glow shadow
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
+
+                // Red circle
+                ctx.fillStyle = '#ef4444'; // Solid Red-500
+                ctx.beginPath();
+                ctx.arc(kp.x * canvas.width, kp.y * canvas.height, 12, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // White border
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Reset shadow
+                ctx.shadowBlur = 0;
+
+                // Number label
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 14px Inter';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(index + 1, kp.x * canvas.width, kp.y * canvas.height);
+            }
+        });
+
+        // Draw distance lines
+        if (pointsToDraw.length >= 2) {
+            for (let i = 0; i < pointsToDraw.length - 1; i++) {
+                const p1 = keypoints.find(k => k.name === pointsToDraw[i]);
+                const p2 = keypoints.find(k => k.name === pointsToDraw[i + 1]);
+
+                if (p1 && p2) {
+                    // Line
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+                    ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+        }
+
+        // Draw angle arc
+        if (pointsToDraw.length === 3) {
+            const p1 = keypoints.find(k => k.name === pointsToDraw[0]);
+            const p2 = keypoints.find(k => k.name === pointsToDraw[1]);
+            const p3 = keypoints.find(k => k.name === pointsToDraw[2]);
+            if (p1 && p2 && p3) {
+                ctx.strokeStyle = '#f87171';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+                ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+                ctx.lineTo(p3.x * canvas.width, p3.y * canvas.height);
+                ctx.stroke();
+
+                // Arc
+                const ang1 = Math.atan2(p1.y - p2.y, p1.x - p2.x);
+                const ang3 = Math.atan2(p3.y - p2.y, p3.x - p2.x);
+                ctx.beginPath();
+                ctx.arc(p2.x * canvas.width, p2.y * canvas.height, 40, ang1, ang3);
+                ctx.stroke();
+            }
         }
     };
 
@@ -994,6 +1238,10 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         scrollbar-width: thin;
                         scrollbar-color: #4b5563 transparent;
                     }
+                    @keyframes spin {
+                        from { transform: rotate(0deg); }
+                        to { transform: rotate(360deg); }
+                    }
                 `}
             </style>
             <StudioAssistant model={currentModel} />
@@ -1088,15 +1336,22 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 />
                                 <canvas
                                     ref={canvasRef}
-                                    onMouseDown={startDrawingROI}
-                                    onMouseMove={drawROI}
-                                    onMouseUp={endDrawingROI}
+                                    onMouseDown={(e) => {
+                                        if (isDrawingROI) startDrawingROI(e);
+                                    }}
+                                    onMouseMove={(e) => {
+                                        if (isDrawingROI) drawROI(e);
+                                    }}
+                                    onMouseUp={(e) => {
+                                        if (isDrawingROI) endDrawingROI(e);
+                                    }}
+                                    onClick={handleCanvasClick}
                                     style={{
                                         position: 'absolute',
                                         top: 0, left: 0, right: 0, bottom: 0,
                                         width: '100%', height: '100%',
-                                        pointerEvents: isDrawingROI ? 'auto' : 'none',
-                                        cursor: isDrawingROI ? 'crosshair' : 'default',
+                                        pointerEvents: (isDrawingROI || (measurementMode && isVideoPaused)) ? 'auto' : 'none',
+                                        cursor: isDrawingROI ? 'crosshair' : (measurementMode ? 'pointer' : 'default'),
                                         zIndex: 10
                                     }}
                                 />
@@ -1105,55 +1360,227 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                     </div>
                                 )}
 
-                                {/* VISUALIZATION TOOLBAR */}
-                                <div style={{
-                                    position: 'absolute',
-                                    top: '20px',
-                                    right: '20px',
-                                    zIndex: 50,
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px'
-                                }}>
+
+
+                                {/* POSE DETECTOR LOADING INDICATOR */}
+                                {loadingDetector && (
                                     <div style={{
-                                        backgroundColor: 'rgba(31, 41, 55, 0.8)',
+                                        position: 'absolute',
+                                        bottom: '80px',
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        zIndex: 50,
+                                        backgroundColor: 'rgba(31, 41, 55, 0.95)',
                                         backdropFilter: 'blur(4px)',
                                         borderRadius: '12px',
-                                        padding: '6px',
+                                        padding: '12px 20px',
                                         border: '1px solid #374151',
                                         display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '4px',
+                                        alignItems: 'center',
+                                        gap: '12px',
                                         boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
                                     }}>
-                                        {[
-                                            { id: 'skeleton', icon: <Activity size={18} />, label: 'Skeleton' },
-                                            { id: 'rules', icon: <Box size={18} />, label: 'Rules' },
-                                            { id: 'roi', icon: <Square size={18} />, label: 'ROI' }
-                                        ].map(opt => (
+                                        <div style={{
+                                            width: '20px',
+                                            height: '20px',
+                                            border: '2px solid #3b82f6',
+                                            borderTopColor: 'transparent',
+                                            borderRadius: '50%',
+                                            animation: 'spin 1s linear infinite'
+                                        }} />
+                                        <span style={{ color: 'white', fontSize: '0.875rem' }}>
+                                            Loading Pose Detector...
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* DETECTOR READY INDICATOR */}
+                                {detectorReady && !loadingDetector && !activePose && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: '80px',
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        zIndex: 50,
+                                        backgroundColor: 'rgba(16, 185, 129, 0.9)',
+                                        backdropFilter: 'blur(4px)',
+                                        borderRadius: '12px',
+                                        padding: '12px 20px',
+                                        border: '1px solid #10b981',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                                    }}>
+                                        <Check size={18} style={{ color: 'white' }} />
+                                        <span style={{ color: 'white', fontSize: '0.875rem' }}>
+                                            Skeleton Ready - Play video to detect
+                                        </span>
+                                    </div>
+                                )}
+
+                                {/* SKELETON MEASUREMENT TOOLBAR */}
+                                {isVideoPaused && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        left: '20px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        zIndex: 50,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '12px'
+                                    }}>
+                                        <div style={{
+                                            backgroundColor: 'rgba(31, 41, 55, 0.4)',
+                                            backdropFilter: 'blur(4px)',
+                                            borderRadius: '16px',
+                                            padding: '8px',
+                                            border: '1px solid #374151',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px',
+                                            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                                            width: 'fit-content'
+                                        }}>
+                                            <div style={{
+                                                padding: '4px 8px',
+                                                fontSize: '0.65rem',
+                                                fontWeight: '700',
+                                                color: '#60a5fa',
+                                                textAlign: 'center',
+                                                borderBottom: '1px solid #374151',
+                                                marginBottom: '4px'
+                                            }}>RULER</div>
+
                                             <button
-                                                key={opt.id}
-                                                onClick={() => setVisOptions(prev => ({ ...prev, [opt.id]: !prev[opt.id] }))}
+                                                onClick={() => {
+                                                    setMeasurementMode(measurementMode === 'distance' ? null : 'distance');
+                                                    setSelectedMeasurePoints([]);
+                                                    setMeasurementResult(null);
+                                                }}
                                                 style={{
-                                                    width: '36px',
-                                                    height: '36px',
-                                                    borderRadius: '8px',
+                                                    width: '44px',
+                                                    height: '44px',
+                                                    borderRadius: '12px',
+                                                    backgroundColor: measurementMode === 'distance' ? '#2563eb' : 'transparent',
+                                                    color: measurementMode === 'distance' ? 'white' : '#9ca3af',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
-                                                    backgroundColor: visOptions[opt.id] ? '#2563eb' : 'transparent',
-                                                    color: visOptions[opt.id] ? 'white' : '#9ca3af',
-                                                    border: 'none',
-                                                    cursor: 'pointer',
                                                     transition: 'all 0.2s'
                                                 }}
-                                                title={opt.label}
+                                                title="Measure Distance (Select 2 points)"
                                             >
-                                                {opt.icon}
+                                                <Ruler size={20} />
                                             </button>
-                                        ))}
+
+                                            <button
+                                                onClick={() => {
+                                                    setMeasurementMode(measurementMode === 'angle' ? null : 'angle');
+                                                    setSelectedMeasurePoints([]);
+                                                    setMeasurementResult(null);
+                                                }}
+                                                style={{
+                                                    width: '44px',
+                                                    height: '44px',
+                                                    borderRadius: '12px',
+                                                    backgroundColor: measurementMode === 'angle' ? '#2563eb' : 'transparent',
+                                                    color: measurementMode === 'angle' ? 'white' : '#9ca3af',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.2s',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 'bold'
+                                                }}
+                                                title="Measure Angle (Select 3 points)"
+                                            >
+                                                <Activity size={18} />
+                                                <span style={{ fontSize: '0.6rem' }}>DEG</span>
+                                            </button>
+
+                                            {(measurementMode || selectedMeasurePoints.length > 0) && (
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedMeasurePoints([]);
+                                                        setMeasurementResult(null);
+                                                    }}
+                                                    style={{
+                                                        width: '44px',
+                                                        height: '44px',
+                                                        borderRadius: '12px',
+                                                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                                        color: '#ef4444',
+                                                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    title="Clear Measurement"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* RESULT DISPLAY */}
+                                        {measurementResult && (
+                                            <div style={{
+                                                backgroundColor: 'rgba(31, 41, 55, 0.4)',
+                                                borderRadius: '12px',
+                                                padding: '12px 16px',
+                                                color: 'white',
+                                                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                                                border: '1px solid #374151',
+                                                width: 'fit-content',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '8px'
+                                            }}>
+                                                {measurementResult.distance !== null && (
+                                                    <div style={{ borderBottom: measurementResult.angle !== null ? '1px solid #374151' : 'none', paddingBottom: measurementResult.angle !== null ? '8px' : '0' }}>
+                                                        <div style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: '600', marginBottom: '2px' }}>DISTANCE</div>
+                                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
+                                                            <div style={{ fontSize: '1.2rem', fontWeight: '800' }}>{measurementResult.distance.toFixed(1)}<span style={{ fontSize: '0.7rem', color: '#60a5fa', marginLeft: '2px' }}>%</span></div>
+                                                            <div style={{ fontSize: '0.9rem', color: '#9ca3af' }}>{measurementResult.pixelDistance?.toFixed(0)}<span style={{ fontSize: '0.6rem', color: '#9ca3af', marginLeft: '2px' }}>px</span></div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {measurementResult.angle !== null && (
+                                                    <div>
+                                                        <div style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: '600', marginBottom: '2px' }}>ANGLE</div>
+                                                        <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#3b82f6' }}>
+                                                            {measurementResult.angle.toFixed(1)}<span style={{ fontSize: '0.7rem', marginLeft: '2px' }}>°</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {measurementMode && !measurementResult && (
+                                            <div style={{
+                                                backgroundColor: 'rgba(31, 41, 55, 0.4)',
+                                                borderRadius: '8px',
+                                                padding: '8px 12px',
+                                                color: '#60a5fa',
+                                                fontSize: '0.75rem',
+                                                fontWeight: '600',
+                                                border: '1px solid rgba(96, 165, 250, 0.3)'
+                                            }}>
+                                                Pick points on skeleton (max 3)
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
+                                )}
                             </>
                         ) : (
                             <div style={styles.emptyState}>
