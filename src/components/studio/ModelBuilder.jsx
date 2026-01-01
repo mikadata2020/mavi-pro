@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler } from 'lucide-react';
+import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler, Undo, Redo, Copy, RotateCw, Upload, Download, FileJson } from 'lucide-react';
 import ObjectTracking from '../ObjectTracking'; // Reuse existing component for video + detection
 import RuleEditor from './RuleEditor';
 import { initializePoseDetector, detectPose } from '../../utils/poseDetector';
@@ -8,11 +8,14 @@ import PoseSmoother from '../../utils/studio/PoseSmoother';
 import StudioAssistant from './StudioAssistant';
 import { getAllProjects } from '../../utils/database';
 import InferenceEngine from '../../utils/studio/InferenceEngine';
+import { generateAiRuleFromImage, validateAiRuleScript } from '../../utils/aiGenerator';
+import useHistory from '../../hooks/useHistory';
+import { MODEL_TEMPLATES } from '../../utils/studio/ModelTemplates';
 
 const ModelBuilder = ({ model, onClose, onSave }) => {
-    const [currentModel, setCurrentModel] = useState({
+    const [currentModel, setCurrentModel, undoModel, redoModel, canUndoModel, canRedoModel] = useHistory({
         ...model,
-        states: model.statesList || [{ id: 's_start', name: 'Start' }], // Initialize with default if empty
+        states: model.statesList || [{ id: 's_start', name: 'Start' }],
         transitions: model.transitions || []
     });
     const [showHelp, setShowHelp] = useState(false);
@@ -63,6 +66,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const [testLogs, setTestLogs] = useState([]);
     const [timelineData, setTimelineData] = useState([]);
     const [currentTestState, setCurrentTestState] = useState(null);
+    const [cycleStats, setCycleStats] = useState(null);
 
     // MEASUREMENT TOOL STATES
     const [measurementMode, setMeasurementMode] = useState(null); // 'distance' | 'angle' | null
@@ -305,34 +309,31 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             if (videoRef.current && !videoRef.current.paused && !videoRef.current.ended) {
                 const poses = await detectPose(videoRef.current);
                 if (poses && poses.length > 0) {
-                    const originalKeypoints = poses[0].keypoints;
+                    // Smooth all detected poses
+                    const smoothedPoses = poses.map(p => ({
+                        ...p,
+                        keypoints: smootherRef.current.smooth(p.keypoints, p.id || 0) // Assume smoother can handle IDs
+                    }));
 
-                    // Apply Smoothing
-                    const smoothedKeypoints = smootherRef.current.smooth(originalKeypoints);
-                    const smoothedPose = { ...poses[0], keypoints: smoothedKeypoints };
+                    setActivePose(smoothedPoses[0]); // Keep primary active pose for legacy UI
 
-                    // Update active pose with smoothed data
-                    setActivePose(smoothedPose);
-
-
-                    // Draw Visualizations
-                    drawVisualizations(smoothedPose);
+                    // Draw Visualizations (Pass all poses for inter-operator rules)
+                    drawVisualizations(smoothedPoses[0], null, null, smoothedPoses);
 
                     // TEST MODE EXECUTION
                     if (activeTab === 'test') {
-                        // Initialize Engine if needed (or if model changed, ideally we reset)
                         if (!engineRef.current) {
                             engineRef.current = new InferenceEngine();
                             engineRef.current.loadModel(currentModel);
+                            engineRef.current.onCycleComplete = (stats) => {
+                                setCycleStats(stats);
+                                console.log("♻️ Cycle Analytics Updated:", stats);
+                            };
                             console.log("Test Engine Started with Model:", currentModel.name);
                         }
 
-                        // Run Engine
-                        // We use a dummy ID 'tester' since we are testing on a single person video
-                        // The engine expects array of poses.
-                        // We need to verify if Engine handles single pose mapping nicely.
-                        // Assuming processFrame handles tracking.
-                        engineRef.current.processFrame([smoothedPose], [], videoRef.current.currentTime);
+                        // Run Engine with all poses
+                        engineRef.current.processFrame(smoothedPoses, [], videoRef.current.currentTime);
 
                         // Update UI
                         const logs = engineRef.current.getLogs();
@@ -342,14 +343,12 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
                         // Update Timeline Data
                         if (engineRef.current.timelineEvents) {
-                            // Copy events
-                            // Also add the "current active" event which is incomplete
                             const activeEvents = [];
                             engineRef.current.activeTracks.forEach((track, id) => {
                                 activeEvents.push({
                                     state: track.currentState,
-                                    startTime: track.enterTime,
-                                    endTime: videoRef.current.currentTime, // Current time as end
+                                    startTime: track.stateEnterTime || track.enterTime,
+                                    endTime: videoRef.current.currentTime,
                                     isActive: true
                                 });
                             });
@@ -357,14 +356,10 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             setTimelineData([...engineRef.current.timelineEvents, ...activeEvents]);
                         }
 
-                        // Visualize Current State
-                        // Map tracks to find our person
-                        // Engine tracks ID is usually 'p_1' etc.
-                        // Let's iterate values
-                        const iterator = engineRef.current.tracks.values();
-                        const firstTrack = iterator.next().value;
-                        if (firstTrack) {
-                            setCurrentTestState(firstTrack.currentState);
+                        // Visualize Current State of Track 1 (Primary)
+                        const primaryTrack = engineRef.current.activeTracks.get(1) || engineRef.current.activeTracks.values().next().value;
+                        if (primaryTrack) {
+                            setCurrentTestState(primaryTrack.currentState);
                         }
                     }
                 }
@@ -536,54 +531,100 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         }
     };
 
-    // VISUAL GEOMETRY DRAWING
-    const drawVisualizations = (pose, overridePoints = null, overrideResults = null) => {
-        if (!canvasRef.current || !pose) return;
-        const ctx = canvasRef.current.getContext('2d');
-        const canvas = canvasRef.current;
+    const captureCurrentFrame = () => {
+        if (!videoRef.current || !canvasRef.current) return null;
 
-        // Sync canvas size if needed (resize handling)
-        if (videoRef.current && (canvas.width !== videoRef.current.clientWidth || canvas.height !== videoRef.current.clientHeight)) {
-            canvas.width = videoRef.current.clientWidth;
-            canvas.height = videoRef.current.clientHeight;
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        const ctx = canvas.getContext('2d');
+
+        // Draw video
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+
+        // Draw skeleton if active
+        if (activePose) {
+            // Need to scale pose to video resolution (not display resolution)
+            const scaleX = canvas.width / canvasRef.current.width;
+            const scaleY = canvas.height / canvasRef.current.height;
+
+            // Simplified skeleton drawing for AI context
+            ctx.fillStyle = '#ff0000';
+            activePose.keypoints.forEach(kp => {
+                if (kp.score > 0.5) {
+                    ctx.beginPath();
+                    ctx.arc(kp.x * canvas.width, kp.y * canvas.height, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            });
         }
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', 0.8);
+    };
 
-        // 1. Draw ROI
-        if (visOptions.roi && selectedStateId) {
-            const state = currentModel.states.find(s => s.id === selectedStateId);
-            if (state && state.roi) {
-                ctx.strokeStyle = '#eab308';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.strokeRect(
-                    state.roi.x * canvas.width,
-                    state.roi.y * canvas.height,
-                    state.roi.width * canvas.width,
-                    state.roi.height * canvas.height
-                );
-                ctx.setLineDash([]);
+    const handleAiSuggestRule = async (transitionId) => {
+        const imageData = captureCurrentFrame();
+        if (!imageData) {
+            alert("Gagal menangkap frame video.");
+            return;
+        }
+
+        try {
+            const result = await generateAiRuleFromImage(imageData);
+            if (result && result.type) {
+                // Add the rule to the transition
+                const transition = currentModel.transitions.find(t => t.id === transitionId);
+                if (!transition) return;
+
+                const newRule = {
+                    id: `rule_ai_${Date.now()}`,
+                    type: result.type,
+                    params: result.params,
+                    aiGenerated: true,
+                    aiReasoning: result.reasoning
+                };
+
+                const updatedCondition = {
+                    ...transition.condition,
+                    rules: [...transition.condition.rules, newRule]
+                };
+
+                handleUpdateTransition(transitionId, { condition: updatedCondition });
+                alert(`AI Sugesti: ${result.reasoning}`);
             }
-        }
-
-        // 2. Draw Skeleton
-        if (visOptions.skeleton) {
-            drawSkeleton(ctx, pose);
-        }
-
-        // 3. Draw Active Rules Visuals
-        if (visOptions.rules) {
-            drawRulesVisuals(ctx, pose);
-        }
-
-        // 4. Draw Measurements
-        if (measurementMode) {
-            drawMeasurements(ctx, pose, overridePoints, overrideResults);
+        } catch (error) {
+            console.error("AI Suggestion Error:", error);
+            alert("AI gagal memberikan saran rule: " + error.message);
         }
     };
 
+    const handleAiValidateScript = async (transitionId, ruleId, script) => {
+        if (!script) {
+            alert("Script kosong. Silakan tulis logika terlebih dahulu.");
+            return;
+        }
 
+        setAiLoading(prev => ({ ...prev, [transitionId]: true }));
+        try {
+            const result = await validateAiRuleScript(script);
+            if (result) {
+                alert(`AI Logic Check:\n\n${result.explanation}\n\n${result.issues.length > 0 ? "Isu: " + result.issues.join(", ") : "Tidak ada isu ditemukan."}\n\nSaran: ${result.suggestion}`);
+
+                if (result.isValid === false && result.suggestion) {
+                    if (window.confirm("AI menemukan potensi kesalahan. Gunakan saran AI?")) {
+                        handleUpdateRule(transitionId, ruleId, { params: { script: result.suggestion } });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("AI Validation Error:", error);
+            alert("Gagal memvalidasi script: " + error.message);
+        } finally {
+            setAiLoading(prev => ({ ...prev, [transitionId]: false }));
+        }
+    };
+
+    // VISUAL GEOMETRY HELPERS
     const drawMeasurements = (ctx, pose, overridePoints = null, overrideResults = null) => {
         const keypoints = pose.keypoints;
         const canvas = canvasRef.current;
@@ -683,111 +724,160 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         ];
 
         // Draw connections
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.lineWidth = 2;
         connections.forEach(([start, end]) => {
             const p1 = keypoints.find(k => k.name === start);
             const p2 = keypoints.find(k => k.name === end);
-            if (p1 && p2 && p1.score > 0.3 && p2.score > 0.3) {
+            if (p1 && p2 && p1.score > 0.2 && p2.score > 0.2) {
+                const isPredicted = p1.isPredicted || p2.isPredicted;
+                ctx.strokeStyle = isPredicted ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.4)';
+                if (isPredicted) ctx.setLineDash([2, 4]); else ctx.setLineDash([]);
+
                 ctx.beginPath();
                 ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
                 ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
                 ctx.stroke();
             }
         });
+        ctx.setLineDash([]);
 
         // Draw keypoints
         keypoints.forEach(kp => {
-            if (kp.score > 0.3) {
-                ctx.fillStyle = '#60a5fa';
+            if (kp.score > 0.2) {
+                const isPred = kp.isPredicted;
+                ctx.fillStyle = isPred ? 'rgba(96, 165, 250, 0.4)' : '#60a5fa'; // Faded blue for prediction
                 ctx.beginPath();
-                ctx.arc(kp.x * canvas.width, kp.y * canvas.height, 4, 0, 2 * Math.PI);
+                ctx.arc(kp.x * canvas.width, kp.y * canvas.height, isPred ? 3 : 4, 0, 2 * Math.PI);
                 ctx.fill();
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 1;
-                ctx.stroke();
+
+                if (!isPred) {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
             }
         });
     };
 
-    const drawRulesVisuals = (ctx, pose) => {
+    const drawRulesVisuals = (ctx, pose, allPoses = null) => {
         const keypoints = pose.keypoints;
         const canvas = canvasRef.current;
-
-        // Find relevant transitions for visualization
-        // In "Rules" tab, we might want to highlight rules from the selected/first transition
         const relevantTransitions = currentModel.transitions;
 
         relevantTransitions.forEach(t => {
             t.condition.rules.forEach(rule => {
-                const getKP = (name) => keypoints.find(k => k.name === name);
+                const getKP = (p, name) => p.keypoints.find(k => k.name === name);
 
                 if (rule.type === 'POSE_ANGLE') {
-                    const a = getKP(rule.params.jointA);
-                    const b = getKP(rule.params.jointB);
-                    const c = getKP(rule.params.jointC);
+                    const a = getKP(pose, rule.params.jointA);
+                    const b = getKP(pose, rule.params.jointB);
+                    const c = getKP(pose, rule.params.jointC);
                     if (a && b && c) {
-                        // Draw lines
-                        ctx.strokeStyle = '#ef4444';
+                        const isPred = a.isPredicted || b.isPredicted || c.isPredicted;
+                        ctx.strokeStyle = isPred ? 'rgba(239, 68, 68, 0.4)' : '#ef4444';
                         ctx.lineWidth = 3;
+                        if (isPred) ctx.setLineDash([5, 5]); else ctx.setLineDash([]);
+
                         ctx.beginPath();
                         ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
                         ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
                         ctx.lineTo(c.x * canvas.width, c.y * canvas.height);
                         ctx.stroke();
 
-                        // Draw angle arc
                         const ang1 = Math.atan2(a.y - b.y, a.x - b.x);
                         const ang2 = Math.atan2(c.y - b.y, c.x - b.x);
                         ctx.beginPath();
                         ctx.arc(b.x * canvas.width, b.y * canvas.height, 20, ang1, ang2);
                         ctx.stroke();
 
-                        // Label
-                        ctx.fillStyle = '#ef4444';
-                        ctx.font = 'bold 12px Inter';
+                        ctx.fillStyle = isPred ? 'rgba(239, 68, 68, 0.6)' : '#ef4444';
+                        ctx.font = isPred ? 'italic 12px Inter' : 'bold 12px Inter';
                         const angleDeg = Math.abs((ang2 - ang1) * 180 / Math.PI);
                         const displayAngle = angleDeg > 180 ? 360 - angleDeg : angleDeg;
-                        ctx.fillText(`${displayAngle.toFixed(1)}°`, b.x * canvas.width + 25, b.y * canvas.height);
-                    }
-                } else if (rule.type === 'POSE_RELATION') {
-                    const a = getKP(rule.params.jointA);
-                    if (a) {
-                        ctx.strokeStyle = '#10b981';
-                        ctx.lineWidth = 2;
-                        ctx.setLineDash([2, 4]);
-
-                        if (rule.params.targetType === 'POINT') {
-                            const b = getKP(rule.params.jointB);
-                            if (b) {
-                                ctx.beginPath();
-                                ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
-                                ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
-                                ctx.stroke();
-
-                                // Label distance
-                                const dist = Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
-                                ctx.fillStyle = '#10b981';
-                                ctx.font = '10px Inter';
-                                ctx.fillText(`dist: ${dist.toFixed(2)}`, (a.x + b.x) / 2 * canvas.width, (a.y + b.y) / 2 * canvas.height);
-                            }
-                        } else {
-                            // Draw horizontal or vertical line for value comparison
-                            ctx.beginPath();
-                            if (rule.params.component === 'y') {
-                                ctx.moveTo(0, rule.params.value * canvas.height);
-                                ctx.lineTo(canvas.width, rule.params.value * canvas.height);
-                            } else {
-                                ctx.moveTo(rule.params.value * canvas.width, 0);
-                                ctx.lineTo(rule.params.value * canvas.width, canvas.height);
-                            }
-                            ctx.stroke();
-                        }
+                        ctx.fillText(`${displayAngle.toFixed(1)}°${isPred ? ' (pred)' : ''}`, b.x * canvas.width + 25, b.y * canvas.height);
                         ctx.setLineDash([]);
                     }
+                } else if (rule.type === 'POSE_RELATION' || rule.type === 'OPERATOR_PROXIMITY') {
+                    const a = getKP(pose, rule.params.jointA || rule.params.joint);
+                    if (!a) return;
+
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([4, 4]);
+
+                    if (rule.type === 'OPERATOR_PROXIMITY' || (rule.type === 'POSE_RELATION' && rule.params.targetType === 'POINT')) {
+                        let targetPose = pose;
+                        let jointBName = rule.params.jointB || rule.params.joint;
+
+                        // Handle inter-operator targeting
+                        const targetTrackId = rule.params.targetTrackId;
+                        if (targetTrackId && targetTrackId !== 'self' && allPoses) {
+                            const targetIdx = typeof targetTrackId === 'number' ? targetTrackId - 1 : (targetTrackId === 'nearest' ? 1 : 0);
+                            if (allPoses[targetIdx]) targetPose = allPoses[targetIdx];
+                        }
+
+                        const b = getKP(targetPose, jointBName);
+                        if (b) {
+                            ctx.strokeStyle = rule.type === 'OPERATOR_PROXIMITY' ? '#a855f7' : '#10b981';
+                            ctx.beginPath();
+                            ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+                            ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+                            ctx.stroke();
+
+                            const dist = Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
+                            ctx.fillStyle = ctx.strokeStyle;
+                            ctx.font = '10px Inter';
+                            ctx.fillText(`${rule.type === 'OPERATOR_PROXIMITY' ? 'prox' : 'rel'}: ${dist.toFixed(2)}`, (a.x + b.x) / 2 * canvas.width, (a.y + b.y) / 2 * canvas.height - 10);
+                        }
+                    } else if (rule.type === 'POSE_RELATION' && rule.params.targetType === 'VALUE') {
+                        ctx.strokeStyle = '#10b981';
+                        ctx.beginPath();
+                        if (rule.params.component === 'y') {
+                            ctx.moveTo(0, rule.params.value * canvas.height);
+                            ctx.lineTo(canvas.width, rule.params.value * canvas.height);
+                        } else {
+                            ctx.moveTo(rule.params.value * canvas.width, 0);
+                            ctx.lineTo(rule.params.value * canvas.width, canvas.height);
+                        }
+                        ctx.stroke();
+                    }
+                    ctx.setLineDash([]);
                 }
             });
         });
+    };
+
+    const drawVisualizations = (pose, overridePoints = null, overrideResults = null, allPoses = null) => {
+        if (!canvasRef.current || !pose) return;
+        const ctx = canvasRef.current.getContext('2d');
+        const vw = videoRef.current ? videoRef.current.videoWidth : 1;
+        const vh = videoRef.current ? videoRef.current.videoHeight : 1;
+
+        canvasRef.current.width = vw;
+        canvasRef.current.height = vh;
+
+        ctx.clearRect(0, 0, vw, vh);
+
+        if (visOptions.skeleton) drawSkeleton(ctx, pose);
+        if (visOptions.rules) drawRulesVisuals(ctx, pose, allPoses);
+
+        if (visOptions.roi && selectedStateId) {
+            const state = currentModel.states.find(s => s.id === selectedStateId);
+            if (state && state.roi) {
+                ctx.strokeStyle = '#eab308';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    state.roi.x * canvasRef.current.width,
+                    state.roi.y * canvasRef.current.height,
+                    state.roi.width * canvasRef.current.width,
+                    state.roi.height * canvasRef.current.height
+                );
+            }
+        }
+
+        // Draw Measurements
+        if (measurementMode) {
+            drawMeasurements(ctx, pose, overridePoints, overrideResults);
+        }
     };
 
     // ROI Logic
@@ -954,6 +1044,20 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Mendeteksi mulai gerak (Speed &gt; 100) atau berhenti (Speed &lt; 10).</p>
                         </div>
 
+                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ec4899' }}>
+                            <strong style={{ color: '#ec4899' }}>Object in ROI (Deteksi Objek)</strong>
+                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Mendeteksi keberadaan objek tertentu (Helm, Kotak, dll) di dalam zona ROI.</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Fitur Baru:</em> Klik ikon pensil (✎) untuk memasukkan <strong>Nama Objek Custom</strong> jika tidak ada di list standar.</p>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
+                            <strong style={{ color: '#8b5cf6' }}>Advanced Script (DSL)</strong>
+                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Tulis logika kompleks bebas menggunakan teks script.</p>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Syntax:</em> <code>dist(A, B)</code>, <code>angle(A, B, C)</code>, <code>joint.x</code>, <code>joint.y</code>.</p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> <code>dist(right_wrist, nose) &lt; 0.2 AND right_wrist.y &lt; nose.y</code></p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#a78bfa' }}>✨ Gunakan tombol <strong>"AI Logic Check"</strong> untuk memvalidasi script Anda.</p>
+                        </div>
+
                         <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ef4444' }}>
                             <strong style={{ color: '#ef4444' }}>Object Proximity (Kedekatan Objek)</strong>
                             <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Mengukur jarak antara titik tubuh (tangan) dengan objek yang terdeteksi AI.</p>
@@ -967,19 +1071,145 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         </div>
                     </div>
 
-                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>5. 📚 Contoh Skenario: Deteksi Pengangkatan Aman</h3>
-                    <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
-                        <p style={{ marginBottom: '8px' }}><strong>Tujuan:</strong> Pastikan Jongkok (Squat) sebelum Angkat.</p>
-                        <ul style={{ paddingLeft: '20px', color: '#d1d5db' }}>
-                            <li><strong>Setup:</strong> Mode <em>Body-Centric</em>.</li>
-                            <li><strong>State Jongkok:</strong> <code>Hip Y</code> &gt; <code>Knee Y</code> (Hysteresis 0.5s).</li>
-                            <li><strong>State Angkat:</strong> <code>Wrist Velocity</code> &gt; 0.5.</li>
-                        </ul>
+                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>5. 📚 Contoh Kasus Penggunaan (Use Cases)</h3>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
+                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#eab308' }}>Kasus 1: Menghitung Jumlah Rakitan</strong>
+                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
+                                Menghitung berapa kali operator mengambil part dari box.
+                            </p>
+                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
+                                <li><strong>State 1 (Idle):</strong> Tangan jauh dari box.</li>
+                                <li><strong>Rule (Idle &rarr; Pick):</strong> <code>Hand Proximity</code> ke "Parts Box" &lt; 10cm.</li>
+                                <li><strong>State 2 (Picking):</strong> Tangan berada di dalam area box.</li>
+                                <li><strong>Return Rule:</strong> <code>Hand Proximity</code> &gt; 20cm.</li>
+                            </ul>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#ef4444' }}>Kasus 2: Safety - Tangan di Zona Bahaya</strong>
+                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
+                                Alarm jika tangan masuk area mesin saat mesin aktif.
+                            </p>
+                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
+                                <li><strong>Object:</strong> Gambar ROI di area mesin ("Danger Zone").</li>
+                                <li><strong>Rule:</strong> <code>Object in ROI</code> (Hand in Danger Zone).</li>
+                                <li><strong>Action:</strong> Trigger Audio Alert / Stop Signal.</li>
+                            </ul>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#10b981' }}>Kasus 3: Ergonomi - Kerja di Atas Kepala</strong>
+                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
+                                Mendeteksi postur kerja tidak ergonomis (Overhead Work).
+                            </p>
+                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
+                                <li><strong>Logic:</strong> Membandingkan Wrist Y dengan Nose Y.</li>
+                                <li><strong>Script (DSL):</strong> <code>right_wrist.y &lt; nose.y</code> (Ingat: Y=0 di atas).</li>
+                                <li><strong>Output:</strong> Catat durasi postur buruk.</li>
+                            </ul>
+                        </div>
+
+                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#8b5cf6' }}>Kasus 4: Dua Tangan Bersamaan (Simultaneous)</strong>
+                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
+                                Memastikan operator mengangkat beban dengan dua tangan.
+                            </p>
+                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
+                                <li><strong>Script (DSL):</strong> <code>dist(left_wrist, object) &lt; 0.1 AND dist(right_wrist, object) &lt; 0.1</code></li>
+                                <li><strong>Benefit:</strong> Mencegah cedera punggung akibat angkat beban tidak seimbang.</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     );
+
+    // KEYBOARD SHORTCUTS
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                if (canUndoModel) undoModel();
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+                e.preventDefault();
+                if (canRedoModel) redoModel();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [canUndoModel, undoModel, canRedoModel, redoModel]);
+
+    // DUPLICATE STATE
+    const handleDuplicateState = (stateId) => {
+        const originalState = currentModel.states.find(s => s.id === stateId);
+        if (!originalState) return;
+
+        const newState = {
+            ...originalState,
+            id: `s_${Date.now()}`,
+            name: `${originalState.name} (Copy)`
+        };
+
+        const updatedStates = [...currentModel.states, newState];
+        setCurrentModel({ ...currentModel, states: updatedStates });
+        alert(`Duplicated state: ${newState.name}`);
+    };
+
+    // --- PORTABILITY & TEMPLATES ---
+
+    const handleExportModel = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentModel, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", `model_${model.id}_${Date.now()}.json`);
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    };
+
+    const handleImportModel = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const jsonObj = JSON.parse(event.target.result);
+                // Simple validation
+                if (!jsonObj.states || !jsonObj.transitions) {
+                    alert("Invalid model file format.");
+                    return;
+                }
+                setCurrentModel({ ...jsonObj, id: model.id }); // Keep original ID to avoid db mismatch
+                alert("Model imported successfully!");
+            } catch (err) {
+                console.error(err);
+                alert("Error parsing JSON file");
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const handleLoadTemplate = (templateId) => {
+        const template = MODEL_TEMPLATES.find(t => t.id === templateId);
+        if (!template) return;
+
+        if (confirm(`Load "${template.name}"? This will REPLACE your current states.`)) {
+            setCurrentModel({
+                ...currentModel,
+                states: template.states,
+                transitions: template.transitions
+            });
+            setShowTemplateModal(false);
+        }
+    };
+
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const fileImportRef = useRef(null);
 
     const styles = {
         container: {
@@ -1265,6 +1495,24 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     />
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginRight: '16px', borderRight: '1px solid #4b5563', paddingRight: '16px' }}>
+                        <button
+                            onClick={undoModel}
+                            disabled={!canUndoModel}
+                            style={{ ...styles.iconButton, opacity: canUndoModel ? 1 : 0.5, cursor: canUndoModel ? 'pointer' : 'default' }}
+                            title="Undo (Ctrl+Z)"
+                        >
+                            <Undo size={18} color="#e5e7eb" />
+                        </button>
+                        <button
+                            onClick={redoModel}
+                            disabled={!canRedoModel}
+                            style={{ ...styles.iconButton, opacity: canRedoModel ? 1 : 0.5, cursor: canRedoModel ? 'pointer' : 'default' }}
+                            title="Redo (Ctrl+Y)"
+                        >
+                            <Redo size={18} color="#e5e7eb" />
+                        </button>
+                    </div>
                     <button
                         style={{ ...styles.saveButton, background: '#4b5563' }}
                         onClick={() => setShowHelp(true)}
@@ -1534,6 +1782,10 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                         {/* RESULT DISPLAY */}
                                         {measurementResult && (
                                             <div style={{
+                                                position: 'absolute',
+                                                bottom: '80px',
+                                                left: '20px',
+                                                zIndex: 50,
                                                 backgroundColor: 'rgba(31, 41, 55, 0.4)',
                                                 borderRadius: '12px',
                                                 padding: '12px 16px',
@@ -1623,274 +1875,278 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 </div>
                             </div>
                         )}
-
-                        {/* Project Picker Modal */}
-                        {showProjectPicker && (
-                            <div style={{
-                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                                backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 2000,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                            }}>
-                                <div style={{
-                                    backgroundColor: '#1f2937', padding: '24px', borderRadius: '12px',
-                                    width: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                                        <h3 style={{ color: 'white', margin: 0 }}>Select Project Video</h3>
-                                        <button onClick={() => setShowProjectPicker(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
-                                    </div>
-                                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {availableProjects.length === 0 ? (
-                                            <p style={{ color: '#9ca3af', textAlign: 'center' }}>No projects found.</p>
-                                        ) : (
-                                            availableProjects.map(p => (
-                                                <div
-                                                    key={p.id}
-                                                    onClick={() => handleSelectProject(p)}
-                                                    style={{
-                                                        padding: '12px', borderRadius: '8px', backgroundColor: '#374151',
-                                                        cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                                                    }}
-                                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
-                                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#374151'}
-                                                >
-                                                    <div>
-                                                        <div style={{ color: 'white', fontWeight: 'bold' }}>{p.projectName}</div>
-                                                        <div style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{new Date(p.createdAt).toLocaleDateString()}</div>
-                                                    </div>
-                                                    <div style={{ color: '#60a5fa' }}>Select</div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* IP Camera Recording Modal */}
-                        {showIPCameraModal && (
-                            <div style={{
-                                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                                backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                            }}>
-                                <div style={{
-                                    backgroundColor: '#1f2937', padding: '24px', borderRadius: '12px',
-                                    width: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-                                    border: '1px solid #374151'
-                                }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                                        <h3 style={{ color: 'white', margin: 0 }}>📹 Record from IP Camera</h3>
-                                        <button
-                                            onClick={() => {
-                                                setShowIPCameraModal(false);
-                                                setIpCameraURL('');
-                                                setIsRecording(false);
-                                            }}
-                                            style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.2rem' }}
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-
-                                    {/* URL Input */}
-                                    <div style={{ marginBottom: '16px' }}>
-                                        <label style={{ display: 'block', color: '#9ca3af', marginBottom: '8px', fontSize: '0.9rem' }}>
-                                            Camera Stream URL (MJPEG/HTTP)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={ipCameraURL}
-                                            onChange={(e) => setIpCameraURL(e.target.value)}
-                                            placeholder="http://192.168.1.100/mjpeg"
-                                            style={{
-                                                width: '100%', padding: '10px', backgroundColor: '#111827',
-                                                border: '1px solid #374151', borderRadius: '6px', color: 'white',
-                                                outline: 'none'
-                                            }}
-                                            disabled={isRecording}
-                                        />
-                                    </div>
-
-                                    {/* Live Preview */}
-                                    <div style={{
-                                        backgroundColor: '#000', borderRadius: '8px', marginBottom: '16px',
-                                        height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        border: '1px solid #374151', position: 'relative', overflow: 'hidden'
-                                    }}>
-                                        {ipCameraURL ? (
-                                            <>
-                                                <img
-                                                    ref={ipCameraRef}
-                                                    src={ipCameraURL}
-                                                    alt="IP Camera Feed"
-                                                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                                                    crossOrigin="anonymous"
-                                                />
-                                                {isRecording && (
-                                                    <div style={{
-                                                        position: 'absolute', top: '10px', left: '10px',
-                                                        backgroundColor: 'rgba(239, 68, 68, 0.9)', padding: '8px 12px',
-                                                        borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px',
-                                                        color: 'white', fontWeight: 'bold'
-                                                    }}>
-                                                        <div style={{
-                                                            width: '12px', height: '12px', borderRadius: '50%',
-                                                            backgroundColor: 'white', animation: 'pulse 1s infinite'
-                                                        }} />
-                                                        REC {recordingDuration}s / 30s
-                                                    </div>
-                                                )}
-                                            </>
-                                        ) : (
-                                            <div style={{ color: '#6b7280', textAlign: 'center' }}>
-                                                <Camera size={48} style={{ marginBottom: '8px', opacity: 0.5 }} />
-                                                <p>Enter camera URL to preview</p>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Recording Controls */}
-                                    <div style={{ display: 'flex', gap: '10px' }}>
-                                        {!isRecording ? (
-                                            <button
-                                                onClick={handleStartRecording}
-                                                disabled={!ipCameraURL}
-                                                style={{
-                                                    flex: 1, padding: '12px', backgroundColor: ipCameraURL ? '#10b981' : '#374151',
-                                                    color: 'white', border: 'none', borderRadius: '8px',
-                                                    fontWeight: 'bold', cursor: ipCameraURL ? 'pointer' : 'not-allowed',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                                                }}
-                                            >
-                                                <Play size={18} /> Start Recording
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={handleStopRecording}
-                                                style={{
-                                                    flex: 1, padding: '12px', backgroundColor: '#ef4444',
-                                                    color: 'white', border: 'none', borderRadius: '8px',
-                                                    fontWeight: 'bold', cursor: 'pointer',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                                                }}
-                                            >
-                                                <Square size={18} /> Stop Recording
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <p style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: '12px', marginBottom: 0 }}>
-                                        💡 Tip: Recording will automatically stop after 30 seconds. Make sure the camera URL is accessible.
-                                    </p>
-                                </div>
-                            </div>
-                        )}
                     </div>
 
-                    {/* VISUAL TIMELINE (Test Mode) */}
-                    {videoSrc && activeTab === 'test' && (
+                    {/* Project Picker Modal */}
+                    {showProjectPicker && (
                         <div style={{
-                            height: '50px',
-                            backgroundColor: '#111827',
-                            borderTop: '1px solid #374151',
-                            padding: '5px 10px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'center'
+                            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 2000,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '0.7rem', color: '#9ca3af' }}>
-                                <span>00:00</span>
-                                <span>Timeline Visualization</span>
-                                {videoRef.current && <span>{videoRef.current.duration?.toFixed(2)}s</span>}
-                            </div>
                             <div style={{
-                                height: '24px',
-                                backgroundColor: '#374151',
-                                position: 'relative',
-                                borderRadius: '4px',
-                                overflow: 'hidden',
-                                cursor: 'pointer'
-                            }}
-                                onClick={(e) => {
-                                    // Global seek on bar click
-                                    if (!videoRef.current) return;
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const x = e.clientX - rect.left;
-                                    const pct = x / rect.width;
-                                    videoRef.current.currentTime = pct * videoRef.current.duration;
-                                }}
-                            >
-                                {timelineData.map((event, idx) => {
-                                    const duration = videoRef.current ? videoRef.current.duration : 1;
-                                    if (!duration) return null;
-
-                                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-                                    const colorIdx = (typeof event.state === 'string' ? event.state.length : 0) % colors.length;
-                                    // Simple deterministic color
-
-                                    const left = (event.startTime / duration) * 100;
-                                    let width = ((event.endTime - event.startTime) / duration) * 100;
-                                    if (width < 0.5) width = 0.5; // Min width visibility
-
-                                    return (
-                                        <div
-                                            key={idx}
-                                            style={{
-                                                position: 'absolute',
-                                                left: `${left}%`,
-                                                width: `${width}%`,
-                                                height: '100%',
-                                                backgroundColor: colors[colorIdx],
-                                                opacity: event.isActive ? 1 : 0.8,
-                                                borderRight: '1px solid rgba(0,0,0,0.2)',
-                                                fontSize: '0.6rem',
-                                                color: 'white',
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                paddingLeft: '2px',
-                                                lineHeight: '24px'
-                                            }}
-                                            title={`${event.state}: ${event.startTime.toFixed(2)}s - ${event.endTime.toFixed(2)}s`}
-                                        >
-                                            {width > 5 && event.state}
-                                        </div>
-                                    );
-                                })}
-                                {/* Playhead Indicator */}
-                                <div style={{
-                                    position: 'absolute',
-                                    left: `${(videoRef.current?.currentTime / (videoRef.current?.duration || 1)) * 100}%`,
-                                    top: 0, bottom: 0, width: '2px', backgroundColor: 'white', zIndex: 10,
-                                    boxShadow: '0 0 4px rgba(0,0,0,0.5)'
-                                }} />
+                                backgroundColor: '#1f2937', padding: '24px', borderRadius: '12px',
+                                width: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                    <h3 style={{ color: 'white', margin: 0 }}>Select Project Video</h3>
+                                    <button onClick={() => setShowProjectPicker(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
+                                </div>
+                                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {availableProjects.length === 0 ? (
+                                        <p style={{ color: '#9ca3af', textAlign: 'center' }}>No projects found.</p>
+                                    ) : (
+                                        availableProjects.map(p => (
+                                            <div
+                                                key={p.id}
+                                                onClick={() => handleSelectProject(p)}
+                                                style={{
+                                                    padding: '12px', borderRadius: '8px', backgroundColor: '#374151',
+                                                    cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                                }}
+                                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#4b5563'}
+                                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#374151'}
+                                            >
+                                                <div>
+                                                    <div style={{ color: 'white', fontWeight: 'bold' }}>{p.projectName}</div>
+                                                    <div style={{ color: '#9ca3af', fontSize: '0.8rem' }}>{new Date(p.createdAt).toLocaleDateString()}</div>
+                                                </div>
+                                                <div style={{ color: '#60a5fa' }}>Select</div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    )}    <input
-                        type="file"
-                        ref={fileInputRef}
-                        style={{ display: 'none' }}
-                        accept="video/*"
-                        onChange={handleFileUpload}
-                    />
+                    )}
+
+                    {/* IP Camera Recording Modal */}
+                    {showIPCameraModal && (
+                        <div style={{
+                            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                            <div style={{
+                                backgroundColor: '#1f2937', padding: '24px', borderRadius: '12px',
+                                width: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+                                border: '1px solid #374151'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                    <h3 style={{ color: 'white', margin: 0 }}>📹 Record from IP Camera</h3>
+                                    <button
+                                        onClick={() => {
+                                            setShowIPCameraModal(false);
+                                            setIpCameraURL('');
+                                            setIsRecording(false);
+                                        }}
+                                        style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '1.2rem' }}
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+
+                                {/* URL Input */}
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ display: 'block', color: '#9ca3af', marginBottom: '8px', fontSize: '0.9rem' }}>
+                                        Camera Stream URL (MJPEG/HTTP)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={ipCameraURL}
+                                        onChange={(e) => setIpCameraURL(e.target.value)}
+                                        placeholder="http://192.168.1.100/mjpeg"
+                                        style={{
+                                            width: '100%', padding: '10px', backgroundColor: '#111827',
+                                            border: '1px solid #374151', borderRadius: '6px', color: 'white',
+                                            outline: 'none'
+                                        }}
+                                        disabled={isRecording}
+                                    />
+                                </div>
+
+                                {/* Live Preview */}
+                                <div style={{
+                                    backgroundColor: '#000', borderRadius: '8px', marginBottom: '16px',
+                                    height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    border: '1px solid #374151', position: 'relative', overflow: 'hidden'
+                                }}>
+                                    {ipCameraURL ? (
+                                        <>
+                                            <img
+                                                ref={ipCameraRef}
+                                                src={ipCameraURL}
+                                                alt="IP Camera Feed"
+                                                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                                                crossOrigin="anonymous"
+                                            />
+                                            {isRecording && (
+                                                <div style={{
+                                                    position: 'absolute', top: '10px', left: '10px',
+                                                    backgroundColor: 'rgba(239, 68, 68, 0.9)', padding: '8px 12px',
+                                                    borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px',
+                                                    color: 'white', fontWeight: 'bold'
+                                                }}>
+                                                    <div style={{
+                                                        width: '12px', height: '12px', borderRadius: '50%',
+                                                        backgroundColor: 'white', animation: 'pulse 1s infinite'
+                                                    }} />
+                                                    REC {recordingDuration}s / 30s
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div style={{ color: '#6b7280', textAlign: 'center' }}>
+                                            <Camera size={48} style={{ marginBottom: '8px', opacity: 0.5 }} />
+                                            <p>Enter camera URL to preview</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Recording Controls */}
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    {!isRecording ? (
+                                        <button
+                                            onClick={handleStartRecording}
+                                            disabled={!ipCameraURL}
+                                            style={{
+                                                flex: 1, padding: '12px', backgroundColor: ipCameraURL ? '#10b981' : '#374151',
+                                                color: 'white', border: 'none', borderRadius: '8px',
+                                                fontWeight: 'bold', cursor: ipCameraURL ? 'pointer' : 'not-allowed',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <Play size={18} /> Start Recording
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleStopRecording}
+                                            style={{
+                                                flex: 1, padding: '12px', backgroundColor: '#ef4444',
+                                                color: 'white', border: 'none', borderRadius: '8px',
+                                                fontWeight: 'bold', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <Square size={18} /> Stop Recording
+                                        </button>
+                                    )}
+                                </div>
+
+                                <p style={{ color: '#6b7280', fontSize: '0.8rem', marginTop: '12px', marginBottom: 0 }}>
+                                    💡 Tip: Recording will automatically stop after 30 seconds. Make sure the camera URL is accessible.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Resizer */}
-                {!isMaximized && (
-                    <div
-                        style={styles.resizer}
-                        onMouseDown={(e) => {
-                            e.preventDefault();
-                            setIsResizing(true);
+                {/* VISUAL TIMELINE (Test Mode) */}
+                {videoSrc && activeTab === 'test' && (
+                    <div style={{
+                        height: '50px',
+                        backgroundColor: '#111827',
+                        borderTop: '1px solid #374151',
+                        padding: '5px 10px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '0.7rem', color: '#9ca3af' }}>
+                            <span>00:00</span>
+                            <span>Timeline Visualization</span>
+                            {videoRef.current && <span>{videoRef.current.duration?.toFixed(2)}s</span>}
+                        </div>
+                        <div style={{
+                            height: '24px',
+                            backgroundColor: '#374151',
+                            position: 'relative',
+                            borderRadius: '4px',
+                            overflow: 'hidden',
+                            cursor: 'pointer'
                         }}
-                    >
-                        <div style={styles.resizerHandle}>
-                            <div style={styles.resizerBar} />
-                            <div style={styles.resizerBar} />
-                            <div style={styles.resizerBar} />
+                            onClick={(e) => {
+                                // Global seek on bar click
+                                if (!videoRef.current) return;
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const x = e.clientX - rect.left;
+                                const pct = x / rect.width;
+                                videoRef.current.currentTime = pct * videoRef.current.duration;
+                            }}
+                        >
+                            {timelineData.map((event, idx) => {
+                                const duration = videoRef.current ? videoRef.current.duration : 1;
+                                if (!duration) return null;
+
+                                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                                const colorIdx = (typeof event.state === 'string' ? event.state.length : 0) % colors.length;
+                                // Simple deterministic color
+
+                                const left = (event.startTime / duration) * 100;
+                                let width = ((event.endTime - event.startTime) / duration) * 100;
+                                if (width < 0.5) width = 0.5; // Min width visibility
+
+                                return (
+                                    <div
+                                        key={idx}
+                                        style={{
+                                            position: 'absolute',
+                                            left: `${left}%`,
+                                            width: `${width}%`,
+                                            height: '100%',
+                                            backgroundColor: colors[colorIdx],
+                                            opacity: event.isActive ? 1 : 0.8,
+                                            borderRight: '1px solid rgba(0,0,0,0.2)',
+                                            fontSize: '0.6rem',
+                                            color: 'white',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            paddingLeft: '2px',
+                                            lineHeight: '24px'
+                                        }}
+                                        title={`${event.state}: ${event.startTime.toFixed(2)}s - ${event.endTime.toFixed(2)}s`}
+                                    >
+                                        {width > 5 && event.state}
+                                    </div>
+                                );
+                            })}
+                            {/* Playhead Indicator */}
+                            <div style={{
+                                position: 'absolute',
+                                left: `${(videoRef.current?.currentTime / (videoRef.current?.duration || 1)) * 100}%`,
+                                top: 0, bottom: 0, width: '2px', backgroundColor: 'white', zIndex: 10,
+                                boxShadow: '0 0 4px rgba(0,0,0,0.5)'
+                            }} />
                         </div>
                     </div>
                 )}
+
+                <input
+                    type="file"
+                    ref={fileInputRef}
+                    style={{ display: 'none' }}
+                    accept="video/*"
+                    onChange={handleFileUpload}
+                />
+
+                {/* Resizer */}
+                {
+                    !isMaximized && (
+                        <div
+                            style={styles.resizer}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                setIsResizing(true);
+                            }}
+                        >
+                            <div style={styles.resizerHandle}>
+                                <div style={styles.resizerBar} />
+                                <div style={styles.resizerBar} />
+                                <div style={styles.resizerBar} />
+                            </div>
+                        </div>
+                    )
+                }
 
                 {/* Right Panel: Editor */}
                 <div style={styles.rightPanel}>
@@ -1944,30 +2200,95 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                     </div>
                                 </div>
 
-                                <h3 style={{ marginBottom: '10px' }}>Test Console</h3>
-                                <div style={{
-                                    flex: 1,
-                                    backgroundColor: '#000',
-                                    borderRadius: '8px',
-                                    padding: '12px',
-                                    overflowY: 'auto',
-                                    fontFamily: 'monospace',
-                                    fontSize: '0.85rem'
-                                }}>
-                                    {testLogs.length === 0 && <span style={{ color: '#6b7280' }}>System ready. Press Play on video to start simulation.</span>}
-                                    {testLogs.map((log, i) => (
-                                        <div key={i} style={{
-                                            marginBottom: '4px',
-                                            color: log.type === 'transition' ? '#10b981' : '#d1d5db',
-                                            borderBottom: '1px solid #1f2937',
-                                            paddingBottom: '2px'
-                                        }}>
-                                            <span style={{ color: '#6b7280' }}>[{log.timestamp}]</span> {log.message}
+                                <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: 0 }}>
+                                    {/* Console Logs */}
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1rem' }}>Live Console</h3>
+                                            <button
+                                                onClick={() => setTestLogs([])}
+                                                style={{ background: 'transparent', border: '1px solid #4b5563', color: '#9ca3af', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', cursor: 'pointer' }}
+                                            >
+                                                Clear
+                                            </button>
                                         </div>
-                                    ))}
+                                        <div style={{
+                                            flex: 1,
+                                            backgroundColor: '#000',
+                                            borderRadius: '8px',
+                                            padding: '12px',
+                                            overflowY: 'auto',
+                                            fontFamily: 'monospace',
+                                            fontSize: '0.85rem',
+                                            border: '1px solid #374151'
+                                        }}>
+                                            {testLogs.length === 0 && <span style={{ color: '#6b7280' }}>System ready. Press Play on video to start simulation.</span>}
+                                            {testLogs.map((log, i) => (
+                                                <div key={i} style={{
+                                                    color: log.type === 'transition' ? '#10b981' : (log.type === 'Anomaly' ? '#ef4444' : '#d1d5db'),
+                                                    backgroundColor: log.type === 'Anomaly' ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    borderLeft: log.type === 'Anomaly' ? '4px solid #ef4444' : 'none',
+                                                    marginBottom: '4px'
+                                                }}>
+                                                    <span style={{ color: '#6b7280' }}>[{log.timestamp}]</span> {log.message}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Cycle Statistics Panel */}
+                                    <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        <h3 style={{ margin: 0, fontSize: '1rem' }}>Cycle Analytics</h3>
+
+                                        {!cycleStats ? (
+                                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #374151', borderRadius: '8px', color: '#6b7280', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>
+                                                Complete one cycle to see analytics
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                    <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>TOTAL CYCLES</div>
+                                                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{cycleStats.totalCycles}</div>
+                                                    </div>
+                                                    <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>VA RATIO</div>
+                                                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>{cycleStats.vaRatio}%</div>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ backgroundColor: '#1f2937', padding: '16px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '8px' }}>AVERAGE STATISTICS</div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                        <span style={{ fontSize: '0.85rem' }}>Cycle Time (TC)</span>
+                                                        <span style={{ fontWeight: 'bold' }}>{cycleStats.avgCycleTime}s</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                        <span style={{ fontSize: '0.85rem' }}>VA Time</span>
+                                                        <span style={{ fontWeight: 'bold', color: '#10b981' }}>{cycleStats.avgVaTime}s</span>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '8px' }}>CYCLE HISTORY</div>
+                                                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }} className="custom-scrollbar">
+                                                        {cycleStats.history.slice().reverse().map((c, idx) => (
+                                                            <div key={idx} style={{ padding: '8px', backgroundColor: '#111827', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid #2d3748', display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span style={{ color: '#9ca3af' }}>Cycle #{cycleStats.totalCycles - idx}</span>
+                                                                <span>{c.duration.toFixed(2)}s <span style={{ color: '#10b981', marginLeft: '4px' }}>({((c.vaDuration / c.duration) * 100).toFixed(0)}% VA)</span></span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         )}
+
                         {activeTab === 'rules' && (
                             <RuleEditor
                                 states={currentModel.states}
@@ -1976,6 +2297,8 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 onDeleteTransition={handleDeleteTransition}
                                 onUpdateTransition={handleUpdateTransition}
                                 activePose={activePose}
+                                onAiSuggest={handleAiSuggestRule}
+                                onAiValidateScript={handleAiValidateScript}
                             />
                         )}
 
@@ -2009,6 +2332,22 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                                 onChange={(e) => handleUpdateState(selectedStateId, 'minDuration', parseFloat(e.target.value))}
                                                 style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #374151', color: 'white', borderRadius: '4px' }}
                                             />
+                                        </div>
+
+                                        {/* Value Added Toggle */}
+                                        <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!currentModel.states.find(s => s.id === selectedStateId)?.isVA}
+                                                    onChange={(e) => handleUpdateState(selectedStateId, 'isVA', e.target.checked)}
+                                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                                />
+                                                <div>
+                                                    <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem' }}>Value Added (VA)</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Mark this state as essential to the process (Green in reports)</div>
+                                                </div>
+                                            </label>
                                         </div>
 
                                         {/* ROI Config */}
@@ -2091,12 +2430,22 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                                         )}
                                                     </div>
                                                     <div>
-                                                        <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem' }}>{state.name}</div>
+                                                        <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            {state.name}
+                                                            {state.isVA && <span style={{ fontSize: '0.65rem', backgroundColor: '#064e3b', color: '#10b981', padding: '1px 6px', borderRadius: '4px', border: '1px solid #065f46' }}>VA</span>}
+                                                        </div>
                                                         <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Step {idx + 1}</div>
                                                     </div>
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
                                                     {state.referencePose && <Check size={16} color="#10b981" />}
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleDuplicateState(state.id); }}
+                                                        style={{ background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '4px' }}
+                                                        title="Duplicate State"
+                                                    >
+                                                        <Copy size={16} />
+                                                    </button>
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleDeleteState(state.id); }}
                                                         style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
@@ -2164,6 +2513,56 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                         <strong>Body-Centric</strong> is recommended for precision. It remains accurate even if the operator moves around or the camera shifts.
                                         (0,0) is the center of the hips.
                                     </p>
+                                </div>
+
+                                {/* PORTABILITY SECTION */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Database size={18} color="#60a5fa" /> Portability & Templates
+                                    </h4>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                        {/* Export */}
+                                        <button
+                                            onClick={handleExportModel}
+                                            style={{
+                                                padding: '12px', background: '#374151', border: '1px solid #4b5563', borderRadius: '8px',
+                                                color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <Download size={16} /> Export JSON
+                                        </button>
+
+                                        {/* Import */}
+                                        <button
+                                            onClick={() => fileImportRef.current.click()}
+                                            style={{
+                                                padding: '12px', background: '#374151', border: '1px solid #4b5563', borderRadius: '8px',
+                                                color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <Upload size={16} /> Import JSON
+                                        </button>
+                                        <input
+                                            type="file"
+                                            ref={fileImportRef}
+                                            style={{ display: 'none' }}
+                                            accept="application/json"
+                                            onChange={handleImportModel}
+                                        />
+
+                                        {/* Load Template */}
+                                        <button
+                                            onClick={() => setShowTemplateModal(true)}
+                                            style={{
+                                                gridColumn: 'span 2',
+                                                padding: '12px', background: 'rgba(96, 165, 250, 0.1)', border: '1px dashed #60a5fa', borderRadius: '8px',
+                                                color: '#60a5fa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <FileJson size={16} /> Load from Template Library
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -2250,6 +2649,53 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             </div>
                         )}
                     </div>
+
+                    {/* Template Selection Modal */}
+                    {showTemplateModal && (
+                        <div style={{
+                            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 2000,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                            <div style={{
+                                backgroundColor: '#1f2937', padding: '24px', borderRadius: '12px',
+                                width: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+                                border: '1px solid #374151'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                    <h3 style={{ color: 'white', margin: 0 }}>Select Motion Template</h3>
+                                    <button onClick={() => setShowTemplateModal(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
+                                </div>
+
+                                <div style={{ overflowY: 'auto', display: 'grid', gap: '12px' }}>
+                                    {MODEL_TEMPLATES.map(tpl => (
+                                        <div
+                                            key={tpl.id}
+                                            onClick={() => handleLoadTemplate(tpl.id)}
+                                            style={{
+                                                padding: '16px',
+                                                backgroundColor: '#374151',
+                                                borderRadius: '8px',
+                                                cursor: 'pointer',
+                                                border: '1px solid transparent',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseOver={(e) => { e.currentTarget.style.borderColor = '#60a5fa'; e.currentTarget.style.backgroundColor = '#4b5563'; }}
+                                            onMouseOut={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.backgroundColor = '#374151'; }}
+                                        >
+                                            <div style={{ fontWeight: 'bold', color: 'white', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                                                {tpl.name}
+                                                <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#9ca3af', backgroundColor: '#1f2937', padding: '2px 8px', borderRadius: '4px' }}>
+                                                    {tpl.states.length} Steps
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', color: '#d1d5db' }}>{tpl.description}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

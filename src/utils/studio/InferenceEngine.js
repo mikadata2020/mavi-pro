@@ -6,6 +6,7 @@
 import AngleCalculator from '../angleCalculator';
 import { getKeypoint } from '../poseDetector';
 import PoseNormalizer from './PoseNormalizer';
+import RuleScriptParser from './RuleScriptParser';
 
 class InferenceEngine {
     constructor() {
@@ -48,45 +49,59 @@ class InferenceEngine {
         const { poses = [], objects = [], hands = [], timestamp } = data;
         this.frameCount++;
 
-        const primaryPose = poses.length > 0 ? poses[0] : null;
-
-        if (primaryPose) {
-            let trackId = 1;
+        // --- MULTI-PERSON TRACKING LOGIC ---
+        poses.forEach((pose, index) => {
+            let trackId = pose.id || pose.trackId || (index + 1);
 
             if (!this.activeTracks.has(trackId)) {
                 this.activeTracks.set(trackId, {
                     id: trackId,
                     currentState: this.model.statesList[0].id,
                     stateEnterTime: timestamp,
-                    lastUpdate: timestamp
+                    lastUpdate: timestamp,
+                    transitionCandidates: {}
                 });
-                this.addLog(trackId, timestamp, "System", `Operator detected. Starting in ${this.model.statesList[0].name}`);
+                this.addLog(trackId, timestamp, "System", `Operator ${trackId} detected. Starting in ${this.model.statesList[0].name}`);
             }
 
             const track = this.activeTracks.get(trackId);
-            const dt = (timestamp - track.lastUpdate) / 1000;
+            const dt = (timestamp - track.lastUpdate);
 
-            if (dt > 0 && dt < 1.0 && track.prevPose) {
-                track.velocities = this.calculateVelocities(track.prevPose, primaryPose, dt);
+            if (dt > 0 && track.prevPose) {
+                track.velocities = this.calculateVelocities(track.prevPose, pose, dt);
             } else {
                 track.velocities = {};
             }
 
             track.lastUpdate = timestamp;
-            track.prevPose = primaryPose;
+            track.prevPose = pose;
 
-            this.updateFSM(track, primaryPose, objects, hands, timestamp);
+            this.updateFSM(track, pose, objects, hands, timestamp, this.activeTracks);
+        });
+
+        // Cleanup stale tracks (not seen for > 2 seconds)
+        for (const [id, track] of this.activeTracks.entries()) {
+            if (timestamp - track.lastUpdate > 2.0) {
+                this.activeTracks.delete(id);
+                this.addLog(id, timestamp, "System", `Operator ${id} lost`);
+            }
         }
 
         return {
             tracks: Array.from(this.activeTracks.values()).map(t => ({
                 id: t.id,
                 state: this.getStateName(t.currentState),
-                duration: ((timestamp - t.stateEnterTime) / 1000).toFixed(1) + 's'
+                duration: ((timestamp - t.stateEnterTime)).toFixed(1) + 's',
+                isVA: this.isStateVA(t.currentState)
             })),
             logs: this.logs,
             timelineEvents: this.timelineEvents
         };
+    }
+
+    isStateVA(stateId) {
+        const state = this.model.statesList.find(s => s.id === stateId);
+        return state ? !!state.isVA : false;
     }
 
     updateFSM(track, pose, objects, hands, timestamp) {
@@ -106,7 +121,7 @@ class InferenceEngine {
 
         if (complianceMet && (currentState.roi || currentState.referencePose)) {
             if (!track.matchStartTime) track.matchStartTime = timestamp;
-            const duration = (timestamp - track.matchStartTime) / 1000;
+            const duration = (timestamp - track.matchStartTime);
             const reqDuration = currentState.minDuration || 0.5;
 
             if (duration >= reqDuration) {
@@ -117,8 +132,8 @@ class InferenceEngine {
                     this.transitionTo(track, nextState.id, timestamp, "Sequence Step Complete");
                     return;
                 } else {
-                    if (track.currentState !== 's_complete') {
-                        this.addLog(track.id, timestamp, "Cycle Complete", `Cycle finished in ${((timestamp - track.stateEnterTime) / 1000).toFixed(1)}s`);
+                    if (track.currentState !== 'complete' && track.currentState !== 's_complete') {
+                        this.addLog(track.id, timestamp, "Cycle Complete", `Cycle finished in ${((timestamp - track.stateEnterTime)).toFixed(1)}s`);
                     }
                 }
             }
@@ -131,8 +146,8 @@ class InferenceEngine {
             if (!track.transitionCandidates) track.transitionCandidates = {};
 
             for (const transition of possibleTransitions) {
-                if (this.evaluateCondition(transition.condition, pose, objects, hands, track)) {
-                    const holdTime = (transition.condition.holdTime || 0) * 1000;
+                if (this.evaluateCondition(transition.condition, pose, objects, hands, track, allTracks)) {
+                    const holdTime = (transition.condition.holdTime || 0);
 
                     if (holdTime > 0) {
                         if (!track.transitionCandidates[transition.id]) {
@@ -140,7 +155,7 @@ class InferenceEngine {
                         } else {
                             const elapsedTime = timestamp - track.transitionCandidates[transition.id];
                             if (elapsedTime >= holdTime) {
-                                this.transitionTo(track, transition.to, timestamp, `Rule Triggered (Held ${(elapsedTime / 1000).toFixed(1)}s)`);
+                                this.transitionTo(track, transition.to, timestamp, `Rule Triggered (Held ${elapsedTime.toFixed(1)}s)`);
                                 track.transitionCandidates = {};
                                 break;
                             }
@@ -160,21 +175,97 @@ class InferenceEngine {
     }
 
     transitionTo(track, newStateId, timestamp, reason) {
-        const fromState = this.getStateName(track.currentState);
+        const fromStateId = track.currentState;
+        const fromState = this.getStateName(fromStateId);
         const toState = this.getStateName(newStateId);
 
-        this.timelineEvents.push({
+        // SEQUENCE ANOMALY CHECK
+        const currentIndex = this.model.statesList.findIndex(s => s.id === fromStateId);
+        const expectedNextIndex = currentIndex + 1;
+        const actualNextIndex = this.model.statesList.findIndex(s => s.id === newStateId);
+
+        if (actualNextIndex > expectedNextIndex) {
+            this.addLog(track.id, timestamp, "Anomaly", `Sequence Skip: Jumped from ${fromState} to ${toState}`);
+        } else if (actualNextIndex < currentIndex && actualNextIndex !== 0) {
+            this.addLog(track.id, timestamp, "Anomaly", `Regression: Reverted from ${fromState} to ${toState}`);
+        }
+
+        const event = {
             trackId: track.id,
-            state: this.getStateName(track.currentState),
+            state: fromState,
+            stateId: fromStateId,
             startTime: track.stateEnterTime,
             endTime: timestamp,
-            duration: timestamp - track.stateEnterTime
-        });
+            duration: timestamp - track.stateEnterTime,
+            isVA: this.isStateVA(fromStateId)
+        };
+        this.timelineEvents.push(event);
 
         this.addLog(track.id, timestamp, "Transition", `${fromState} -> ${toState} (${reason})`);
         track.currentState = newStateId;
         track.stateEnterTime = timestamp;
         track.matchStartTime = null;
+
+        // If transitioning to start state or complete state, trigger cycle analysis
+        if (newStateId === 's_start' || newStateId === 'complete' || newStateId === 's_complete') {
+            const stats = this.getCycleStatistics();
+            if (this.onCycleComplete && stats) {
+                this.onCycleComplete(stats);
+            }
+        }
+    }
+
+    getCycleStatistics() {
+        if (this.timelineEvents.length === 0) return null;
+
+        // Group events into cycles based on sequence
+        const cycles = [];
+        let currentCycle = [];
+
+        // Find state indices to detect restarts
+        const getIndex = (id) => this.model.statesList.findIndex(s => s.id === id);
+
+        this.timelineEvents.forEach((evt, i) => {
+            currentCycle.push(evt);
+
+            const nextEvt = this.timelineEvents[i + 1];
+            const isLast = !nextEvt;
+            const isCycleEnd = evt.stateId === 'complete' || evt.stateId === 's_complete';
+            const isRestart = nextEvt && getIndex(nextEvt.stateId) < getIndex(evt.stateId);
+
+            if (isCycleEnd || isRestart || isLast) {
+                if (currentCycle.length > 0) {
+                    cycles.push([...currentCycle]);
+                    currentCycle = [];
+                }
+            }
+        });
+
+        if (cycles.length === 0) return null;
+
+        const cycleData = cycles.map(c => {
+            const durationMs = c.reduce((acc, e) => acc + e.duration, 0);
+            const vaMs = c.filter(e => e.isVA).reduce((acc, e) => acc + e.duration, 0);
+            return {
+                duration: durationMs / 1000,
+                vaDuration: vaMs / 1000,
+                events: c
+            };
+        });
+
+        const totalTime = cycleData.reduce((acc, c) => acc + c.duration, 0);
+        const totalVaTime = cycleData.reduce((acc, c) => acc + c.vaDuration, 0);
+        const avgCycleTime = totalTime / cycleData.length;
+        const avgVaTime = totalVaTime / cycleData.length;
+
+        return {
+            totalCycles: cycleData.length,
+            avgCycleTime: avgCycleTime.toFixed(2),
+            avgVaTime: avgVaTime.toFixed(2),
+            vaRatio: ((totalVaTime / totalTime) * 100 || 0).toFixed(1),
+            latestCycle: cycleData[cycleData.length - 1],
+            history: cycleData
+        };
     }
 
     checkROI(roi, pose) {
@@ -189,30 +280,110 @@ class InferenceEngine {
         return checkPoint(rightWrist) || checkPoint(leftWrist);
     }
 
-    evaluateCondition(condition, pose, objects, hands, track) {
+    evaluateCondition(condition, pose, objects, hands, track, allTracks) {
         if (!condition || !condition.rules || condition.rules.length === 0) return false;
         const operator = condition.operator || 'AND';
         const evaluateItem = (item) => {
             let result = (item.rules && item.rules.length > 0)
-                ? this.evaluateCondition(item, pose, objects, hands, track)
-                : this.checkRule(item, pose, objects, hands, track);
+                ? this.evaluateCondition(item, pose, objects, hands, track, allTracks)
+                : this.checkRule(item, pose, objects, hands, track, allTracks);
             return item.invert ? !result : result;
         };
 
         return operator === 'OR' ? condition.rules.some(evaluateItem) : condition.rules.every(evaluateItem);
     }
 
-    checkRule(rule, pose, objects, hands, track) {
+    checkRule(rule, pose, objects, hands, track, allTracks) {
         const { type, params } = rule;
+
+        // --- PREDICTION SENSITIVITY ---
+        // If a rule is strict (trustPersistent: false), we check if any relevant keypoint is predicted
+        if (params && params.trustPersistent === false) {
+            const isAnyJointPredicted = (jointNames) => {
+                return jointNames.some(name => {
+                    const kp = getKeypoint(pose.keypoints, name);
+                    return kp && kp.isPredicted;
+                });
+            };
+
+            let involvedJoints = [];
+            if (params.joint) involvedJoints.push(params.joint);
+            if (params.jointA) involvedJoints.push(params.jointA);
+            if (params.jointB) involvedJoints.push(params.jointB);
+            if (params.jointC) involvedJoints.push(params.jointC);
+            if (params.bodyPart) involvedJoints.push(params.bodyPart);
+
+            if (isAnyJointPredicted(involvedJoints)) return false;
+        }
+
         switch (type) {
             case 'POSE_ANGLE': return this.checkPoseAngle(params, pose);
-            case 'POSE_RELATION': return this.checkPoseRelation(params, pose);
+            case 'POSE_RELATION': return this.checkPoseRelation(params, pose, allTracks, track.id);
             case 'POSE_VELOCITY': return this.checkPoseVelocity(params, track);
             case 'POSE_MATCHING': return this.checkPoseMatching(rule, pose);
             case 'HAND_GESTURE': return this.checkHandGesture(params, hands);
             case 'HAND_PROXIMITY': return this.checkHandProximity(params, hands, pose);
+            case 'OBJECT_PROXIMITY': return this.checkObjectProximity(params, objects, pose);
+            case 'OBJECT_IN_ROI': return this.checkObjectInROI(params, objects);
+            case 'OPERATOR_PROXIMITY': return this.checkOperatorProximity(params, pose, allTracks, track.id);
+            case 'ADVANCED_SCRIPT': return RuleScriptParser.evaluate(params.script, { pose, objects, hands, allTracks });
             default: return false;
         }
+    }
+
+    checkOperatorProximity(params, pose, allTracks, currentTrackId) {
+        const { joint, targetTrackId = 'nearest', distance, operator = '<' } = params;
+        if (!pose || !allTracks) return false;
+
+        const myJoint = getKeypoint(pose.keypoints, joint);
+        if (!myJoint) return false;
+
+        let otherTracks = Array.from(allTracks.values()).filter(t => t.id !== currentTrackId);
+        if (otherTracks.length === 0) return false;
+
+        if (targetTrackId !== 'nearest' && targetTrackId !== 'any') {
+            const specificOther = allTracks.get(targetTrackId);
+            if (!specificOther || !specificOther.prevPose) return false;
+            otherTracks = [specificOther];
+        }
+
+        return otherTracks.some(other => {
+            if (!other.prevPose) return false;
+            const otherJoint = getKeypoint(other.prevPose.keypoints, joint);
+            if (!otherJoint) return false;
+
+            const dist = Math.hypot(myJoint.x - otherJoint.x, myJoint.y - otherJoint.y);
+            return operator === '<' ? dist < distance : dist > distance;
+        });
+    }
+
+    checkObjectProximity(params, objects, pose) {
+        const { objectClass, joint, distance, operator = '<' } = params;
+        if (!objects || objects.length === 0 || !pose) return false;
+
+        const targetJoint = getKeypoint(pose.keypoints, joint);
+        if (!targetJoint) return false;
+
+        return objects.some(obj => {
+            if (obj.class !== objectClass) return false;
+            const objX = obj.bbox[0] + obj.bbox[2] / 2;
+            const objY = obj.bbox[1] + obj.bbox[3] / 2;
+            const dist = Math.hypot(objX - targetJoint.x, objY - targetJoint.y);
+            return operator === '<' ? dist < distance : dist > distance;
+        });
+    }
+
+    checkObjectInROI(params, objects) {
+        const { objectClass, roi } = params;
+        if (!objects || objects.length === 0 || !roi) return false;
+
+        return objects.some(obj => {
+            if (obj.class !== objectClass) return false;
+            const objX = obj.bbox[0] + obj.bbox[2] / 2;
+            const objY = obj.bbox[1] + obj.bbox[3] / 2;
+            return objX >= roi.x && objX <= (roi.x + roi.width) &&
+                objY >= roi.y && objY <= (roi.y + roi.height);
+        });
     }
 
     checkPoseVelocity(params, track) {
@@ -241,8 +412,8 @@ class InferenceEngine {
         return vels;
     }
 
-    checkPoseRelation(params, pose) {
-        const { jointA, jointB, component, operator, targetType, value } = params;
+    checkPoseRelation(params, pose, allTracks = null, currentTrackId = null) {
+        const { jointA, jointB, component, operator, targetType, targetTrackId, value } = params;
         let keypointsToUse = (this.model && this.model.coordinateSystem !== 'screen')
             ? PoseNormalizer.normalize(pose.keypoints)
             : pose.keypoints;
@@ -254,7 +425,15 @@ class InferenceEngine {
         let valB = value;
 
         if (targetType === 'POINT' && jointB) {
-            const pB = getKeypoint(keypointsToUse, jointB);
+            let pB;
+            if (targetTrackId && targetTrackId !== 'self' && allTracks) {
+                const otherTrack = allTracks.get(targetTrackId);
+                if (otherTrack && otherTrack.prevPose) {
+                    pB = getKeypoint(otherTrack.prevPose.keypoints, jointB);
+                }
+            } else {
+                pB = getKeypoint(keypointsToUse, jointB);
+            }
             if (!pB) return false;
             valB = pB[component || 'y'];
         }

@@ -121,32 +121,166 @@ const StudioModel = () => {
                         </ul>
 
                         <h4 style={{ color: '#60a5fa', marginBottom: '8px', marginTop: '16px' }}>4. Tipe Rule (Aturan)</h4>
-                        <ul style={{ paddingLeft: '20px', color: '#d1d5db' }}>
-                            <li><strong style={{ color: '#fbbf24' }}>Pose Angle:</strong> Sudut sendi (Contoh: Siku &lt; 90 derajat).</li>
-                            <li><strong style={{ color: '#fbbf24' }}>Pose Relation:</strong> Posisi satu titik banding titik lain/nilai (Contoh: Wrist Y &lt; Shoulder Y).</li>
-                            <li><strong style={{ color: '#fbbf24' }}>Pose Velocity:</strong> Kecepatan gerak sendi (Deteksi gerakan cepat/lambat).</li>
-                            <li><strong style={{ color: '#fbbf24' }}>Object Proximity:</strong> Jarak tangan ke objek (Alat/Part).</li>
-                        </ul>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                            <div style={{ padding: '8px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#60a5fa' }}>Joint Angle</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Sudut sendi (Siku &lt; 90°).</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Cek postur tubuh/ergonomi.</p>
+                            </div>
+                            <div style={{ padding: '8px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#10b981' }}>Pose Relation (XYZ)</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Posisi relatif (Wrist Y &lt; Nose Y).</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Cek posisi tangan vs badan.</p>
+                            </div>
+                            <div style={{ padding: '8px', background: 'rgba(236, 72, 153, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#ec4899' }}>Pose Velocity</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Kecepatan gerak sendi.</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Deteksi diam (tunggu) atau gerakan cepat.</p>
+                            </div>
+                            <div style={{ padding: '8px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#f59e0b' }}>Object Proximity</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Jarak tangan ke objek.</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Deteksi ambil/taruh barang.</p>
+                            </div>
+                            <div style={{ padding: '8px', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#ef4444' }}>Object in ROI</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Objek masuk area.</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Safety zone atau deteksi material masuk.</p>
+                            </div>
+                            <div style={{ padding: '8px', background: 'rgba(14, 165, 233, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#0ea5e9' }}>Operator Proximity</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Jarak operator ke kamera/titik.</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Cek apakah operator di stasiun kerja.</p>
+                            </div>
+                            <div style={{ padding: '8px', background: 'rgba(124, 58, 237, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#7c3aed' }}>Golden Pose Match</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Kemiripan dengan foto referensi.</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Validasi postur kompleks (contoh: SOP).</p>
+                            </div>
+                            <div style={{ padding: '8px', background: 'rgba(139, 92, 246, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#8b5cf6' }}>Advanced Script</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Logika custom (DSL).</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Skenario rumit (Logika AND/OR).</p>
+                            </div>
+                        </div>
                     </div>
-                    <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
-                        <h4 style={{ color: '#60a5fa', marginBottom: '8px' }}>5. 📚 Contoh Skenario: Deteksi Pengangkatan Aman (Safe Lifting)</h4>
-                        <div style={{ background: '#1f2937', padding: '12px', borderRadius: '8px', marginBottom: '16px', fontSize: '0.9rem' }}>
-                            <p style={{ marginBottom: '8px' }}><strong>Tujuan:</strong> Memastikan operator melakukan <em>Squat</em> (jongkok) saat mengambil barang di bawah.</p>
-                            <ul style={{ paddingLeft: '20px', color: '#d1d5db', lineHeight: '1.6' }}>
-                                <li><strong>Setup:</strong> Pilih Mode <strong>Body-Centric</strong> di Settings.</li>
-                                <li><strong>State 1 (Berdiri):</strong> Posisi awal.</li>
-                                <li><strong>State 2 (Jongkok):</strong> Transisi saat <code>Hip Y</code> turun mendekati <code>Knee Y</code>. Gunakan <strong>Hysteresis 0.5s</strong>.</li>
-                                <li><strong>State 3 (Lifting):</strong> Transisi saat <code>Wrist Velocity</code> &gt; 0.5 (Cepat naik).</li>
+
+                    <h4 style={{ color: '#60a5fa', marginBottom: '8px', marginTop: '20px' }}>5. 📚 Contoh Kasus Penggunaan (Use Cases)</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
+                        <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#eab308' }}>Case 1: Hitung Rakitan</strong>
+                            <p style={{ margin: '6px 0', fontSize: '0.8rem', color: '#9ca3af' }}>Hitung cycle saat tangan ambil part.</p>
+                            <ul style={{ paddingLeft: '16px', fontSize: '0.75rem', color: '#d1d5db', margin: 0 }}>
+                                <li><strong>Rule:</strong> <code>Hand Proximity</code> &lt; 10cm ke Box.</li>
                             </ul>
                         </div>
+                        <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#ef4444' }}>Case 2: Safety Zone</strong>
+                            <p style={{ margin: '6px 0', fontSize: '0.8rem', color: '#9ca3af' }}>Alarm jika tangan masuk mesin.</p>
+                            <ul style={{ paddingLeft: '16px', fontSize: '0.75rem', color: '#d1d5db', margin: 0 }}>
+                                <li><strong>Rule:</strong> <code>Object in ROI</code> (Hand in Danger Zone).</li>
+                            </ul>
+                        </div>
+                        <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#10b981' }}>Case 3: Ergonomi</strong>
+                            <p style={{ margin: '6px 0', fontSize: '0.8rem', color: '#9ca3af' }}>Cegah kerja tangan di atas kepala.</p>
+                            <ul style={{ paddingLeft: '16px', fontSize: '0.75rem', color: '#d1d5db', margin: 0 }}>
+                                <li><strong>Script:</strong> <code>right_wrist.y &lt; nose.y</code></li>
+                            </ul>
+                        </div>
+                        <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#8b5cf6' }}>Case 4: Dua Tangan</strong>
+                            <p style={{ margin: '6px 0', fontSize: '0.8rem', color: '#9ca3af' }}>Wajib angkat dengan 2 tangan.</p>
+                            <ul style={{ paddingLeft: '16px', fontSize: '0.75rem', color: '#d1d5db', margin: 0 }}>
+                                <li><strong>Script:</strong> <code>dist(L_Hand) &lt; 0.1 && dist(R_Hand) &lt; 0.1</code></li>
+                            </ul>
+                        </div>
+                    </div>
 
-                        <h4 style={{ color: '#60a5fa', marginBottom: '8px' }}>6. Tips & Trik</h4>
-                        <ol style={{ marginLeft: '20px', marginTop: '5px', color: '#d1d5db' }}>
-                            <li>Click <strong>+ Create New Model</strong> to start.</li>
-                            <li>Upload a video of the standard work.</li>
-                            <li>Define the <strong>States</strong> (Steps of the process).</li>
-                            <li>Add <strong>Rules</strong> to link the states together.</li>
+                    <h4 style={{ color: '#60a5fa', marginBottom: '8px', marginTop: '20px' }}>6. 🏭 Contoh Step-by-Step (Siklus Mesin CNC)</h4>
+                    <div style={{ backgroundColor: '#1f2937', padding: '15px', borderRadius: '8px', border: '1px solid #374151', fontSize: '0.85rem', color: '#d1d5db' }}>
+                        <p style={{ margin: '0 0 10px 0', fontStyle: 'italic', color: '#9ca3af' }}>Skenario: Operator menjalankan mesin, merakit, dan memindahkan barang.</p>
+                        <ol style={{ paddingLeft: '20px', margin: 0, lineHeight: '1.8' }}>
+                            <li><strong>Tekan Tombol MSIN ON:</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Object Proximity</code> (Kanan &lt; 5cm ke "Start Button").</li>
+                                </ul>
+                            </li>
+                            <li><strong>Ambil Baut:</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Hand Proximity</code> (Kiri &lt; 10cm ke "Box Baut").</li>
+                                </ul>
+                            </li>
+                            <li><strong>Pasang Baut:</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Pose Relation</code> (Kiri &lt; Dada Y) <em>*Asumsi pasang di level dada</em>.</li>
+                                </ul>
+                            </li>
+                            <li><strong>Pindah Belakang (Mundur):</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Pose Relation</code> (Ankle Y &gt; Line Batas Lantai) <em>*Atau luas bounding box mengecil</em>.</li>
+                                </ul>
+                            </li>
+                            <li><strong>Periksa Barang (Inspeksi):</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Pose Angle</code> (Leher Angle &lt; 150°) <em>*Menunduk melihat barang</em>.</li>
+                                </ul>
+                            </li>
+                            <li><strong>Tekan Tombol RUN:</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Object Proximity</code> (Kanan &lt; 5cm ke "Panel Run").</li>
+                                </ul>
+                            </li>
+                            <li><strong>Tunggu Mesin Berhenti:</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Pose Velocity</code> (Semua Sendi &lt; 10) <em>*Operator diam menunggu</em>.</li>
+                                </ul>
+                            </li>
+                            <li><strong>Ambil Barang Jadi:</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Hand Proximity</code> (Kedua Tangan &lt; 10cm ke "Machine Chuck").</li>
+                                </ul>
+                            </li>
+                            <li><strong>Taruh di Meja:</strong>
+                                <ul style={{ paddingLeft: '15px', margin: '4px 0', color: '#9ca3af', listStyleType: 'circle' }}>
+                                    <li>Rule: <code>Object Proximity</code> (Object &lt; 5cm ke "Meja Finish").</li>
+                                </ul>
+                            </li>
                         </ol>
+                    </div>
+
+                    <h4 style={{ color: '#60a5fa', marginBottom: '8px', marginTop: '20px' }}>7. ⚖️ Analisa Akurasi & Pertimbangan (Pros/Cons)</h4>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', color: '#d1d5db' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid #4b5563', color: '#9ca3af', textAlign: 'left' }}>
+                                    <th style={{ padding: '8px' }}>Tipe Logic</th>
+                                    <th style={{ padding: '8px' }}>Akurasi Est.</th>
+                                    <th style={{ padding: '8px' }}>Kelebihan (Pros)</th>
+                                    <th style={{ padding: '8px' }}>Kekurangan (Cons)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style={{ borderBottom: '1px solid #374151' }}>
+                                    <td style={{ padding: '8px', color: '#60a5fa' }}>Pose/Joint (Angle, Relation)</td>
+                                    <td style={{ padding: '8px', color: '#10b981' }}>Tinggi (>95%)</td>
+                                    <td style={{ padding: '8px' }}>Sangat cepat, ringan, real-time 30FPS.</td>
+                                    <td style={{ padding: '8px', color: '#f87171' }}>Gagal jika badan tertutup objek (Occlusion).</td>
+                                </tr>
+                                <tr style={{ borderBottom: '1px solid #374151' }}>
+                                    <td style={{ padding: '8px', color: '#f59e0b' }}>Object Detection (AI)</td>
+                                    <td style={{ padding: '8px', color: '#facc15' }}>Sedang (80-90%)</td>
+                                    <td style={{ padding: '8px' }}>Bisa mengenali alat/benda spesifik.</td>
+                                    <td style={{ padding: '8px', color: '#f87171' }}>Lebih berat (FPS turun), sensitif cahaya.</td>
+                                </tr>
+                                <tr style={{ borderBottom: '1px solid #374151' }}>
+                                    <td style={{ padding: '8px', color: '#8b5cf6' }}>Advanced Script</td>
+                                    <td style={{ padding: '8px', color: '#10b981' }}>Tinggi (>95%)</td>
+                                    <td style={{ padding: '8px' }}>Fleksibel, bisa gabung banyak kondisi.</td>
+                                    <td style={{ padding: '8px', color: '#f87171' }}>Butuh pemahaman logika (Coding skill).</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

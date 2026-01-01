@@ -1329,3 +1329,85 @@ export const generateVSMFromImage = async (imageData, apiKey, language = 'Englis
     console.log('Hand-drawn VSM processed successfully:', result);
     return result;
 };
+
+/**
+ * Generates a motion analysis rule suggestion from an image.
+ * Analyze posture, joint positions, and object interaction.
+ */
+export const generateAiRuleFromImage = async (imageData, apiKey, language = 'English') => {
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) throw new Error("API Key missing");
+
+    const prompt = `
+        You are an Industrial Engineering Computer Vision Expert.
+        
+        **TASK:**
+        Analyze the provided image (video frame highlighting a worker) and suggest a motion analysis rule for a Finite State Machine (FSM).
+        
+        **AVAILABLE RULE TYPES:**
+        - POSE_ANGLE: Angle between 3 joints (e.g. elbow flex, knee bend). Use parameters: { jointA, jointB, jointC, operator (<, >), value (degrees) }.
+        - POSE_RELATION: Distance or position relation. Use parameters: { jointA, jointB, component (x, y, z), targetType (POINT or VALUE), operator, value }.
+        - OBJECT_PROXIMITY: Distance to a tool/object. Use parameters: { joint, objectClass, operator, distance (normalized 0-1) }.
+        
+        **AVAILABLE JOINTS:**
+        nose, left_shoulder, right_shoulder, left_elbow, right_elbow, left_wrist, right_wrist, left_hip, right_hip, left_knee, right_knee, left_ankle, right_ankle.
+        
+        **INSTRUCTIONS:**
+        1. Identify the most critical posture or interaction in the image (e.g. "Operator picking up a part", "Operator bending over").
+        2. Create ONE highly relevant rule that defines this state.
+        3. Output MUST be valid JSON with this structure:
+        {
+            "reasoning": "Brief explanation of why this rule was chosen (max 1 sentence)",
+            "type": "RULE_TYPE_HERE",
+            "params": { ... appropriate params for that type ... }
+        }
+        
+        4. Use **${language}** for the reasoning.
+        5. Return ONLY the JSON.
+    `;
+
+    return await callAIProvider(prompt, keyToUse, "gemini-1.5-flash-002", true, imageData);
+};
+
+/**
+ * Validates a custom motion script for logic and anatomical errors.
+ */
+export const validateAiRuleScript = async (script, apiKey, language = 'English') => {
+    const keyToUse = getStoredApiKey(apiKey);
+    if (!keyToUse) throw new Error("API Key missing");
+
+    const prompt = `
+        You are an Industrial Engineering Expert and Logic Validator.
+        
+        **TASK:**
+        Analyze the following motion analysis script (DSL) for correctness, safety, and logic.
+        
+        **SCRIPT:**
+        \`\`\`js
+        ${script}
+        \`\`\`
+        
+        **CONTEXT:**
+        This script runs in a motion study tool using MediaPipe Pose keypoints (nose, shoulders, wrists, elbows, hips, knees, ankles).
+        Functions available: dist(A, B), angle(A, B, C).
+        Properties: joint.x, joint.y, joint.z.
+        
+        **INSTRUCTIONS:**
+        1. Check if the logic is anatomically possible (e.g. checking if a hand is below a foot might be a mistake if the goal is picking something from a table).
+        2. Check for syntax errors.
+        3. Provide a brief explanation of what the script does and any potential issues.
+        4. Suggest an improvement if there's a better way to write it.
+        
+        **OUTPUT FORMAT (JSON):**
+        {
+            "isValid": true/false,
+            "explanation": "Brief explanation in ${language}",
+            "issues": ["Issue 1", "Issue 2"],
+            "suggestion": "Better script representation"
+        }
+        
+        Return ONLY the JSON.
+    `;
+
+    return await callAIProvider(prompt, keyToUse, "gemini-1.5-flash-002", true);
+};

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, ArrowRight, CheckCircle, BarChart2, BookOpen, Layers, Users, Shield, Zap, Cloud, AlertTriangle, XCircle, Briefcase, Factory, TrendingUp, HelpCircle, ChevronDown, ChevronUp, Video, Brain } from 'lucide-react';
+import { Play, ArrowRight, CheckCircle, BarChart2, BookOpen, Layers, Users, Shield, Zap, Cloud, AlertTriangle, XCircle, Briefcase, Factory, TrendingUp, HelpCircle, ChevronDown, ChevronUp, Video, Brain, Clock } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import LanguageSelector from './LanguageSelector';
 
@@ -218,6 +218,7 @@ const LandingPage = ({ onLogin, onDemo }) => {
                 <div style={styles.navLinks}>
                     <a href="#features" style={styles.link}>{t('landing.nav.features')}</a>
                     <a href="#solutions" style={styles.link}>{t('landing.nav.solutions')}</a>
+                    <a href="/class" style={styles.link}>MAVi Class</a>
                     <button onClick={onLogin} style={{ ...styles.btnSecondary, padding: '0.5rem 1.5rem', marginLeft: 0 }}>
                         {t('landing.nav.login')}
                     </button>
@@ -230,17 +231,83 @@ const LandingPage = ({ onLogin, onDemo }) => {
 
             {/* Hero */}
             <header style={styles.hero}>
-                <div style={{ display: 'inline-block', padding: '0.5rem 1rem', borderRadius: '999px', backgroundColor: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', fontWeight: '600', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
-                    {t('landing.hero.newBadge')}
+                <style>
+                    {`
+                    @keyframes scan {
+                        0% { top: 0%; opacity: 0; }
+                        50% { opacity: 1; }
+                        100% { top: 100%; opacity: 0; }
+                    }
+                    @keyframes pulse-ring {
+                        0% { transform: scale(0.8); opacity: 0.5; }
+                        100% { transform: scale(1.3); opacity: 0; }
+                    }
+                    @keyframes float {
+                        0% { transform: translateY(0px) rotateX(5deg); }
+                        50% { transform: translateY(-10px) rotateX(5deg); }
+                        100% { transform: translateY(0px) rotateX(5deg); }
+                    }
+                    @keyframes chart-grow {
+                        0% { height: 10%; }
+                        100% { height: var(--target-height); }
+                    }
+                    .hero-dashboard {
+                        animation: float 6s ease-in-out infinite;
+                    }
+                    .scan-line {
+                        position: absolute;
+                        left: 0;
+                        width: 100%;
+                        height: 2px;
+                        background: rgba(79, 70, 229, 0.8);
+                        box-shadow: 0 0 10px rgba(79, 70, 229, 0.8);
+                        animation: scan 3s linear infinite;
+                    }
+                    .pulse-dot::before {
+                        content: '';
+                        position: absolute;
+                        top: -4px;
+                        left: -4px;
+                        right: -4px;
+                        bottom: -4px;
+                        border: 1px solid #4f46e5;
+                        border-radius: 50%;
+                        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+                    }
+                    `}
+                </style>
+
+                {/* Animated Background Grid */}
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)',
+                    backgroundSize: '50px 50px',
+                    maskImage: 'radial-gradient(circle at center, black 40%, transparent 80%)',
+                    zIndex: -1,
+                    pointerEvents: 'none'
+                }}></div>
+
+                <div style={{ display: 'inline-block', padding: '0.5rem 1rem', borderRadius: '999px', backgroundColor: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', fontWeight: '600', fontSize: '0.875rem', marginBottom: '1.5rem', border: '1px solid rgba(79, 70, 229, 0.2)' }}>
+                    ✨ {t('landing.hero.newBadge')}
                 </div>
                 <h1 style={styles.h1}>
                     {t('landing.hero.title')} <br />
-                    <span style={styles.highlight}>{t('landing.hero.highlight')}</span>
+                    <span style={{
+                        background: 'linear-gradient(90deg, #4f46e5, #06b6d4, #4f46e5)',
+                        backgroundSize: '200% auto',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        animation: 'gradient 3s linear infinite'
+                    }}>{t('landing.hero.highlight')}</span>
                 </h1>
                 <p style={styles.subtitle}>
                     {t('landing.hero.subtitle')}
                 </p>
-                <div>
+                <div style={{ marginBottom: '4rem' }}>
                     <button onClick={onDemo} style={styles.btnPrimary}>
                         {t('landing.hero.ctaPrimary')} <ArrowRight size={18} />
                     </button>
@@ -248,84 +315,115 @@ const LandingPage = ({ onLogin, onDemo }) => {
                         {t('landing.hero.ctaSecondary')}
                     </button>
                 </div>
-                <div style={{ marginTop: '4rem', perspective: '1000px' }}>
-                    <div style={{
-                        background: 'linear-gradient(180deg, rgba(30,30,30,0.8) 0%, rgba(0,0,0,0.8) 100%)',
-                        border: '1px solid #333',
-                        borderRadius: '12px',
+
+                <div style={{ perspective: '1000px' }}>
+                    <div className="hero-dashboard" style={{
+                        background: 'rgba(20, 20, 20, 0.8)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderRadius: '16px',
                         padding: '1rem',
-                        maxWidth: '900px',
+                        maxWidth: '1000px',
                         margin: '0 auto',
-                        boxShadow: '0 20px 50px -10px rgba(0,0,0,0.5)',
+                        boxShadow: '0 40px 80px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)',
                         transform: 'rotateX(5deg)'
                     }}>
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
-                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff5f56' }}></div>
-                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ffbd2e' }}></div>
-                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f' }}></div>
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem', paddingLeft: '0.5rem' }}>
+                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ff5f56', opacity: 0.8 }}></div>
+                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#ffbd2e', opacity: 0.8 }}></div>
+                            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#27c93f', opacity: 0.8 }}></div>
                         </div>
-                        <div style={{ height: '400px', background: '#111', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#333' }}>
-                            {/* Simulated Dashboard UI */}
-                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: '#0f0f0f', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
-                                {/* App Header */}
-                                <div style={{ height: '50px', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', gap: '20px', color: '#666', fontSize: '0.8rem' }}>
-                                        <div style={{ color: '#fff', fontWeight: 'bold' }}>Dashboard</div>
-                                        <div>Analysis</div>
-                                        <div>Reports</div>
+
+                        <div style={{ height: '500px', background: '#0a0a0a', borderRadius: '12px', display: 'flex', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            {/* Sidebar */}
+                            <div style={{ width: '70px', borderRight: '1px solid #222', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0', gap: '20px', backgroundColor: '#0f0f0f' }}>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}><Zap size={20} /></div>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}><Layers size={20} /></div>
+                                <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}><BarChart2 size={20} /></div>
+                            </div>
+
+                            {/* Main Area */}
+                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                {/* Top Bar */}
+                                <div style={{ height: '60px', borderBottom: '1px solid #222', display: 'flex', alignItems: 'center', padding: '0 2rem', justifyContent: 'space-between', backgroundColor: '#0f0f0f' }}>
+                                    <h3 style={{ fontSize: '1rem', fontWeight: '600', color: '#fff' }}>Assembly Line 4 - Station B</h3>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '0.25rem 0.75rem', borderRadius: '999px' }}>
+                                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', display: 'block' }} className="pulse-dot"></span>
+                                            Live Analysis
+                                        </div>
                                     </div>
-                                    <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: '#333' }}></div>
                                 </div>
-                                {/* App Body */}
-                                <div style={{ flex: 1, display: 'flex' }}>
-                                    {/* Sidebar */}
-                                    <div style={{ width: '60px', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0', gap: '20px' }}>
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '4px', backgroundColor: '#333' }}></div>
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '4px', backgroundColor: '#333' }}></div>
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '4px', backgroundColor: '#333' }}></div>
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '4px', backgroundColor: '#333' }}></div>
-                                    </div>
-                                    {/* Main Content */}
-                                    <div style={{ flex: 1, padding: '20px', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
-                                        {/* Video Analysis Panel */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                            <div style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <div style={{ position: 'absolute', top: '10px', left: '10px', padding: '4px 8px', backgroundColor: 'rgba(255,0,0,0.2)', color: '#ff4444', fontSize: '0.7rem', borderRadius: '4px' }}>REC</div>
-                                                <Play size={48} color="#444" fill="#444" />
-                                                {/* Simulated Bounding Boxes */}
-                                                <div style={{ position: 'absolute', top: '30%', left: '40%', width: '100px', height: '120px', border: '2px solid #4f46e5', borderRadius: '4px' }}>
-                                                    <div style={{ position: 'absolute', top: '-20px', left: '0', backgroundColor: '#4f46e5', color: 'white', fontSize: '0.6rem', padding: '2px 4px', borderRadius: '2px' }}>Worker 1 (98%)</div>
+
+                                {/* Content Grid */}
+                                <div style={{ flex: 1, padding: '1.5rem', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
+
+                                    {/* Video Feed */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ flex: 1, backgroundColor: '#151515', borderRadius: '12px', border: '1px solid #333', position: 'relative', overflow: 'hidden' }}>
+                                            {/* Grid Overlay */}
+                                            <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+
+                                            <div style={{ position: 'absolute', top: '20px', left: '20px', padding: '6px 12px', backgroundColor: 'rgba(255,0,0,0.2)', color: '#ff4444', fontSize: '0.75rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', backdropFilter: 'blur(4px)' }}>
+                                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ff4444' }}></span> REC 00:04:12
+                                            </div>
+
+                                            {/* AI Bounding Box */}
+                                            <div style={{ position: 'absolute', top: '25%', left: '35%', width: '180px', height: '240px', border: '2px solid rgba(79, 70, 229, 0.8)', borderRadius: '8px', boxShadow: '0 0 20px rgba(79, 70, 229, 0.2)' }}>
+                                                <div style={{ position: 'absolute', top: '-28px', left: '-2px', backgroundColor: '#4f46e5', color: 'white', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '4px 4px 4px 0', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <Brain size={12} /> Worker 01 (99%)
                                                 </div>
-                                            </div>
-                                            {/* Timeline */}
-                                            <div style={{ height: '40px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 10px', gap: '5px' }}>
-                                                <div style={{ flex: 1, height: '4px', backgroundColor: '#333', borderRadius: '2px', overflow: 'hidden' }}>
-                                                    <div style={{ width: '60%', height: '100%', backgroundColor: '#4f46e5' }}></div>
+                                                <div style={{ position: 'absolute', bottom: '-28px', left: '-2px', backgroundColor: 'rgba(0,0,0,0.8)', color: '#10b981', fontSize: '0.7rem', padding: '4px 8px', borderRadius: '0 4px 4px 4px', border: '1px solid #333' }}>
+                                                    Action: Assembly (Correct)
                                                 </div>
+                                                {/* Scanning Line */}
+                                                <div className="scan-line"></div>
                                             </div>
-                                        </div>
-                                        {/* Metrics Panel */}
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                                            <div style={{ padding: '15px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333' }}>
-                                                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '5px' }}>Cycle Time</div>
-                                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fff' }}>12.4s</div>
-                                                <div style={{ fontSize: '0.7rem', color: '#10b981' }}>↓ 12% vs Standard</div>
-                                            </div>
-                                            <div style={{ padding: '15px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333' }}>
-                                                <div style={{ fontSize: '0.7rem', color: '#888', marginBottom: '5px' }}>Efficiency</div>
-                                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fff' }}>94%</div>
-                                                <div style={{ fontSize: '0.7rem', color: '#10b981' }}>↑ 4% Improved</div>
-                                            </div>
-                                            <div style={{ flex: 1, backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', position: 'relative', overflow: 'hidden' }}>
-                                                {/* Fake Chart */}
-                                                <div style={{ display: 'flex', alignItems: 'flex-end', height: '100%', padding: '10px', gap: '5px', justifyContent: 'space-between' }}>
-                                                    {[40, 60, 45, 70, 50, 80, 65].map((h, i) => (
-                                                        <div key={i} style={{ width: '100%', height: `${h}%`, backgroundColor: 'rgba(79, 70, 229, 0.4)', borderRadius: '2px' }}></div>
-                                                    ))}
-                                                </div>
-                                            </div>
+
+                                            {/* Skeleton Nodes */}
+                                            <div style={{ position: 'absolute', top: '35%', left: '50%', width: '8px', height: '8px', backgroundColor: '#fff', borderRadius: '50%', boxShadow: '0 0 10px #4f46e5' }}></div>
+                                            <div style={{ position: 'absolute', top: '30%', left: '42%', width: '8px', height: '8px', backgroundColor: '#fff', borderRadius: '50%', boxShadow: '0 0 10px #4f46e5' }}></div>
+                                            <div style={{ position: 'absolute', top: '30%', left: '58%', width: '8px', height: '8px', backgroundColor: '#fff', borderRadius: '50%', boxShadow: '0 0 10px #4f46e5' }}></div>
                                         </div>
                                     </div>
+
+                                    {/* Analytics Panel */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ padding: '1.5rem', backgroundColor: '#151515', borderRadius: '12px', border: '1px solid #333' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
+                                                Cycle Time <span style={{ color: '#aaa' }}>Target: 14s</span>
+                                            </div>
+                                            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#fff', letterSpacing: '-1px' }}>12.4s</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                <TrendingUp size={14} /> 12% faster than avg
+                                            </div>
+                                        </div>
+
+                                        <div style={{ flex: 1, backgroundColor: '#151515', borderRadius: '12px', border: '1px solid #333', padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '1rem' }}>Efficiency Trend</div>
+                                            <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '8px', justifyContent: 'space-between' }}>
+                                                {[40, 65, 45, 80, 55, 90, 75].map((h, i) => (
+                                                    <div key={i} style={{
+                                                        width: '100%',
+                                                        height: '100%',
+                                                        display: 'flex',
+                                                        alignItems: 'flex-end'
+                                                    }}>
+                                                        <div style={{
+                                                            width: '100%',
+                                                            height: `${h}%`,
+                                                            backgroundColor: i === 5 ? '#4f46e5' : 'rgba(79, 70, 229, 0.2)',
+                                                            borderRadius: '4px',
+                                                            transition: 'height 1s ease',
+                                                            '--target-height': `${h}%`,
+                                                            animation: `chart-grow 1s ease-out forwards ${i * 0.1}s`
+                                                        }}></div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
                         </div>
@@ -364,8 +462,15 @@ const LandingPage = ({ onLogin, onDemo }) => {
                             <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                 <XCircle size={20} color="#ef4444" style={{ marginTop: '4px', flexShrink: 0 }} />
                                 <div>
-                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.old.subjective.title')}</strong>
-                                    <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.old.subjective.desc')}</span>
+                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Analisis Subjektif</strong>
+                                    <span style={{ color: '#a1a1aa' }}>Engineer yang berbeda menghasilkan hasil yang berbeda untuk tugas yang sama.</span>
+                                </div>
+                            </li>
+                            <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
+                                <XCircle size={20} color="#ef4444" style={{ marginTop: '4px', flexShrink: 0 }} />
+                                <div>
+                                    <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Audit Manual</strong>
+                                    <span style={{ color: '#a1a1aa' }}>Pemeriksaan kepatuhan SOP dilakukan acak dan jarang, risiko lolos tinggi.</span>
                                 </div>
                             </li>
                         </ul>
@@ -399,8 +504,15 @@ const LandingPage = ({ onLogin, onDemo }) => {
                                 <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
                                     <CheckCircle size={20} color="#10b981" style={{ marginTop: '4px', flexShrink: 0 }} />
                                     <div>
-                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>{t('landing.solutions.mavi.standardized.title')}</strong>
-                                        <span style={{ color: '#a1a1aa' }}>{t('landing.solutions.mavi.standardized.desc')}</span>
+                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Terstandarisasi & Akurat</strong>
+                                        <span style={{ color: '#a1a1aa' }}>Analisis konsisten setiap saat, menghilangkan kesalahan dan bias manusia.</span>
+                                    </div>
+                                </li>
+                                <li style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
+                                    <CheckCircle size={20} color="#10b981" style={{ marginTop: '4px', flexShrink: 0 }} />
+                                    <div>
+                                        <strong style={{ color: '#fff', display: 'block', marginBottom: '0.25rem' }}>Real-time Compliance</strong>
+                                        <span style={{ color: '#a1a1aa' }}>Monitoring otomatis 24/7. Dapatkan alert instan saat terjadi pelanggaran SOP.</span>
                                     </div>
                                 </li>
                             </ul>
@@ -482,27 +594,330 @@ const LandingPage = ({ onLogin, onDemo }) => {
                         <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>{t('landing.how.improve.desc')}</p>
                     </div>
 
+                    {/* Arrow */}
+                    <div style={{ display: 'flex', alignItems: 'center', color: '#333' }}>
+                        <ArrowRight size={32} />
+                    </div>
+
+                    {/* Step 4 - Real-time Compliance */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: '300px' }}>
+                        <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', position: 'relative' }}>
+                            <Shield size={40} />
+                            <div style={{ position: 'absolute', top: '-5px', right: '-5px', width: '30px', height: '30px', borderRadius: '50%', backgroundColor: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>4</div>
+                        </div>
+                        <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.75rem' }}>Monitor Compliance</h3>
+                        <p style={{ color: '#a1a1aa', lineHeight: '1.6' }}>Real-time monitoring ensures workers follow standard procedures. Get instant alerts when deviations occur, maintaining quality and safety standards.</p>
+                    </div>
+
                 </div>
             </section>
 
-            {/* Target Audience / Use Cases */}
-            <section style={styles.section}>
-                <h2 style={styles.sectionTitle}>{t('landing.audience.title')}</h2>
-                <div style={styles.grid}>
-                    <div style={styles.card}>
-                        <div style={{ ...styles.cardIcon, color: '#fda4af', backgroundColor: 'rgba(253, 164, 175, 0.1)' }}><Briefcase size={24} /></div>
-                        <h3 style={styles.cardTitle}>{t('landing.audience.ie.title')}</h3>
-                        <p style={styles.cardText}>{t('landing.audience.ie.desc')}</p>
+            {/* Industry Solutions (Use Cases) */}
+            <section style={{ ...styles.section, backgroundColor: '#111' }}>
+                <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
+                    <div style={{ display: 'inline-block', padding: '0.5rem 1rem', borderRadius: '999px', backgroundColor: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', fontWeight: '600', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                        INDUSTRIES
                     </div>
-                    <div style={styles.card}>
-                        <div style={{ ...styles.cardIcon, color: '#93c5fd', backgroundColor: 'rgba(147, 197, 253, 0.1)' }}><Factory size={24} /></div>
-                        <h3 style={styles.cardTitle}>{t('landing.audience.pm.title')}</h3>
-                        <p style={styles.cardText}>{t('landing.audience.pm.desc')}</p>
+                    <h2 style={styles.sectionTitle}>Solutions by Industry</h2>
+                    <p style={{ color: '#a1a1aa', maxWidth: '600px', margin: '0 auto', fontSize: '1.1rem' }}>
+                        Tailored solutions to meet the unique challenges of your sector.
+                    </p>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2rem' }}>
+                    {/* Automotive */}
+                    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '24px', height: '400px', border: '1px solid #333' }}>
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.9) 100%)', zIndex: 2 }}></div>
+                        <img src="/assets/automotive-bg.jpg" alt="Automotive" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }}
+                            onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.background = '#1a1a1a' }} />
+
+                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '2rem', zIndex: 3 }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', color: 'white' }}>
+                                <Factory size={24} />
+                            </div>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'white' }}>Automotive</h3>
+                            <p style={{ color: '#d1d5db', marginBottom: '1.5rem' }}>Optimize assembly lines and reduce cycle time variability with precision motion analysis.</p>
+                            <ul style={{ listStyle: 'none', padding: 0, color: '#9ca3af', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle size={16} color="#ef4444" /> Line Balancing</li>
+                                <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle size={16} color="#ef4444" /> Standardized Work</li>
+                            </ul>
+                        </div>
                     </div>
-                    <div style={styles.card}>
-                        <div style={{ ...styles.cardIcon, color: '#fcd34d', backgroundColor: 'rgba(252, 211, 77, 0.1)' }}><TrendingUp size={24} /></div>
-                        <h3 style={styles.cardTitle}>{t('landing.audience.lc.title')}</h3>
-                        <p style={styles.cardText}>{t('landing.audience.lc.desc')}</p>
+
+                    {/* Electronics */}
+                    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '24px', height: '400px', border: '1px solid #333' }}>
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.9) 100%)', zIndex: 2 }}></div>
+                        <img src="/assets/electronics-bg.jpg" alt="Electronics" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }}
+                            onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.background = '#1a1a1a' }} />
+
+                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '2rem', zIndex: 3 }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', color: 'white' }}>
+                                <Zap size={24} />
+                            </div>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'white' }}>Electronics</h3>
+                            <p style={{ color: '#d1d5db', marginBottom: '1.5rem' }}>Ensure 100% compliance in high-precision manual assembly tasks.</p>
+                            <ul style={{ listStyle: 'none', padding: 0, color: '#9ca3af', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle size={16} color="#3b82f6" /> Micro-motion Analysis</li>
+                                <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle size={16} color="#3b82f6" /> Defect Reduction</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    {/* Logistics */}
+                    <div style={{ position: 'relative', overflow: 'hidden', borderRadius: '24px', height: '400px', border: '1px solid #333' }}>
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.9) 100%)', zIndex: 2 }}></div>
+                        <img src="/assets/logistics-bg.jpg" alt="Logistics" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.6 }}
+                            onError={(e) => { e.target.style.display = 'none'; e.target.parentElement.style.background = '#1a1a1a' }} />
+
+                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '2rem', zIndex: 3 }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', color: 'white' }}>
+                                <Briefcase size={24} />
+                            </div>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.5rem', color: 'white' }}>Logistics</h3>
+                            <p style={{ color: '#d1d5db', marginBottom: '1.5rem' }}>Improve ergonomics and efficiency in picking and packing operations.</p>
+                            <ul style={{ listStyle: 'none', padding: 0, color: '#9ca3af', fontSize: '0.9rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle size={16} color="#f59e0b" /> Ergonomic Scores</li>
+                                <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><CheckCircle size={16} color="#f59e0b" /> Process Optimization</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* MAVi Class Section - Redesigned */}
+            <section style={{ ...styles.section, backgroundColor: '#050505', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: '20%', left: '-10%', width: '600px', height: '600px', background: 'radial-gradient(circle, rgba(79, 70, 229, 0.08) 0%, transparent 70%)', borderRadius: '50%', filter: 'blur(60px)' }}></div>
+                <div style={{ position: 'absolute', bottom: '10%', right: '-5%', width: '400px', height: '400px', background: 'radial-gradient(circle, rgba(16, 185, 129, 0.05) 0%, transparent 70%)', borderRadius: '50%', filter: 'blur(60px)' }}></div>
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                    <h2 style={styles.sectionTitle}>🎓 MAVi Class - Master Modern IE</h2>
+                    <p style={{ textAlign: 'center', color: '#a1a1aa', fontSize: '1.1rem', marginBottom: '4rem', maxWidth: '700px', margin: '0 auto' }}>
+                        Comprehensive learning path from basics to advanced AI-enabled Industrial Engineering.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', maxWidth: '1200px', margin: '0 auto' }}>
+                        {/* Module 1 */}
+                        <div style={{
+                            padding: '2rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                        }}
+                            onMouseOver={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                                e.currentTarget.style.borderColor = 'rgba(76, 175, 80, 0.5)';
+                                e.currentTarget.style.background = 'rgba(76, 175, 80, 0.05)';
+                            }}
+                            onMouseOut={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                            }}
+                            onClick={onLogin}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(76, 175, 80, 0.1)', color: '#4CAF50', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🚀</div>
+                                <div style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#888' }}>Tier 1</div>
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Getting Started</h3>
+                            <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem', minHeight: '3rem' }}>Kenalan dengan MAVi dan fitur-fitur dasarnya dalam 15 menit.</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#666', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                                <Clock size={14} /> 15 mins
+                                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#444' }}></span>
+                                4 lessons
+                            </div>
+                        </div>
+
+                        {/* Module 2 */}
+                        <div style={{
+                            padding: '2rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                        }}
+                            onMouseOver={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                                e.currentTarget.style.borderColor = 'rgba(33, 150, 243, 0.5)';
+                                e.currentTarget.style.background = 'rgba(33, 150, 243, 0.05)';
+                            }}
+                            onMouseOut={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                            }}
+                            onClick={onLogin}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(33, 150, 243, 0.1)', color: '#2196F3', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>⏱️</div>
+                                <div style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#888' }}>Tier 2</div>
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Time & Motion</h3>
+                            <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem', minHeight: '3rem' }}>Belajar mengukur waktu dan breakdown elemen kerja secara presisi.</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#666', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                                <Clock size={14} /> 30 mins
+                                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#444' }}></span>
+                                5 lessons
+                            </div>
+                        </div>
+
+                        {/* Module 3 */}
+                        <div style={{
+                            padding: '2rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                        }}
+                            onMouseOver={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 152, 0, 0.5)';
+                                e.currentTarget.style.background = 'rgba(255, 152, 0, 0.05)';
+                            }}
+                            onMouseOut={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                            }}
+                            onClick={onLogin}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(255, 152, 0, 0.1)', color: '#FF9800', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🧠</div>
+                                <div style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#888' }}>Tier 3</div>
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>AI Features</h3>
+                            <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem', minHeight: '3rem' }}>Manfaatkan kekuatan AI untuk analisis otomatis dan deteksi.</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#666', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                                <Clock size={14} /> 25 mins
+                                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#444' }}></span>
+                                4 lessons
+                            </div>
+                        </div>
+                        {/* Module 4 */}
+                        <div style={{
+                            padding: '2rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                        }}
+                            onMouseOver={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                                e.currentTarget.style.borderColor = 'rgba(156, 39, 176, 0.5)';
+                                e.currentTarget.style.background = 'rgba(156, 39, 176, 0.05)';
+                            }}
+                            onMouseOut={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                            }}
+                            onClick={onLogin}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(156, 39, 176, 0.1)', color: '#9C27B0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>📊</div>
+                                <div style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#888' }}>Tier 4</div>
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>TPS Tools</h3>
+                            <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem', minHeight: '3rem' }}>Alat-alat Toyota Production System untuk improvement berkelanjutan.</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#666', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                                <Clock size={14} /> 40 mins
+                                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#444' }}></span>
+                                5 lessons
+                            </div>
+                        </div>
+
+                        {/* Module 5 */}
+                        <div style={{
+                            padding: '2rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                        }}
+                            onMouseOver={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                                e.currentTarget.style.borderColor = 'rgba(102, 126, 234, 0.5)';
+                                e.currentTarget.style.background = 'rgba(102, 126, 234, 0.05)';
+                            }}
+                            onMouseOut={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                            }}
+                            onClick={onLogin}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(102, 126, 234, 0.1)', color: '#667eea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🎬</div>
+                                <div style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#888' }}>Tier 5</div>
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Studio Model</h3>
+                            <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem', minHeight: '3rem' }}>Buat model AI kustom untuk monitor compliance secara real-time.</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#666', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                                <Clock size={14} /> 35 mins
+                                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#444' }}></span>
+                                5 lessons
+                            </div>
+                        </div>
+
+                        {/* Module 6 */}
+                        <div style={{
+                            padding: '2rem',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            color: 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                        }}
+                            onMouseOver={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 215, 0, 0.5)';
+                                e.currentTarget.style.background = 'rgba(255, 215, 0, 0.05)';
+                            }}
+                            onMouseOut={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.05)';
+                                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                            }}
+                            onClick={onLogin}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(255, 215, 0, 0.1)', color: '#FFD700', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>📂</div>
+                                <div style={{ fontSize: '0.8rem', padding: '4px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', color: '#888' }}>Tier 6</div>
+                            </div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: '600', marginBottom: '0.5rem' }}>Study Cases</h3>
+                            <p style={{ color: '#a1a1aa', fontSize: '0.95rem', lineHeight: '1.6', marginBottom: '1.5rem', minHeight: '3rem' }}>Implementasi nyata MAVi di berbagai industri terkemuka.</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.85rem', color: '#666', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1rem' }}>
+                                <Clock size={14} /> 45 mins
+                                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#444' }}></span>
+                                4 lessons
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ textAlign: 'center', marginTop: '3rem' }}>
+                        <button
+                            onClick={onLogin}
+                            style={{
+                                ...styles.btnPrimary,
+                                padding: '1rem 2.5rem',
+                                fontSize: '1.1rem',
+                                background: 'linear-gradient(90deg, #4f46e5, #06b6d4)',
+                                border: 'none'
+                            }}>
+                            <BookOpen size={20} /> Start Learning Now
+                        </button>
                     </div>
                 </div>
             </section>

@@ -3,7 +3,10 @@ export const RULE_TYPES = {
     POSE_RELATION: { label: 'Pose Relation (XYZ)', description: 'Compare joint positions or relative distances' },
     POSE_VELOCITY: { label: 'Pose Velocity (Speed)', description: 'Check speed of a joint' },
     OBJECT_PROXIMITY: { label: 'Object Proximity', description: 'Distance to an object' },
-    POSE_MATCHING: { label: 'Golden Pose Match', description: 'Similarity to reference pose' }
+    OBJECT_IN_ROI: { label: 'Object in ROI', description: 'Check if an object is within a specified region' },
+    OPERATOR_PROXIMITY: { label: 'Operator Proximity', description: 'Distance to another person' },
+    POSE_MATCHING: { label: 'Golden Pose Match', description: 'Similarity to reference pose' },
+    ADVANCED_SCRIPT: { label: 'Advanced Script (DSL)', description: 'Write custom logic in text (e.g. hand.y < eye.y)' }
 };
 
 export const JOINTS = [

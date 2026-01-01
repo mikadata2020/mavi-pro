@@ -1,14 +1,27 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Trash2, ArrowRight, Check, Activity, MousePointer2 } from 'lucide-react';
+import { Plus, Trash2, ArrowRight, Check, Activity, MousePointer2, Copy } from 'lucide-react';
 import { RULE_TYPES, JOINTS } from '../../utils/studio/ModelBuilderEngine';
 import { getDetectableClasses } from '../../utils/objectDetector';
 import JointSelector from './JointSelector';
+import ScriptAutoComplete from './ScriptAutoComplete';
+import { Sparkles, Loader2 } from 'lucide-react';
 
-const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose }) => {
+const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript }) => {
     const [fromState, setFromState] = useState('');
     const [toState, setToState] = useState('');
     const [showSelector, setShowSelector] = useState(false);
     const [selectorTarget, setSelectorTarget] = useState(null); // { transitionId, ruleId, field }
+    const [aiLoading, setAiLoading] = useState({}); // { transitionId: boolean }
+
+    const handleAiSuggest = async (transitionId) => {
+        if (!onAiSuggest) return;
+        setAiLoading(prev => ({ ...prev, [transitionId]: true }));
+        try {
+            await onAiSuggest(transitionId);
+        } finally {
+            setAiLoading(prev => ({ ...prev, [transitionId]: false }));
+        }
+    };
 
     const handleCreateTransition = () => {
         if (fromState && toState) {
@@ -64,6 +77,26 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         onUpdateTransition(transitionId, {
             condition: { ...transition.condition, rules: updatedRules }
         });
+    };
+
+    const handleDuplicateRule = (transitionId, ruleId) => {
+        const transition = transitions.find(t => t.id === transitionId);
+        if (!transition) return;
+
+        const ruleToCopy = transition.condition.rules.find(r => r.id === ruleId);
+        if (!ruleToCopy) return;
+
+        const newRule = {
+            ...ruleToCopy,
+            id: `rule_${Date.now()}`
+        };
+
+        const updatedCondition = {
+            ...transition.condition,
+            rules: [...transition.condition.rules, newRule]
+        };
+
+        onUpdateTransition(transitionId, { condition: updatedCondition });
     };
 
     const openJointSelector = (transitionId, ruleId, field) => {
@@ -126,14 +159,13 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         if (val === null) return null;
 
         const params = rule.params;
-        const targetVal = params.targetType === 'POINT' ? null : params.value; // Relation point-to-point is tricky for boolean status here if no threshold
 
         if (rule.type === 'POSE_ANGLE') {
             return params.operator === '<' ? val < params.value : val > params.value;
         }
 
         if (rule.type === 'POSE_RELATION') {
-            if (params.targetType === 'POINT') return true; // Just connected
+            if (params.targetType === 'POINT') return true;
             const valB = params.value;
             switch (params.operator) {
                 case '<': return val < valB;
@@ -145,7 +177,6 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         return null;
     };
 
-    // Helper to render live value display
     const renderLiveValue = (rule) => {
         const val = calculateRuleValue(rule);
         if (val === null) return null;
@@ -178,12 +209,11 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
 
     const styles = {
         container: {
-            padding: '0 0 120px 0', // Bottom padding for "mentok" prevention
+            padding: '0 0 120px 0',
             color: 'white',
             fontFamily: 'Inter, sans-serif',
             display: 'flex',
             flexDirection: 'column'
-            // Removed height: 100% and overflowY: auto to let parent handle scrolling
         },
         createSection: {
             backgroundColor: '#1f2937',
@@ -267,7 +297,6 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         },
         rulesContainer: {
             padding: '20px',
-            // Removed fixed maxHeight to prevent nested scrollbars
             overflowY: 'visible'
         },
         ruleItem: {
@@ -331,6 +360,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
             transition: 'all 0.3s ease'
         })
     };
+
 
     const objectClasses = getDetectableClasses();
 
@@ -465,11 +495,21 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                         {rule.params.targetType === 'POINT' ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <select
+                                    style={{ ...styles.paramSelect, width: '90px', color: '#a855f7' }}
+                                    value={rule.params.targetTrackId || 'self'}
+                                    onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, targetTrackId: e.target.value } })}
+                                >
+                                    <option value="self">Self</option>
+                                    <option value="nearest">Nearest Other</option>
+                                    <option value="any">Any Other</option>
+                                    {[1, 2, 3, 4].map(id => <option key={id} value={id}>Track {id}</option>)}
+                                </select>
+                                <select
                                     style={styles.paramSelect}
                                     value={rule.params.jointB || ''}
                                     onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, jointB: e.target.value } })}
                                 >
-                                    <option value="">Target...</option>
+                                    <option value="">Target Joint...</option>
                                     {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
                                 </select>
                                 <button style={styles.skeletonBtn} onClick={() => openJointSelector(transitionId, rule.id, 'jointB')}>
@@ -491,6 +531,319 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                         )}
                     </div>
                 )}
+
+                {rule.type === 'POSE_VELOCITY' && (
+                    <div style={styles.paramRow}>
+                        <select
+                            style={styles.paramSelect}
+                            value={rule.params.joint}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, joint: e.target.value } })}
+                        >
+                            {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
+                        </select>
+                        <select
+                            style={{ ...styles.paramSelect, width: '60px' }}
+                            value={rule.params.operator}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
+                        >
+                            <option value="<">{'<'}</option>
+                            <option value=">">{'>'}</option>
+                        </select>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            <input
+                                type="number"
+                                style={styles.input}
+                                value={rule.params.value}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value: parseFloat(e.target.value) } })}
+                            />
+                            {renderLiveValue(rule)}
+                        </div>
+                    </div>
+                )}
+
+                {rule.type === 'HAND_PROXIMITY' && (
+                    <div style={styles.paramRow}>
+                        <select
+                            style={styles.paramSelect}
+                            value={rule.params.landmark || 8}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, landmark: parseInt(e.target.value) } })}
+                        >
+                            <option value={8}>Index Tip</option>
+                            <option value={4}>Thumb Tip</option>
+                            <option value={0}>Wrist</option>
+                        </select>
+                        <span style={{ color: '#4b5563' }}>distance to</span>
+                        <select
+                            style={styles.paramSelect}
+                            value={rule.params.bodyPart}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, bodyPart: e.target.value } })}
+                        >
+                            {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
+                        </select>
+                        <select
+                            style={{ ...styles.paramSelect, width: '60px' }}
+                            value={rule.params.operator || '<'}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
+                        >
+                            <option value="<">{'<'}</option>
+                            <option value=">">{'>'}</option>
+                        </select>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            <input
+                                type="number"
+                                step="0.01"
+                                style={styles.input}
+                                value={rule.params.distance || 0.1}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, distance: parseFloat(e.target.value) } })}
+                            />
+                            {renderLiveValue(rule)}
+                        </div>
+                    </div>
+                )}
+
+                {rule.type === 'OBJECT_PROXIMITY' && (
+                    <div style={styles.paramRow}>
+                        <select
+                            style={styles.paramSelect}
+                            value={rule.params.objectClass}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, objectClass: e.target.value } })}
+                        >
+                            <option value="">Select Object...</option>
+                            {objectClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select
+                            style={styles.paramSelect}
+                            value={rule.params.joint}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, joint: e.target.value } })}
+                        >
+                            {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
+                        </select>
+                        <select
+                            style={{ ...styles.paramSelect, width: '60px' }}
+                            value={rule.params.operator || '<'}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
+                        >
+                            <option value="<">{'<'}</option>
+                            <option value=">">{'>'}</option>
+                        </select>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            <input
+                                type="number"
+                                step="0.01"
+                                style={styles.input}
+                                value={rule.params.distance || 0.1}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, distance: parseFloat(e.target.value) } })}
+                            />
+                            {renderLiveValue(rule)}
+                        </div>
+                    </div>
+                )}
+
+                {rule.type === 'OBJECT_IN_ROI' && (
+                    <div style={styles.paramRow}>
+                        {rule.params.isCustomObject ? (
+                            <input
+                                style={{ ...styles.paramSelect, width: '140px', backgroundColor: '#374151', border: '1px solid #60a5fa' }}
+                                value={rule.params.objectClass || ''}
+                                placeholder="Custom Name..."
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, objectClass: e.target.value } })}
+                            />
+                        ) : (
+                            <select
+                                style={styles.paramSelect}
+                                value={rule.params.objectClass}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, objectClass: e.target.value } })}
+                            >
+                                <option value="">Select Object...</option>
+                                {objectClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        )}
+                        <button
+                            onClick={() => {
+                                const isCustom = rule.params.isCustomObject;
+                                handleUpdateRule(transitionId, rule.id, {
+                                    params: {
+                                        ...rule.params,
+                                        isCustomObject: !isCustom,
+                                        objectClass: ''
+                                    }
+                                });
+                            }}
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid #4b5563',
+                                color: rule.params.isCustomObject ? '#60a5fa' : '#9ca3af',
+                                borderRadius: '4px',
+                                padding: '4px 8px',
+                                cursor: 'pointer',
+                                marginLeft: '8px'
+                            }}
+                            title="Toggle Custom Name"
+                        >
+                            <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>✎</span>
+                        </button>
+
+                        <div style={{ fontSize: '0.85rem', color: '#9ca3af', marginLeft: '8px' }}>must be in</div>
+                        <select
+                            style={styles.paramSelect}
+                            value={rule.params.roiSource || 'STATE_ROI'}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, roiSource: e.target.value } })}
+                        >
+                            <option value="STATE_ROI">Current State ROI</option>
+                        </select>
+                    </div>
+                )}
+
+                {rule.type === 'OPERATOR_PROXIMITY' && (
+                    <div style={styles.paramRow}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <select
+                                style={styles.paramSelect}
+                                value={rule.params.joint}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, joint: e.target.value } })}
+                            >
+                                {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
+                            </select>
+                            <button style={styles.skeletonBtn} onClick={() => openJointSelector(transitionId, rule.id, 'joint')}>
+                                <MousePointer2 size={14} />
+                            </button>
+                        </div>
+                        <span style={{ color: '#4b5563' }}>distance to</span>
+                        <select
+                            style={{ ...styles.paramSelect, width: '120px', color: '#a855f7' }}
+                            value={rule.params.targetTrackId || 'nearest'}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, targetTrackId: e.target.value } })}
+                        >
+                            <option value="nearest">Nearest Other</option>
+                            <option value="any">Any Other</option>
+                            {[1, 2, 3, 4].map(id => <option key={id} value={id}>Track {id}</option>)}
+                        </select>
+                        <select
+                            style={{ ...styles.paramSelect, width: '60px' }}
+                            value={rule.params.operator || '<'}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
+                        >
+                            <option value="<">{'<'}</option>
+                            <option value=">">{'>'}</option>
+                        </select>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                            <input
+                                type="number"
+                                step="0.05"
+                                style={styles.input}
+                                value={rule.params.distance || 0.2}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, distance: parseFloat(e.target.value) } })}
+                            />
+                            {renderLiveValue(rule)}
+                        </div>
+                        <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>units</span>
+                    </div>
+                )}
+
+                {rule.type === 'POSE_MATCHING' && (
+                    <div style={styles.paramRow}>
+                        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Match against state:</span>
+                        <select
+                            style={styles.paramSelect}
+                            value={rule.params.targetStateId}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, targetStateId: e.target.value } })}
+                        >
+                            <option value="">Select State...</option>
+                            {states.filter(s => s.id !== 's_start').map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                        <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Threshold:</span>
+                        <input
+                            type="number"
+                            step="0.01"
+                            style={styles.input}
+                            value={rule.params.threshold || 0.8}
+                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, threshold: parseFloat(e.target.value) } })}
+                        />
+                    </div>
+                )}
+
+                {/* ADVANCED SCRIPT UI */}
+                {rule.type === 'ADVANCED_SCRIPT' && (
+                    <div style={{ ...styles.paramRow, flexDirection: 'column', alignItems: 'flex-start', gap: '12px', width: '100%' }}>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                            <ScriptAutoComplete
+                                style={{
+                                    width: '100%',
+                                    minHeight: '80px',
+                                    backgroundColor: '#1f2937',
+                                    border: '1px solid #4b5563',
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    color: '#60a5fa',
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.85rem',
+                                    outline: 'none',
+                                    resize: 'vertical'
+                                }}
+                                placeholder="Example: right_wrist.y < nose.y AND dist(right_wrist, left_wrist) > 0.3"
+                                value={rule.params.script || ''}
+                                onChange={(val) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, script: val } })}
+                            />
+                            {renderLiveValue(rule)}
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                            <button
+                                onClick={() => onAiValidateScript && onAiValidateScript(transitionId, rule.id, rule.params.script)}
+                                style={{
+                                    flex: 1,
+                                    padding: '8px',
+                                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                                    color: '#a855f7',
+                                    border: '1px solid #a855f7',
+                                    borderRadius: '8px',
+                                    fontSize: '0.8rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                {aiLoading[transitionId] ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                                AI Logic Check
+                            </button>
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#6b7280', fontStyle: 'italic' }}>
+                            Tips: Use joint.x/y/z, dist(A, B), or angle(A, B, C). Logical: AND, OR, NOT.
+                        </div>
+                    </div>
+                )}
+
+                {/* Occlusion Tolerance Toggle */}
+                <div style={{
+                    marginTop: '12px',
+                    paddingTop: '12px',
+                    borderTop: '1px solid #374151',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                }}>
+                    <label style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Sparkles size={14} color={rule.params.trustPersistent !== false ? '#eab308' : '#6b7280'} />
+                        Prediction Tolerance (Kinematic)
+                    </label>
+                    <button
+                        onClick={() => handleUpdateRule(transitionId, rule.id, {
+                            params: { ...rule.params, trustPersistent: !(rule.params.trustPersistent !== false) }
+                        })}
+                        style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.7rem',
+                            backgroundColor: rule.params.trustPersistent !== false ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                            border: `1px solid ${rule.params.trustPersistent !== false ? '#10b981' : '#ef4444'}`,
+                            color: rule.params.trustPersistent !== false ? '#10b981' : '#ef4444',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        {rule.params.trustPersistent !== false ? 'Resilient (Trust Prediction)' : 'Strict (Live Only)'}
+                    </button>
+                </div>
             </div>
         );
     };
@@ -569,7 +922,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             </div>
 
                             <div style={styles.rulesContainer} className="custom-scrollbar">
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px dashed #374151' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid #374151', borderStyle: 'none none dashed none' }}>
                                     <span style={{ fontSize: '0.85rem', color: '#eab308', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                         <Activity size={14} /> Hysteresis (Hold Time):
                                     </span>
@@ -586,18 +939,24 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                     <span style={{ fontSize: '0.85rem', color: '#6b7280' }}>seconds</span>
                                 </div>
 
-                                <div style={{ marginBottom: '10px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                <div style={{ marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                                         <h4 style={{ margin: 0, color: '#9ca3af', fontSize: '0.85rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Conditions</h4>
                                     </div>
 
                                     {transition.condition.rules.map((rule, idx) => (
-                                        <div key={rule.id || idx} style={styles.ruleItem}>
+                                        <div key={rule.id || idx} style={{ ...styles.ruleItem, borderColor: rule.aiGenerated ? '#a855f7' : '#374151' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', borderBottom: '1px solid #374151', paddingBottom: '8px' }}>
-                                                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                    Rule #{idx + 1}
+                                                <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: rule.aiGenerated ? '#a855f7' : '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    {rule.aiGenerated ? <Sparkles size={14} /> : null}
+                                                    Rule #{idx + 1} {rule.aiGenerated ? '(AI)' : ''}
                                                 </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    {rule.aiReasoning && (
+                                                        <div title={rule.aiReasoning} style={{ cursor: 'help', color: '#a855f7' }}>
+                                                            <Info size={14} />
+                                                        </div>
+                                                    )}
                                                     <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#9ca3af', cursor: 'pointer' }}>
                                                         <input
                                                             type="checkbox"
@@ -607,6 +966,13 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                                         />
                                                         Invert (NOT)
                                                     </label>
+                                                    <button
+                                                        style={{ background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer' }}
+                                                        onClick={() => handleDuplicateRule(transition.id, rule.id)}
+                                                        title="Duplicate Rule"
+                                                    >
+                                                        <Copy size={14} />
+                                                    </button>
                                                     <button
                                                         style={{ background: 'transparent', border: 'none', color: '#4b5563', cursor: 'pointer' }}
                                                         onClick={() => handleDeleteRule(transition.id, rule.id)}
@@ -622,9 +988,8 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                     <button
                                         onClick={() => handleAddRule(transition.id)}
                                         style={{
-                                            width: '100%',
+                                            flex: 1,
                                             padding: '12px',
-                                            marginTop: '8px',
                                             background: 'rgba(37, 99, 235, 0.05)',
                                             color: '#60a5fa',
                                             border: '1px dashed #2563eb',
@@ -640,6 +1005,35 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                         }}
                                     >
                                         <Plus size={16} /> Add Rule Condition
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleAiSuggest(transition.id)}
+                                        disabled={aiLoading[transition.id]}
+                                        style={{
+                                            flex: 1,
+                                            padding: '12px',
+                                            background: 'rgba(168, 85, 247, 0.05)',
+                                            color: '#a855f7',
+                                            border: '1px dashed #a855f7',
+                                            borderRadius: '12px',
+                                            cursor: aiLoading[transition.id] ? 'not-allowed' : 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '8px',
+                                            fontSize: '0.85rem',
+                                            fontWeight: '600',
+                                            transition: 'all 0.2s',
+                                            opacity: aiLoading[transition.id] ? 0.6 : 1
+                                        }}
+                                    >
+                                        {aiLoading[transition.id] ? (
+                                            <Loader2 size={16} className="animate-spin" />
+                                        ) : (
+                                            <Sparkles size={16} />
+                                        )}
+                                        {aiLoading[transition.id] ? 'AI Berpikir...' : 'AI Suggest Rule'}
                                     </button>
                                 </div>
                             </div>

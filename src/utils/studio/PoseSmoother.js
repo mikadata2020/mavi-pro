@@ -6,63 +6,143 @@
 
 class PoseSmoother {
     constructor(alpha = 0.5) {
-        this.alpha = alpha; // Smoothing factor (0 < alpha <= 1). Lower = smoother but more lag.
-        this.prevKeypoints = null; // Store previous frame's smoothed keypoints
+        this.alpha = alpha;
+        this.prevKeypoints = null;
+        this.velocities = {}; // Track velocity (dx, dy) for each joint
+        this.persistence = {}; // Track missing frames
+        this.maxPersistence = 20; // Hold point for ~0.7s at 30fps
+        this.decayFactor = 0.92;  // Score decay
+        this.friction = 0.8;      // Velocity friction (slow down extrapolation)
+
+        // Anatomical Constraints (Parent -> Child mapping with max length ratios)
+        // Values are normalized distance multipliers based on reference frames
+        this.topology = {
+            'left_elbow': 'left_shoulder',
+            'left_wrist': 'left_elbow',
+            'right_elbow': 'right_shoulder',
+            'right_wrist': 'right_elbow',
+            'left_knee': 'left_hip',
+            'left_ankle': 'left_knee',
+            'right_knee': 'right_hip',
+            'right_ankle': 'right_knee'
+        };
+        this.boneLengths = {}; // Adaptive bone lengths calculated during high-confidence frames
     }
 
     /**
-     * Smooths the incoming keypoints using EMA.
-     * @param {Array} keypoints - Array of keypoint objects {x, y, z, score, name}
-     * @returns {Array} - Smoothed keypoints
+     * Smooths the incoming keypoints using EMA and handles occlusions with Kinematic Prediction.
      */
     smooth(keypoints) {
         if (!keypoints || keypoints.length === 0) return keypoints;
 
-        // If first frame, just store it and return
         if (!this.prevKeypoints) {
-            this.prevKeypoints = keypoints.map(k => ({ ...k })); // Deep copy
+            this.prevKeypoints = keypoints.map(k => ({ ...k }));
             return keypoints;
         }
 
+        // 1. Calculate/Update Adaptive Bone Lengths for Constraints
+        this.updateAnatomicalFidelity(keypoints);
+
         const smoothedKeypoints = keypoints.map((currentKp, index) => {
+            const name = currentKp.name;
             const prevKp = this.prevKeypoints[index];
 
-            // If keypoint tracking was lost or switched, or names don't match, reset for this point
-            if (!prevKp || prevKp.name !== currentKp.name) {
+            if (this.persistence[name] === undefined) this.persistence[name] = 0;
+            if (this.velocities[name] === undefined) this.velocities[name] = { dx: 0, dy: 0 };
+
+            // OCCLUSION LOGIC: Kinematic Prediction
+            if (currentKp.score < 0.25 && prevKp) {
+                this.persistence[name]++;
+
+                if (this.persistence[name] <= this.maxPersistence) {
+                    // PREDICT Position: LastPos + (Velocity * Friction)
+                    const vel = this.velocities[name];
+                    let nextX = prevKp.x + (vel.dx * this.friction);
+                    let nextY = prevKp.y + (vel.dy * this.friction);
+
+                    // Apply Anatomical Leashing (Constraint)
+                    const parentName = this.topology[name];
+                    if (parentName) {
+                        const parent = this.prevKeypoints.find(k => k.name === parentName);
+                        const maxLen = this.boneLengths[name];
+                        if (parent && maxLen) {
+                            const dx = nextX - parent.x;
+                            const dy = nextY - parent.y;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist > maxLen * 1.2) { // 20% slack
+                                const scale = (maxLen * 1.2) / dist;
+                                nextX = parent.x + (dx * scale);
+                                nextY = parent.y + (dy * scale);
+                            }
+                        }
+                    }
+
+                    // Decay velocity for next frame
+                    this.velocities[name] = { dx: vel.dx * this.friction, dy: vel.dy * this.friction };
+
+                    return {
+                        ...prevKp,
+                        x: nextX,
+                        y: nextY,
+                        score: prevKp.score * this.decayFactor,
+                        isPredicted: true
+                    };
+                }
                 return { ...currentKp };
             }
 
-            // Apply EMA: Smoothed = alpha * Current + (1 - alpha) * Previous
-            // We smooth x, y, and z. Score is usually left as is or smoothed lightly.
-            // Here we smooth x, y, z.
+            // POINT VISIBLE: Update Velocity and Position
+            this.persistence[name] = 0;
+
+            const dx = currentKp.x - prevKp.x;
+            const dy = currentKp.y - prevKp.y;
+            // Smooth velocity too
+            this.velocities[name] = {
+                dx: this.alpha * dx + (1 - this.alpha) * (this.velocities[name].dx || 0),
+                dy: this.alpha * dy + (1 - this.alpha) * (this.velocities[name].dy || 0)
+            };
+
+            // Standard EMA Smoothing
             const smoothX = this.alpha * currentKp.x + (1 - this.alpha) * prevKp.x;
             const smoothY = this.alpha * currentKp.y + (1 - this.alpha) * prevKp.y;
-
-            // Handle z if it exists (3D)
-            let smoothZ = currentKp.z;
-            if (currentKp.z !== undefined && prevKp.z !== undefined) {
-                smoothZ = this.alpha * currentKp.z + (1 - this.alpha) * prevKp.z;
-            }
 
             return {
                 ...currentKp,
                 x: smoothX,
                 y: smoothY,
-                z: smoothZ,
-                score: currentKp.score // Keep original confidence score
+                score: currentKp.score,
+                isPredicted: false
             };
         });
 
-        // Update history
         this.prevKeypoints = smoothedKeypoints;
         return smoothedKeypoints;
     }
 
     /**
-     * Resets the smoother history (e.g., when changing video source or model)
+     * Updates recorded bone lengths when both parent and child are visible.
+     * Used for clamping predictions to realistic distances.
      */
+    updateAnatomicalFidelity(keypoints) {
+        Object.entries(this.topology).forEach(([child, parent]) => {
+            const kpChild = keypoints.find(k => k.name === child);
+            const kpParent = keypoints.find(k => k.name === parent);
+
+            if (kpChild && kpParent && kpChild.score > 0.6 && kpParent.score > 0.6) {
+                const dist = Math.sqrt(Math.pow(kpChild.x - kpParent.x, 2) + Math.pow(kpChild.y - kpParent.y, 2));
+                // EMA for bone length to handle perspective changes
+                this.boneLengths[child] = this.boneLengths[child]
+                    ? 0.1 * dist + 0.9 * this.boneLengths[child]
+                    : dist;
+            }
+        });
+    }
+
     reset() {
         this.prevKeypoints = null;
+        this.velocities = {};
+        this.persistence = {};
+        this.boneLengths = {};
     }
 
     /**
