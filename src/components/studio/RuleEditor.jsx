@@ -6,7 +6,7 @@ import JointSelector from './JointSelector';
 import ScriptAutoComplete from './ScriptAutoComplete';
 import { Sparkles, Loader2 } from 'lucide-react';
 
-const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript }) => {
+const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript, tmModels = [] }) => {
     const [fromState, setFromState] = useState('');
     const [toState, setToState] = useState('');
     const [showSelector, setShowSelector] = useState(false);
@@ -148,6 +148,10 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                         return a[params.component || 'y'];
                     }
                 }
+                case 'TEACHABLE_MACHINE': {
+                    // This will be populated by the inference loop in ModelBuilder
+                    return rule.lastValue || null;
+                }
                 default: return null;
             }
         } catch (e) { return null; }
@@ -174,6 +178,10 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                 default: return false;
             }
         }
+        if (rule.type === 'TEACHABLE_MACHINE') {
+            if (!val) return null;
+            return val.className === params.targetClass && val.probability >= params.threshold;
+        }
         return null;
     };
 
@@ -189,6 +197,10 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
             suffix = '°';
         } else if (rule.type === 'POSE_RELATION') {
             displayVal = val.toFixed(2);
+            suffix = '';
+        } else if (rule.type === 'TEACHABLE_MACHINE') {
+            if (!val) return null;
+            displayVal = `${val.className} (${(val.probability * 100).toFixed(0)}%)`;
             suffix = '';
         }
 
@@ -759,6 +771,44 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             value={rule.params.threshold || 0.8}
                             onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, threshold: parseFloat(e.target.value) } })}
                         />
+                    </div>
+                )}
+
+                {rule.type === 'TEACHABLE_MACHINE' && (
+                    <div style={{ ...styles.paramRow, flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Model:</span>
+                            <select
+                                style={styles.paramSelect}
+                                value={rule.params.modelId || ''}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, modelId: e.target.value } })}
+                            >
+                                <option value="">Any (Default)</option>
+                                {tmModels.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Target Class:</span>
+                            <input
+                                type="text"
+                                style={{ ...styles.input, width: '120px' }}
+                                placeholder="e.g. Working"
+                                value={rule.params.targetClass || ''}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, targetClass: e.target.value } })}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Threshold:</span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                style={{ ...styles.input, width: '60px' }}
+                                value={rule.params.threshold || 0.8}
+                                onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, threshold: parseFloat(e.target.value) } })}
+                            />
+                        </div>
                     </div>
                 )}
 

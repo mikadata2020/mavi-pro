@@ -800,6 +800,23 @@ const MaviClass = () => {
                 },
                 {
                     id: 'sm-5',
+                    title: 'Teachable Machine Studio',
+                    type: 'hands-on',
+                    duration: '5 min',
+                    content: {
+                        description: 'Pelajari cara menggunakan TM Studio untuk membuat dataset video dan menguji model custom Anda.',
+                        keyPoints: [
+                            'Gunakan Video Slicer untuk memotong video panjang menjadi klip latihan',
+                            'Download klip dan upload ke Google Teachable Machine',
+                            'Paste URL model yang sudah di-deploy ke TM Studio',
+                            'Gunakan model tersebut di Studio Model untuk rules yang lebih kompleks'
+                        ],
+                        tryIt: '/teachable-machine',
+                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                    }
+                },
+                {
+                    id: 'sm-6',
                     title: 'Test Mode & Validation',
                     type: 'hands-on',
                     duration: '5 min',

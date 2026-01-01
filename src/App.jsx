@@ -55,6 +55,7 @@ const LandingPage = React.lazy(() => import('./components/LandingPage'));
 const CycleSegmentation = React.lazy(() => import('./components/CycleSegmentation'));
 const ValueStreamMap = React.lazy(() => import('./components/ValueStreamMap'));
 const AIProcessWorkspace = React.lazy(() => import('./components/AIProcessWorkspace'));
+const TeachableMachineStudio = React.lazy(() => import('./components/TeachableMachineStudio'));
 
 const RealtimeCompliance = React.lazy(() => import('./components/RealtimeCompliance'));
 const StudioModel = React.lazy(() => import('./components/studio/StudioModel'));
@@ -540,7 +541,10 @@ function AppContent() {
               <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
 
               {/* AI Process Studio */}
-              <Route path="/ai-process" element={<div style={{ overflow: 'hidden', height: '100%' }}><AIProcessWorkspace measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} onVideoChange={setVideoSrc} videoName={videoName} onVideoNameChange={setVideoName} /></div>} />
+              <Route path="/ai-process" element={<AIProcessWorkspace measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} onVideoChange={setVideoSrc} videoName={videoName} onVideoNameChange={setVideoName} />} />
+
+              {/* Teachable Machine Studio */}
+              <Route path="/teachable-machine" element={<TeachableMachineStudio videoSrc={videoSrc} />} />
 
               {/* Real-time Compliance */}
               <Route path="/realtime-compliance" element={<RealtimeCompliance projectName={currentProject?.name} />} />

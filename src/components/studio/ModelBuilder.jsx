@@ -11,12 +11,14 @@ import InferenceEngine from '../../utils/studio/InferenceEngine';
 import { generateAiRuleFromImage, validateAiRuleScript } from '../../utils/aiGenerator';
 import useHistory from '../../hooks/useHistory';
 import { MODEL_TEMPLATES } from '../../utils/studio/ModelTemplates';
+import tmDetector from '../../utils/teachableMachineDetector';
 
 const ModelBuilder = ({ model, onClose, onSave }) => {
     const [currentModel, setCurrentModel, undoModel, redoModel, canUndoModel, canRedoModel] = useHistory({
         ...model,
         states: model.statesList || [{ id: 's_start', name: 'Start' }],
-        transitions: model.transitions || []
+        transitions: model.transitions || [],
+        tmModels: model.tmModels || (model.tmModelUrl ? [{ id: 'default', name: 'Main Model', url: model.tmModelUrl, type: model.tmModelType || 'image' }] : [])
     });
     const [showHelp, setShowHelp] = useState(false);
 
@@ -67,6 +69,9 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const [timelineData, setTimelineData] = useState([]);
     const [currentTestState, setCurrentTestState] = useState(null);
     const [cycleStats, setCycleStats] = useState(null);
+    const [tmPredictions, setTmPredictions] = useState({}); // { [modelId]: prediction }
+    const [tmLoadingStates, setTmLoadingStates] = useState({}); // { [modelId]: boolean }
+    const [tmFiles, setTmFiles] = useState({}); // { [modelId]: { model, weights, metadata } }
 
     // MEASUREMENT TOOL STATES
     const [measurementMode, setMeasurementMode] = useState(null); // 'distance' | 'angle' | null
@@ -262,6 +267,33 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         preloadDetector();
     }, [videoSrc]);
 
+    // Multiple Teachable Machine Models Loading
+    useEffect(() => {
+        const models = currentModel.tmModels || [];
+        models.forEach(async (m) => {
+            if (m.url || (tmFiles[m.id]?.model && tmFiles[m.id]?.weights && tmFiles[m.id]?.metadata)) {
+                setTmLoadingStates(prev => ({ ...prev, [m.id]: true }));
+                try {
+                    const source = m.url || tmFiles[m.id];
+                    await tmDetector.loadModel(m.id, source, m.type || 'image');
+                    console.log(`🟢 TM Model [${m.id}] Ready`);
+                } catch (e) {
+                    console.error(`Failed to load TM model [${m.id}]:`, e);
+                } finally {
+                    setTmLoadingStates(prev => ({ ...prev, [m.id]: false }));
+                }
+            }
+        });
+
+        // Unload models no longer in the list
+        const modelIds = models.map(m => m.id);
+        tmDetector.models.forEach((val, key) => {
+            if (!modelIds.includes(key)) {
+                tmDetector.unloadModel(key);
+            }
+        });
+    }, [currentModel.tmModels, tmFiles]);
+
     // Detect pose immediately when video metadata is loaded
     useEffect(() => {
         if (!videoSrc || !detectorReady) return;
@@ -332,8 +364,21 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             console.log("Test Engine Started with Model:", currentModel.name);
                         }
 
+                        // Run Teachable Machine Inference
+                        let currentTmPredictions = {};
+                        if (currentModel.tmModels && currentModel.tmModels.length > 0) {
+                            currentTmPredictions = await tmDetector.predictAll(videoRef.current);
+                            setTmPredictions(currentTmPredictions);
+                        }
+
                         // Run Engine with all poses
-                        engineRef.current.processFrame(smoothedPoses, [], videoRef.current.currentTime);
+                        engineRef.current.processFrame({
+                            poses: smoothedPoses,
+                            objects: [],
+                            hands: [],
+                            timestamp: videoRef.current.currentTime,
+                            teachableMachine: currentTmPredictions
+                        });
 
                         // Update UI
                         const logs = engineRef.current.getLogs();
@@ -360,6 +405,17 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         const primaryTrack = engineRef.current.activeTracks.get(1) || engineRef.current.activeTracks.values().next().value;
                         if (primaryTrack) {
                             setCurrentTestState(primaryTrack.currentState);
+
+                            // Sync TM results back to rules for live UI indicator
+                            if (currentTmPrediction) {
+                                currentModel.transitions.forEach(t => {
+                                    t.condition.rules.forEach(r => {
+                                        if (r.type === 'TEACHABLE_MACHINE') {
+                                            r.lastValue = currentTmPrediction;
+                                        }
+                                    });
+                                });
+                            }
                         }
                     }
                 }
@@ -1239,6 +1295,67 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             }
         };
         reader.readAsText(file);
+    };
+
+    const handleTmFileUpload = (e, modelId, fileType) => {
+        const file = e.target.files[0];
+        if (file) {
+            setTmFiles(prev => ({
+                ...prev,
+                [modelId]: { ...prev[modelId], [fileType]: file }
+            }));
+        }
+    };
+
+    const handleLoadTmFromFiles = async (modelId) => {
+        const files = tmFiles[modelId];
+        if (!files || !files.model || !files.weights || !files.metadata) {
+            alert("Please upload all 3 required files: model.json, weights.bin, and metadata.json");
+            return;
+        }
+
+        const model = currentModel.tmModels.find(m => m.id === modelId);
+        if (!model) return;
+
+        setTmLoadingStates(prev => ({ ...prev, [modelId]: true }));
+        try {
+            await tmDetector.loadModel(modelId, files, model.type || 'image');
+            alert("✅ Local Model Loaded Successfully!");
+        } catch (e) {
+            console.error("Failed to load local TM model:", e);
+            alert("❌ Failed to load local model: " + e.message);
+        } finally {
+            setTmLoadingStates(prev => ({ ...prev, [modelId]: false }));
+        }
+    };
+
+    const handleAddTmModel = () => {
+        const newModel = {
+            id: `tm_${Date.now()}`,
+            name: `New TM Model ${currentModel.tmModels.length + 1}`,
+            url: '',
+            type: 'image'
+        };
+        setCurrentModel(prev => ({
+            ...prev,
+            tmModels: [...(prev.tmModels || []), newModel]
+        }));
+    };
+
+    const handleRemoveTmModel = (id) => {
+        setCurrentModel(prev => ({
+            ...prev,
+            tmModels: prev.tmModels.filter(m => m.id !== id)
+        }));
+        // Clean up from detector
+        tmDetector.unloadModel(id);
+    };
+
+    const handleUpdateTmModel = (id, updates) => {
+        setCurrentModel(prev => ({
+            ...prev,
+            tmModels: prev.tmModels.map(m => m.id === id ? { ...m, ...updates } : m)
+        }));
     };
 
     const handleLoadTemplate = (templateId) => {
@@ -2346,6 +2463,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 activePose={activePose}
                                 onAiSuggest={handleAiSuggestRule}
                                 onAiValidateScript={handleAiValidateScript}
+                                tmModels={currentModel.tmModels}
                             />
                         )}
 
@@ -2560,6 +2678,114 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                         <strong>Body-Centric</strong> is recommended for precision. It remains accurate even if the operator moves around or the camera shifts.
                                         (0,0) is the center of the hips.
                                     </p>
+                                </div>
+
+                                {/* TEACHABLE MACHINE CONFIGURATION */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Layers size={18} color="#10b981" /> Teachable Machine Models
+                                        </div>
+                                        <button
+                                            onClick={handleAddTmModel}
+                                            style={{ padding: '6px 12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                        >
+                                            <Plus size={14} /> Add Model
+                                        </button>
+                                    </h4>
+
+                                    {(currentModel.tmModels || []).map((m, idx) => (
+                                        <div key={m.id} style={{ marginBottom: idx === currentModel.tmModels.length - 1 ? 0 : '16px', padding: '12px', background: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                                <input
+                                                    type="text"
+                                                    value={m.name}
+                                                    onChange={(e) => handleUpdateTmModel(m.id, { name: e.target.value })}
+                                                    style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #4b5563', color: 'white', fontSize: '0.9rem', width: '200px', fontWeight: 'bold', outline: 'none' }}
+                                                />
+                                                <button
+                                                    onClick={() => handleRemoveTmModel(m.id)}
+                                                    style={{ padding: '4px', background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+
+                                            <div style={{ marginBottom: '12px' }}>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Model URL</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="https://teachablemachine.../models/[MODEL_ID]/"
+                                                    value={m.url || ''}
+                                                    onChange={(e) => {
+                                                        let url = e.target.value;
+                                                        if (url && !url.endsWith('/')) url += '/';
+                                                        handleUpdateTmModel(m.id, { url });
+                                                    }}
+                                                    style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                />
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                                    <input
+                                                        type="radio"
+                                                        name={`tmType_${m.id}`}
+                                                        value="image"
+                                                        checked={m.type !== 'pose'}
+                                                        onChange={() => handleUpdateTmModel(m.id, { type: 'image' })}
+                                                    />
+                                                    <span>Image</span>
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                                    <input
+                                                        type="radio"
+                                                        name={`tmType_${m.id}`}
+                                                        value="pose"
+                                                        checked={m.type === 'pose'}
+                                                        onChange={() => handleUpdateTmModel(m.id, { type: 'pose' })}
+                                                    />
+                                                    <span>Pose</span>
+                                                </label>
+                                            </div>
+
+                                            {tmLoadingStates[m.id] && (
+                                                <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginBottom: '8px' }}>
+                                                    <RotateCw size={12} className="animate-spin" /> Loading Model...
+                                                </div>
+                                            )}
+
+                                            <div style={{ padding: '10px', background: '#111827', borderRadius: '6px', border: '1px dashed #374151' }}>
+                                                <p style={{ margin: '0 0 8px', fontSize: '0.75rem', color: '#6b7280' }}>Offline Mode: Upload Files</p>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                                    <input type="file" accept=".json" onChange={(e) => handleTmFileUpload(e, m.id, 'model')} style={{ fontSize: '0.65rem' }} />
+                                                    <input type="file" accept=".bin" onChange={(e) => handleTmFileUpload(e, m.id, 'weights')} style={{ fontSize: '0.65rem' }} />
+                                                    <input type="file" accept=".json" onChange={(e) => handleTmFileUpload(e, m.id, 'metadata')} style={{ fontSize: '0.65rem' }} />
+                                                </div>
+                                                <button
+                                                    onClick={() => handleLoadTmFromFiles(m.id)}
+                                                    style={{ marginTop: '8px', width: '100%', padding: '4px', fontSize: '0.75rem', background: '#374151', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' }}
+                                                >
+                                                    Load Files
+                                                </button>
+                                            </div>
+
+                                            {tmPredictions[m.id] && (
+                                                <div style={{ marginTop: '8px', padding: '8px', backgroundColor: 'rgba(16, 185, 129, 0.05)', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                                        <span style={{ fontWeight: 'bold', color: '#10b981' }}>{tmPredictions[m.id].className}</span>
+                                                        <span style={{ color: '#9ca3af' }}>{(tmPredictions[m.id].probability * 100).toFixed(0)}%</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {(!currentModel.tmModels || currentModel.tmModels.length === 0) && (
+                                        <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '0.85rem' }}>
+                                            No Teachable Machine models configured.
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* PORTABILITY SECTION */}

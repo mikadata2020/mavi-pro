@@ -146,7 +146,7 @@ class InferenceEngine {
             if (!track.transitionCandidates) track.transitionCandidates = {};
 
             for (const transition of possibleTransitions) {
-                if (this.evaluateCondition(transition.condition, pose, objects, hands, track, allTracks)) {
+                if (this.evaluateCondition(transition.condition, pose, objects, hands, track, allTracks, data)) {
                     const holdTime = (transition.condition.holdTime || 0);
 
                     if (holdTime > 0) {
@@ -280,20 +280,20 @@ class InferenceEngine {
         return checkPoint(rightWrist) || checkPoint(leftWrist);
     }
 
-    evaluateCondition(condition, pose, objects, hands, track, allTracks) {
+    evaluateCondition(condition, pose, objects, hands, track, allTracks, data = {}) {
         if (!condition || !condition.rules || condition.rules.length === 0) return false;
         const operator = condition.operator || 'AND';
         const evaluateItem = (item) => {
             let result = (item.rules && item.rules.length > 0)
-                ? this.evaluateCondition(item, pose, objects, hands, track, allTracks)
-                : this.checkRule(item, pose, objects, hands, track, allTracks);
+                ? this.evaluateCondition(item, pose, objects, hands, track, allTracks, data)
+                : this.checkRule(item, pose, objects, hands, track, allTracks, data);
             return item.invert ? !result : result;
         };
 
         return operator === 'OR' ? condition.rules.some(evaluateItem) : condition.rules.every(evaluateItem);
     }
 
-    checkRule(rule, pose, objects, hands, track, allTracks) {
+    checkRule(rule, pose, objects, hands, track, allTracks, data = {}) {
         const { type, params } = rule;
 
         // --- PREDICTION SENSITIVITY ---
@@ -326,9 +326,28 @@ class InferenceEngine {
             case 'OBJECT_PROXIMITY': return this.checkObjectProximity(params, objects, pose);
             case 'OBJECT_IN_ROI': return this.checkObjectInROI(params, objects);
             case 'OPERATOR_PROXIMITY': return this.checkOperatorProximity(params, pose, allTracks, track.id);
-            case 'ADVANCED_SCRIPT': return RuleScriptParser.evaluate(params.script, { pose, objects, hands, allTracks });
+            case 'TEACHABLE_MACHINE': return this.checkTeachableMachine(params, data.teachableMachine);
+            case 'ADVANCED_SCRIPT': return RuleScriptParser.evaluate(params.script, { pose, objects, hands, allTracks, tm: data.teachableMachine });
             default: return false;
         }
+    }
+
+    checkTeachableMachine(params, tmData) {
+        if (!tmData) return false;
+
+        const { modelId, targetClass, threshold = 0.8 } = params;
+
+        // If no modelId is specified, check all available predictions
+        if (!modelId) {
+            return Object.values(tmData).some(pred =>
+                pred && pred.className === targetClass && pred.probability >= threshold
+            );
+        }
+
+        const prediction = tmData[modelId];
+        if (!prediction) return false;
+
+        return prediction.className === targetClass && prediction.probability >= threshold;
     }
 
     checkOperatorProximity(params, pose, allTracks, currentTrackId) {

@@ -252,5 +252,38 @@ export const helpContent = {
                 </ul>
             </>
         )
+    },
+    'teachable-machine': {
+        title: '🤖 Teachable Machine Studio - Help',
+        content: (
+            <>
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>📌 Fungsi</h3>
+                <p>Pusat pengelolaan model AI kustom dan pembuatan data latihan untuk Google Teachable Machine.</p>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>✂️ Video Slicer (Buat Dataset)</h3>
+                <ol>
+                    <li>Upload video proses kerja</li>
+                    <li>Gunakan slider <strong>Start</strong> dan <strong>End</strong> untuk menandai gerakan spesifik (misal: saat operator menyolder)</li>
+                    <li>Klik <strong>Capture Clip</strong> untuk merekam potongan tersebut</li>
+                    <li>Download klip dari gallery. Gunakan klip ini sebagai contoh di situs Teachable Machine</li>
+                </ol>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🚀 Load & Test Model</h3>
+                <ol>
+                    <li>Setelah melatih model di Teachable Machine, klik <strong>Export Model</strong> &rarr; <strong>Update my cloud model</strong></li>
+                    <li>Copy URL yang muncul (link <code>https://teachablemachine...</code>)</li>
+                    <li>Kembali ke MAVi, pilih tipe (Pose/Image) dan paste URL tersebut</li>
+                    <li>Klik <strong>Load Model</strong></li>
+                    <li>Klik <strong>Start Test</strong> untuk melihat prediksi AI secara real-time pada video</li>
+                </ol>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>💡 Tips</h3>
+                <ul>
+                    <li>Pastikan klip video fokus pada satu gerakan saja</li>
+                    <li>Minimal 20-30 klip per kategori gerak untuk akurasi tinggi</li>
+                    <li>Model yang sudah diload bisa langsung dipakai di <strong>Studio Model</strong> sebagai Rule</li>
+                </ul>
+            </>
+        )
     }
 };

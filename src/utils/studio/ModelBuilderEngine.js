@@ -6,6 +6,7 @@ export const RULE_TYPES = {
     OBJECT_IN_ROI: { label: 'Object in ROI', description: 'Check if an object is within a specified region' },
     OPERATOR_PROXIMITY: { label: 'Operator Proximity', description: 'Distance to another person' },
     POSE_MATCHING: { label: 'Golden Pose Match', description: 'Similarity to reference pose' },
+    TEACHABLE_MACHINE: { label: 'Teachable Machine', description: 'Custom classification model (Image or Pose)' },
     ADVANCED_SCRIPT: { label: 'Advanced Script (DSL)', description: 'Write custom logic in text (e.g. hand.y < eye.y)' }
 };
 

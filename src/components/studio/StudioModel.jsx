@@ -162,6 +162,11 @@ const StudioModel = () => {
                                 <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Logika custom (DSL).</p>
                                 <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Skenario rumit (Logika AND/OR).</p>
                             </div>
+                            <div style={{ padding: '8px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '6px' }}>
+                                <strong style={{ color: '#10b981' }}>Teachable Machine</strong>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#d1d5db' }}>Klasifikasi AI kustom.</p>
+                                <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '2px' }}>*Guna: Deteksi aktivitas kompleks (e.g. "Working", "Phone Use").</p>
+                            </div>
                         </div>
                     </div>
 
@@ -249,6 +254,25 @@ const StudioModel = () => {
                         </ol>
                     </div>
 
+                    <h4 style={{ color: '#10b981', marginBottom: '8px', marginTop: '20px' }}>8. 🤖 Integrasi Teachable Machine (AI Kustom)</h4>
+                    <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', fontSize: '0.85rem' }}>
+                        <p style={{ margin: '0 0 10px 0' }}>Gunakan model klasifikasi kustom dari <a href="https://teachablemachine.withgoogle.com/" target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>Teachable Machine</a>.</p>
+
+                        <div style={{ marginBottom: '12px' }}>
+                            <strong style={{ color: 'white' }}>A. Cara Menghubungkan:</strong>
+                            <ol style={{ paddingLeft: '20px', color: '#d1d5db', marginTop: '4px' }}>
+                                <li>Buka tab <strong>Settings</strong> → Klik <strong>Add Model</strong>.</li>
+                                <li>Masukkan <strong>URL</strong> model (Online) atau upload 3 file (Offline).</li>
+                                <li>Anda bisa menambahkan lebih dari satu model untuk deteksi yang berbeda.</li>
+                            </ol>
+                        </div>
+
+                        <div>
+                            <strong style={{ color: 'white' }}>B. Cara Menggunakan di Rule:</strong>
+                            <p style={{ color: '#d1d5db', margin: '4px 0 0' }}>Di Rule Editor, pilih tipe <strong>Teachable Machine</strong> → Pilih <strong>Model</strong> yang sesuai dari dropdown → Masukkan <strong>Target Class</strong> dan <strong>Threshold</strong>.</p>
+                        </div>
+                    </div>
+
                     <h4 style={{ color: '#60a5fa', marginBottom: '8px', marginTop: '20px' }}>7. ⚖️ Analisa Akurasi & Pertimbangan (Pros/Cons)</h4>
                     <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', color: '#d1d5db' }}>
@@ -263,7 +287,7 @@ const StudioModel = () => {
                             <tbody>
                                 <tr style={{ borderBottom: '1px solid #374151' }}>
                                     <td style={{ padding: '8px', color: '#60a5fa' }}>Pose/Joint (Angle, Relation)</td>
-                                    <td style={{ padding: '8px', color: '#10b981' }}>Tinggi (>95%)</td>
+                                    <td style={{ padding: '8px', color: '#10b981' }}>Tinggi (&gt;95%)</td>
                                     <td style={{ padding: '8px' }}>Sangat cepat, ringan, real-time 30FPS.</td>
                                     <td style={{ padding: '8px', color: '#f87171' }}>Gagal jika badan tertutup objek (Occlusion).</td>
                                 </tr>
@@ -275,7 +299,7 @@ const StudioModel = () => {
                                 </tr>
                                 <tr style={{ borderBottom: '1px solid #374151' }}>
                                     <td style={{ padding: '8px', color: '#8b5cf6' }}>Advanced Script</td>
-                                    <td style={{ padding: '8px', color: '#10b981' }}>Tinggi (>95%)</td>
+                                    <td style={{ padding: '8px', color: '#10b981' }}>Tinggi (&gt;95%)</td>
                                     <td style={{ padding: '8px' }}>Fleksibel, bisa gabung banyak kondisi.</td>
                                     <td style={{ padding: '8px', color: '#f87171' }}>Butuh pemahaman logika (Coding skill).</td>
                                 </tr>

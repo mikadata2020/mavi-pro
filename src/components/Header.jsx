@@ -8,6 +8,7 @@ const MENU_ITEMS = [
     { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' },
     { path: '/mavi-class', icon: '🎓', title: 'MAVi Class', labelKey: 'header.maviClass' },
     { path: '/studio-model', icon: '👨‍🏫', title: 'Studio Model', labelKey: 'header.studioModel' },
+    { path: '/teachable-machine', icon: '🤖', title: 'TM Studio', labelKey: 'header.tmStudio' },
     { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
     { path: '/ai-process', icon: '🧠', title: 'AI Process', labelKey: 'header.aiProcess' },
     { path: '/realtime-compliance', icon: '🛡️', title: 'Real-time Compliance', labelKey: 'header.realtimeCompliance' },
