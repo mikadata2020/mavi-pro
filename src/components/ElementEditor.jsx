@@ -381,6 +381,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     type="number"
                                                     value={editCycle}
                                                     onChange={(e) => setEditCycle(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                                                     min="1"
                                                     style={{ width: '60px', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem', textAlign: 'center' }}
                                                 />
@@ -395,7 +396,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                             style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
                                             {editingId === el.id ? (
-                                                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem' }} />
+                                                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()} style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem' }} />
                                             ) : el.elementName}
                                         </td>
                                         <td
@@ -420,6 +421,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     step="0.01"
                                                     value={editManual}
                                                     onChange={(e) => setEditManual(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                                                     style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: '#ffd700', fontSize: '0.85rem', textAlign: 'center' }}
                                                 />
                                             ) : (
@@ -436,6 +438,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     step="0.01"
                                                     value={editAuto}
                                                     onChange={(e) => setEditAuto(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                                                     style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: '#00ff00', fontSize: '0.85rem', textAlign: 'center' }}
                                                 />
                                             ) : (
@@ -452,6 +455,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     step="0.01"
                                                     value={editWalk}
                                                     onChange={(e) => setEditWalk(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                                                     style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: '#ff4d4d', fontSize: '0.85rem', textAlign: 'center' }}
                                                 />
                                             ) : (
@@ -489,6 +493,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     step="0.01"
                                                     value={editStartTime}
                                                     onChange={(e) => setEditStartTime(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                                                     style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem', textAlign: 'right' }}
                                                 />
                                             ) : el.startTime.toFixed(2)}
@@ -503,6 +508,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     step="0.01"
                                                     value={editEndTime}
                                                     onChange={(e) => setEditEndTime(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
                                                     style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem', textAlign: 'right' }}
                                                 />
                                             ) : el.endTime.toFixed(2)}

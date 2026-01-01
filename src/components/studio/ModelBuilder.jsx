@@ -478,8 +478,55 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         if (project.videoBlob) {
             const url = URL.createObjectURL(project.videoBlob);
             setVideoSrc(url);
-            setCurrentModel(prev => ({ ...prev, name: project.projectName + " Model" }));
+
+            // IMPORT ELEMENTS AS STATES
+            let importedStates = [];
+            let importedTransitions = [];
+
+            if (project.measurements && project.measurements.length > 0) {
+                // Get unique element names to avoid duplicates, supporting both elementName and task fields
+                const uniqueElementNames = [...new Set(project.measurements.map(m => m.elementName || m.task))].filter(Boolean);
+
+                if (uniqueElementNames.length > 0) {
+                    // Create States
+                    importedStates = uniqueElementNames.map((name, index) => ({
+                        id: `s_imp_${index}_${Date.now()}`,
+                        name: name,
+                        minDuration: 1.0,
+                        roi: null,
+                        referencePose: null
+                    }));
+
+                    // Create Transitions (Sequential)
+                    for (let i = 0; i < importedStates.length; i++) {
+                        const from = importedStates[i];
+                        const to = importedStates[(i + 1) % importedStates.length]; // Loop back to start
+
+                        importedTransitions.push({
+                            id: `t_imp_${i}_${Date.now()}`,
+                            from: from.id,
+                            to: to.id,
+                            condition: {
+                                rules: [],
+                                holdTime: 0.5
+                            }
+                        });
+                    }
+                }
+            }
+
+            setCurrentModel(prev => ({
+                ...prev,
+                name: project.projectName + " Model",
+                states: importedStates.length > 0 ? importedStates : prev.states,
+                transitions: importedTransitions.length > 0 ? importedTransitions : prev.transitions
+            }));
+
             setShowProjectPicker(false);
+
+            if (importedStates.length > 0) {
+                alert(`Project "${project.projectName}" berhasil diimpor dengan ${importedStates.length} elemen sebagai baseline model.`);
+            }
         } else {
             alert("Project ini tidak memiliki data video.");
         }
