@@ -265,7 +265,7 @@ export const helpContent = {
                     <li>Upload video proses kerja</li>
                     <li>Gunakan slider <strong>Start</strong> dan <strong>End</strong> untuk menandai gerakan spesifik (misal: saat operator menyolder)</li>
                     <li>Klik <strong>Capture Clip</strong> untuk merekam potongan tersebut</li>
-                    <li>Download klip dari gallery. Gunakan klip ini sebagai contoh di situs Teachable Machine</li>
+                    <li>Download klip dari gallery. Gunakan klip ini sebagai contoh di <a href="https://teachablemachine.withgoogle.com/train/pose" target="_blank" rel="noreferrer" style={{ color: '#ffd700', textDecoration: 'underline' }}>situs Teachable Machine</a></li>
                 </ol>
 
                 <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🚀 Load & Test Model</h3>

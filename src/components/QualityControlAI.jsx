@@ -93,7 +93,7 @@ const QualityControlAI = ({ videoRef: propVideoRef, onClose }) => {
                         {!isModelLoading && <Upload size={16} />}
                     </button>
                     <div style={{ marginTop: '10px', fontSize: '0.75rem', color: '#888', fontStyle: 'italic' }}>
-                        * Train an "Image Project" on Teachable Machine, upload it, and paste the URL here.
+                        * Train an "Image Project" on <a href="https://teachablemachine.withgoogle.com/train/pose" target="_blank" rel="noreferrer" style={{ color: '#ffaa00' }}>Teachable Machine</a>, upload it, and paste the URL here.
                     </div>
                 </div>
 

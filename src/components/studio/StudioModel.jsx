@@ -256,7 +256,7 @@ const StudioModel = () => {
 
                     <h4 style={{ color: '#10b981', marginBottom: '8px', marginTop: '20px' }}>8. 🤖 Integrasi Teachable Machine (AI Kustom)</h4>
                     <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)', padding: '15px', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.2)', fontSize: '0.85rem' }}>
-                        <p style={{ margin: '0 0 10px 0' }}>Gunakan model klasifikasi kustom dari <a href="https://teachablemachine.withgoogle.com/" target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>Teachable Machine</a>.</p>
+                        <p style={{ margin: '0 0 10px 0' }}>Gunakan model klasifikasi kustom dari <a href="https://teachablemachine.withgoogle.com/train/pose" target="_blank" rel="noreferrer" style={{ color: '#10b981' }}>Teachable Machine</a>.</p>
 
                         <div style={{ marginBottom: '12px' }}>
                             <strong style={{ color: 'white' }}>A. Cara Menghubungkan:</strong>
