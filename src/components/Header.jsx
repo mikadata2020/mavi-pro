@@ -4,34 +4,50 @@ import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '../i18n/LanguageContext';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 
+const MENU_CATEGORIES = {
+    CORE: '🚀',
+    AI: '🧠',
+    IE: '📉',
+    ADVANCED: '⚡',
+    LEARNING: '🎓'
+};
+
 const MENU_ITEMS = [
-    { path: '/workflow-guide', icon: '🚀', title: 'Workflow Guide', labelKey: 'header.workflowGuide' },
-    { path: '/mavi-class', icon: '🎓', title: 'MAVi Class', labelKey: 'header.maviClass' },
-    { path: '/studio-model', icon: '👨‍🏫', title: 'Studio Model', labelKey: 'header.studioModel' },
-    { path: '/teachable-machine', icon: '🤖', title: 'TM Studio', labelKey: 'header.tmStudio' },
-    { path: '/', icon: '🎬', labelKey: 'header.video', exact: true },
-    { path: '/ai-process', icon: '🧠', title: 'AI Process', labelKey: 'header.aiProcess' },
-    { path: '/realtime-compliance', icon: '🛡️', title: 'Real-time Compliance', labelKey: 'header.realtimeCompliance' },
-    { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange' },
-    { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste' },
-    { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis' },
-    { path: '/statistical-analysis', icon: '📉', labelKey: 'header.statisticalAnalysis', title: 'Statistical Analysis' },
-    { path: '/best-worst', icon: '🏆', labelKey: 'header.bestWorst' },
-    { path: '/yamazumi', icon: '🏔️', labelKey: 'header.yamazumi', title: 'Yamazumi Chart' },
-    { path: '/manual-creation', icon: '📘', labelKey: 'header.manualCreation', title: 'Manual Creation' },
-    { path: '/value-stream-map', icon: '🏭', labelKey: 'header.valueStreamMap', title: 'Value Stream Map' },
-    { path: '/comparison', icon: '🎥', labelKey: 'header.comparison' },
-    { path: '/multi-camera', icon: '📹', labelKey: 'header.multiCamera', title: 'Multi-Camera 3D Fusion' },
-    { path: '/vr-training', icon: '🥽', labelKey: 'header.vrTraining', title: 'VR Training Mode' },
-    { path: '/knowledge-base', icon: '📚', labelKey: 'header.knowledgeBase', title: 'Knowledge Base' },
-    { path: '/broadcast', icon: '📡', labelKey: 'header.broadcast', title: 'Broadcast' },
-    { path: '/action-recognition', icon: '🤖', labelKey: 'header.actionRecognition', title: 'Action Recognition' },
-    { path: '/cycle-segmentation', icon: '🔄', labelKey: 'header.cycleSegmentation', title: 'Cycle Segmentation' },
-    { path: '/files', icon: '📂', labelKey: 'header.files', title: 'File Explorer' },
-    { path: '/diagnostics', icon: '🩺', labelKey: 'header.diagnostics', title: 'System Diagnostics' },
-    { path: '/swcs', icon: '📋', labelKey: 'header.swcs', title: 'Standard Work Combination Sheet' },
-    { path: '/pitch-deck', icon: '💎', labelKey: 'header.pitchDeck', title: 'Pitch Deck' },
-    { path: '/help', icon: '❓', labelKey: 'header.help' },
+    // MAIN MENU
+    { path: '/menu', icon: '🏠', labelKey: 'header.mainMenu', title: 'Main Menu', category: 'CORE' },
+
+    // CORE
+    { path: '/', icon: '🎬', labelKey: 'header.video', exact: true, category: 'CORE' },
+    { path: '/files', icon: '📂', labelKey: 'header.files', title: 'File Explorer', category: 'CORE' },
+
+    // AI STUDIO
+    { path: '/teachable-machine', icon: '🤖', title: 'TM Studio', labelKey: 'header.tmStudio', category: 'AI' },
+    { path: '/studio-model', icon: '👨‍🏫', title: 'Studio Model', labelKey: 'header.studioModel', category: 'AI' },
+    { path: '/ai-process', icon: '🧠', title: 'AI Process', labelKey: 'header.aiProcess', category: 'AI' },
+    { path: '/realtime-compliance', icon: '🛡️', title: 'Real-time Compliance', labelKey: 'header.realtimeCompliance', category: 'AI' },
+
+    // INDUSTRIAL ENGINEERING
+    { path: '/swcs', icon: '📋', labelKey: 'header.swcs', title: 'Standard Work Combination Sheet', category: 'IE' },
+    { path: '/yamazumi', icon: '🏔️', labelKey: 'header.yamazumi', title: 'Yamazumi Chart', category: 'IE' },
+    { path: '/value-stream-map', icon: '🏭', labelKey: 'header.valueStreamMap', title: 'Value Stream Map', category: 'IE' },
+    { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis', category: 'IE' },
+    { path: '/statistical-analysis', icon: '📉', labelKey: 'header.statisticalAnalysis', title: 'Statistical Analysis', category: 'IE' },
+    { path: '/best-worst', icon: '🏆', labelKey: 'header.bestWorst', category: 'IE' },
+    { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange', category: 'IE' },
+    { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste', category: 'IE' },
+    { path: '/manual-creation', icon: '📘', labelKey: 'header.manualCreation', title: 'Manual Creation', category: 'IE' },
+
+    // ADVANCED
+    { path: '/comparison', icon: '🎥', labelKey: 'header.comparison', category: 'ADVANCED' },
+    { path: '/multi-camera', icon: '📹', labelKey: 'header.multiCamera', title: 'Multi-Camera 3D Fusion', category: 'ADVANCED' },
+    { path: '/vr-training', icon: '🥽', labelKey: 'header.vrTraining', title: 'VR Training Mode', category: 'ADVANCED' },
+    { path: '/cycle-segmentation', icon: '🔄', labelKey: 'header.cycleSegmentation', title: 'Cycle Segmentation', category: 'ADVANCED' },
+
+    // LEARNING & COLLABORATION
+    { path: '/mavi-class', icon: '🎓', title: 'MAVi Class', labelKey: 'header.maviClass', category: 'LEARNING' },
+    { path: '/knowledge-base', icon: '📚', labelKey: 'header.knowledgeBase', title: 'Knowledge Base', category: 'LEARNING' },
+    { path: '/broadcast', icon: '📡', labelKey: 'header.broadcast', title: 'Broadcast', category: 'LEARNING' },
+    { path: '/help', icon: '❓', labelKey: 'header.help', category: 'LEARNING' },
 ];
 
 function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme, onLogout, sidebarCollapsed }) {
@@ -86,28 +102,37 @@ function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme,
                     `}
                 </style>
 
-                {MENU_ITEMS.map((item) => (
-                    <NavLink
-                        key={item.path}
-                        to={item.path}
-                        className={({ isActive }) => isNaN(isActive) ? "btn" : (`btn ${isActive ? 'active' : ''}`)}
-                        style={({ isActive }) => ({
-                            backgroundColor: isActive ? 'var(--accent-blue)' : '',
-                            padding: '8px',
-                            fontSize: '1.2rem',
-                            width: '40px',
-                            height: '40px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            color: 'white',
-                            textDecoration: 'none',
-                            borderRadius: '8px'
-                        })}
-                        title={item.labelKey ? t(item.labelKey) : item.title}
-                    >
-                        {item.icon}
-                    </NavLink>
+                {Object.keys(MENU_CATEGORIES).map((catKey, catIndex) => (
+                    <React.Fragment key={catKey}>
+                        {catIndex > 0 && <div style={{ width: '30px', height: '1px', backgroundColor: '#333', margin: '5px 0' }}></div>}
+
+                        {/* Optionally add category header icon/label if space allows, but for now just visual separator */}
+
+                        {MENU_ITEMS.filter(item => item.category === catKey).map((item) => (
+                            <NavLink
+                                key={item.path}
+                                to={item.path}
+                                className={({ isActive }) => isNaN(isActive) ? "btn" : (`btn ${isActive ? 'active' : ''}`)}
+                                style={({ isActive }) => ({
+                                    backgroundColor: isActive ? 'var(--accent-blue)' : '',
+                                    padding: '8px',
+                                    fontSize: '1.2rem',
+                                    width: '40px',
+                                    height: '40px',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    color: 'white',
+                                    textDecoration: 'none',
+                                    borderRadius: '8px',
+                                    transition: 'all 0.2s ease'
+                                })}
+                                title={item.labelKey ? t(item.labelKey) : item.title}
+                            >
+                                {item.icon}
+                            </NavLink>
+                        ))}
+                    </React.Fragment>
                 ))}
 
                 <button

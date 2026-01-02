@@ -329,6 +329,26 @@ function GlobalSettingsDialog({ isOpen, onClose }) {
                                     </button>
                                 </div>
                             </div>
+
+                            <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
+                                <button
+                                    onClick={() => { window.location.href = '#/diagnostics'; onClose(); }}
+                                    style={{
+                                        background: 'none',
+                                        border: '1px solid #444',
+                                        color: '#888',
+                                        fontSize: '0.8rem',
+                                        padding: '5px 15px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px'
+                                    }}
+                                >
+                                    🩺 Advanced: Open System Diagnostics
+                                </button>
+                            </div>
                         </div>
                     )}
 

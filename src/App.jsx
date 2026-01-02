@@ -60,6 +60,7 @@ const TeachableMachineStudio = React.lazy(() => import('./components/TeachableMa
 const RealtimeCompliance = React.lazy(() => import('./components/RealtimeCompliance'));
 const StudioModel = React.lazy(() => import('./components/studio/StudioModel'));
 const PitchDeck = React.lazy(() => import('./components/PitchDeck'));
+const MainMenu = React.lazy(() => import('./components/MainMenu'));
 
 // Loading component
 const LoadingSpinner = () => (
@@ -170,7 +171,7 @@ function AppContent() {
   };
 
   const handleLoginSuccess = () => {
-    navigate('/workflow-guide');
+    navigate('/menu');
   };
 
   // Pre-load pose detector in background after login
@@ -560,6 +561,9 @@ function AppContent() {
 
               {/* Pitch Deck */}
               <Route path="/pitch-deck" element={<PitchDeck onClose={() => navigate('/')} />} />
+
+              {/* Main Menu */}
+              <Route path="/menu" element={<div style={{ overflow: 'hidden', height: '100%' }}><MainMenu /></div>} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
