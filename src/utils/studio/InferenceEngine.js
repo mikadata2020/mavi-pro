@@ -206,12 +206,15 @@ class InferenceEngine {
         track.stateEnterTime = timestamp;
         track.matchStartTime = null;
 
-        // If transitioning to start state or complete state, trigger cycle analysis
         if (newStateId === 's_start' || newStateId === 'complete' || newStateId === 's_complete') {
             const stats = this.getCycleStatistics();
             if (this.onCycleComplete && stats) {
                 this.onCycleComplete(stats);
             }
+        }
+
+        if (this.onStateChange) {
+            this.onStateChange(track.id, newStateId, fromStateId);
         }
     }
 

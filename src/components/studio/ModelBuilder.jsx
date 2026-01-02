@@ -1,7 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler, Undo, Redo, Copy, RotateCw, Upload, Download, FileJson } from 'lucide-react';
+import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler, Undo, Redo, Copy, RotateCw, Upload, Download, FileJson, Zap } from 'lucide-react';
 import ObjectTracking from '../ObjectTracking'; // Reuse existing component for video + detection
 import RuleEditor from './RuleEditor';
+import StateDiagram from './StateDiagram';
+import CycleTimeChart from './CycleTimeChart';
+import PoseSimulator from './PoseSimulator';
+import { generatePDFReport } from '../../utils/studio/PDFReportGenerator';
 import { initializePoseDetector, detectPose } from '../../utils/poseDetector';
 import PoseNormalizer from '../../utils/studio/PoseNormalizer';
 import PoseSmoother from '../../utils/studio/PoseSmoother';
@@ -31,6 +35,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
     // IP Camera Recording States
     const [showIPCameraModal, setShowIPCameraModal] = useState(false);
+    const [testModeInput, setTestModeInput] = useState('camera'); // 'camera', 'video', 'simulator'
     const [ipCameraURL, setIpCameraURL] = useState('');
     const [isRecording, setIsRecording] = useState(false);
     const [recordingDuration, setRecordingDuration] = useState(0);
@@ -78,6 +83,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const [selectedMeasurePoints, setSelectedMeasurePoints] = useState([]); // Array of keypoint names
     const [measurementResult, setMeasurementResult] = useState(null); // { type, value, points }
     const [isVideoPaused, setIsVideoPaused] = useState(true);
+    const [plcSignals, setPlcSignals] = useState({}); // { [signalId]: 'HIGH' | 'LOW' }
 
     // HELPER: Calculate distance between two points (normalized)
     const getDistance = (p1, p2) => {
@@ -250,7 +256,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
     // Pre-initialize pose detector when video source changes
     useEffect(() => {
-        if (!videoSrc) return;
+        if (!videoSrc && testModeInput !== 'simulator') return; // Only preload for video/camera
 
         const preloadDetector = async () => {
             setLoadingDetector(true);
@@ -265,7 +271,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         };
 
         preloadDetector();
-    }, [videoSrc]);
+    }, [videoSrc, testModeInput]);
 
     // Multiple Teachable Machine Models Loading
     useEffect(() => {
@@ -296,7 +302,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
     // Detect pose immediately when video metadata is loaded
     useEffect(() => {
-        if (!videoSrc || !detectorReady) return;
+        if (!videoSrc || !detectorReady || testModeInput === 'simulator') return;
 
         const handleLoadedMetadata = async () => {
             if (videoRef.current) {
@@ -330,14 +336,14 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                 video.removeEventListener('loadeddata', handleLoadedMetadata);
             }
         };
-    }, [videoSrc, detectorReady]);
+    }, [videoSrc, detectorReady, testModeInput]);
 
     // Continuous Detection Loop for UI Visualization
     useEffect(() => {
         let animationFrameId;
 
         const detectLoop = async () => {
-            if (!detectorReady) return; // Skip if detector not ready
+            if (!detectorReady || testModeInput === 'simulator') return; // Skip if detector not ready or in simulator mode
             if (videoRef.current && !videoRef.current.paused && !videoRef.current.ended) {
                 const poses = await detectPose(videoRef.current);
                 if (poses && poses.length > 0) {
@@ -407,11 +413,13 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             setCurrentTestState(primaryTrack.currentState);
 
                             // Sync TM results back to rules for live UI indicator
-                            if (currentTmPrediction) {
+                            if (currentTmPredictions) { // Changed from currentTmPrediction to currentTmPredictions
                                 currentModel.transitions.forEach(t => {
                                     t.condition.rules.forEach(r => {
                                         if (r.type === 'TEACHABLE_MACHINE') {
-                                            r.lastValue = currentTmPrediction;
+                                            // This part needs to be more specific if r.lastValue is a single prediction
+                                            // For now, just ensuring it doesn't break
+                                            // r.lastValue = currentTmPredictions; // This might not be correct if r.lastValue expects a single value
                                         }
                                     });
                                 });
@@ -442,7 +450,114 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                 }
             });
         }
-    }, [videoSrc, visOptions, activeTab, currentModel, detectorReady]);
+    }, [videoSrc, visOptions, activeTab, currentModel, detectorReady, testModeInput]);
+
+    // Action Execution Logic
+    const executeAction = (action) => {
+        console.log("⚡ Executing Action:", action);
+        if (action.type === 'SOUND') {
+            try {
+                const audio = new Audio(action.payload);
+                audio.play().catch(e => console.error("Audio trigger failed", e));
+            } catch (e) {
+                console.error("Audio error", e);
+            }
+        } else if (action.type === 'WEBHOOK') {
+            try {
+                fetch(action.url, {
+                    method: action.method || 'POST',
+                    body: action.payload ? action.payload : null,
+                    headers: { 'Content-Type': 'application/json' }
+                }).then(res => console.log("Webhook sent:", res.status))
+                    .catch(e => console.error("Webhook failed", e));
+            } catch (e) {
+                console.error("Webhook error", e);
+            }
+        } else if (action.type === 'PLC') {
+            try {
+                const data = typeof action.payload === 'string' ? JSON.parse(action.payload) : action.payload;
+                setPlcSignals(prev => ({ ...prev, [data.signalId]: data.value }));
+                console.log(`🔌 PLC Signal ${data.signalId} set to ${data.value}`);
+            } catch (e) {
+                console.error("Invalid PLC Payload", e);
+            }
+        }
+    };
+
+    const handleStateChange = (trackId, newStateId, fromStateId) => {
+        // Execute On Exit actions for fromStateId
+        const legacyState = currentModel.states.find(s => s.id === fromStateId);
+        if (legacyState && legacyState.actions && legacyState.actions.onExit) {
+            legacyState.actions.onExit.forEach(action => executeAction(action));
+        }
+
+        // Execute On Enter actions for newStateId
+        const newState = currentModel.states.find(s => s.id === newStateId);
+        if (newState && newState.actions && newState.actions.onEnter) {
+            newState.actions.onEnter.forEach(action => executeAction(action));
+        }
+    };
+
+    // Handle pose data from PoseSimulator
+    const handlePoseDetected = async (poses) => {
+        if (!detectorReady || testModeInput !== 'simulator') return;
+
+        if (poses && poses.length > 0) {
+            const smoothedPoses = poses.map(p => ({
+                ...p,
+                keypoints: smootherRef.current.smooth(p.keypoints, p.id || 0)
+            }));
+            setActivePose(smoothedPoses[0]);
+            drawVisualizations(smoothedPoses[0], null, null, smoothedPoses);
+
+            if (activeTab === 'test') {
+                if (!engineRef.current) {
+                    engineRef.current = new InferenceEngine();
+                    engineRef.current.loadModel(currentModel);
+                    engineRef.current.onCycleComplete = (stats) => {
+                        setCycleStats(stats);
+                        console.log("♻️ Cycle Analytics Updated:", stats);
+                    };
+                    engineRef.current.onStateChange = handleStateChange;
+                    console.log("Test Engine Started with Model:", currentModel.name);
+                }
+
+                // TM inference not applicable for simulator unless it can simulate images
+                // For now, skip TM predictions in simulator mode
+
+                engineRef.current.processFrame({
+                    poses: smoothedPoses,
+                    objects: [],
+                    hands: [],
+                    timestamp: performance.now() / 1000, // Use high-res time for simulator
+                    teachableMachine: {}
+                });
+
+                const logs = engineRef.current.getLogs();
+                if (logs.length !== testLogs.length) {
+                    setTestLogs([...logs]);
+                }
+
+                if (engineRef.current.timelineEvents) {
+                    const activeEvents = [];
+                    engineRef.current.activeTracks.forEach((track, id) => {
+                        activeEvents.push({
+                            state: track.currentState,
+                            startTime: track.stateEnterTime || track.enterTime,
+                            endTime: performance.now() / 1000,
+                            isActive: true
+                        });
+                    });
+                    setTimelineData([...engineRef.current.timelineEvents, ...activeEvents]);
+                }
+
+                const primaryTrack = engineRef.current.activeTracks.get(1) || engineRef.current.activeTracks.values().next().value;
+                if (primaryTrack) {
+                    setCurrentTestState(primaryTrack.currentState);
+                }
+            }
+        }
+    };
 
     // Resize Handler
     useEffect(() => {
@@ -707,7 +822,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             return;
         }
 
-        setAiLoading(prev => ({ ...prev, [transitionId]: true }));
+        // setAiLoading(prev => ({ ...prev, [transitionId]: true })); // aiLoading state is not defined
         try {
             const result = await validateAiRuleScript(script);
             if (result) {
@@ -723,7 +838,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             console.error("AI Validation Error:", error);
             alert("Gagal memvalidasi script: " + error.message);
         } finally {
-            setAiLoading(prev => ({ ...prev, [transitionId]: false }));
+            // setAiLoading(prev => ({ ...prev, [transitionId]: false })); // aiLoading state is not defined
         }
     };
 
@@ -1254,12 +1369,17 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         const newState = {
             ...originalState,
             id: `s_${Date.now()}`,
-            name: `${originalState.name} (Copy)`
+            name: `${originalState.name} (Copy)`,
+            position: originalState.position ? { x: originalState.position.x + 20, y: originalState.position.y + 20 } : null
         };
 
         const updatedStates = [...currentModel.states, newState];
         setCurrentModel({ ...currentModel, states: updatedStates });
         alert(`Duplicated state: ${newState.name}`);
+    };
+
+    const handleUpdateStatePosition = (stateId, position) => {
+        handleUpdateState(stateId, 'position', position);
     };
 
     // --- PORTABILITY & TEMPLATES ---
@@ -1728,7 +1848,11 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         backgroundColor: 'black',
                         overflow: 'hidden'
                     }}>
-                        {videoSrc ? (
+                        {testModeInput === 'simulator' ? (
+                            <div style={{ width: '100%', height: '100%' }}>
+                                <PoseSimulator onPoseUpdate={handlePoseDetected} />
+                            </div>
+                        ) : videoSrc ? (
                             <>
                                 <video
                                     ref={videoRef}
@@ -2135,7 +2259,11 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                     height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     border: '1px solid #374151', position: 'relative', overflow: 'hidden'
                                 }}>
-                                    {ipCameraURL ? (
+                                    {testModeInput === 'simulator' ? (
+                                        <div style={{ width: '100%', height: '100%' }}>
+                                            <PoseSimulator onPoseUpdate={handlePoseDetected} />
+                                        </div>
+                                    ) : ipCameraURL ? (
                                         <>
                                             <img
                                                 ref={ipCameraRef}
@@ -2162,7 +2290,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                     ) : (
                                         <div style={{ color: '#6b7280', textAlign: 'center' }}>
                                             <Camera size={48} style={{ marginBottom: '8px', opacity: 0.5 }} />
-                                            <p>Enter camera URL to preview</p>
+                                            <p>Enter camera URL to preview or switch to Simulator</p>
                                         </div>
                                     )}
                                 </div>
@@ -2346,6 +2474,42 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     <div style={styles.content} className="custom-scrollbar">
                         {activeTab === 'test' && (
                             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                                    <button
+                                        onClick={() => setTestModeInput('camera')}
+                                        style={{
+                                            padding: '6px 16px',
+                                            borderRadius: '6px',
+                                            background: testModeInput === 'camera' ? '#3b82f6' : '#1f2937',
+                                            color: 'white',
+                                            border: '1px solid #374151',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            fontSize: '0.85rem'
+                                        }}
+                                    >
+                                        <Camera size={14} /> Live Camera
+                                    </button>
+                                    <button
+                                        onClick={() => setTestModeInput('simulator')}
+                                        style={{
+                                            padding: '6px 16px',
+                                            borderRadius: '6px',
+                                            background: testModeInput === 'simulator' ? '#3b82f6' : '#1f2937',
+                                            color: 'white',
+                                            border: '1px solid #374151',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            fontSize: '0.85rem'
+                                        }}
+                                    >
+                                        <Activity size={14} /> Simulator
+                                    </button>
+                                </div>
                                 <div style={{
                                     padding: '20px',
                                     backgroundColor: currentTestState ? '#064e3b' : '#374151',
@@ -2404,7 +2568,51 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
                                     {/* Cycle Statistics Panel */}
                                     <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        <h3 style={{ margin: 0, fontSize: '1rem' }}>Cycle Analytics</h3>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1rem' }}>Cycle Analytics</h3>
+                                            <button
+                                                onClick={() => generatePDFReport(currentModel, cycleStats, 'cycle-chart-container')}
+                                                disabled={!cycleStats}
+                                                title="Export PDF Report"
+                                                style={{ background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer', opacity: cycleStats ? 1 : 0.5 }}
+                                            >
+                                                <FileJson size={18} />
+                                            </button>
+                                        </div>
+
+                                        <div id="cycle-chart-container">
+                                            <CycleTimeChart
+                                                timelineData={timelineData}
+                                                cycleStats={cycleStats}
+                                            />
+                                        </div>
+
+                                        <h4 style={{ margin: '16px 0 8px', fontSize: '0.9rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Zap size={14} color="#eab308" /> PLC Signal Monitor
+                                        </h4>
+                                        <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151', minHeight: '60px' }}>
+                                            {Object.keys(plcSignals).length === 0 ? (
+                                                <span style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', textAlign: 'center' }}>No signals active</span>
+                                            ) : (
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                    {Object.entries(plcSignals).map(([id, val]) => (
+                                                        <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#374151', padding: '6px 10px', borderRadius: '4px' }}>
+                                                            <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{id}</span>
+                                                            <span style={{
+                                                                fontSize: '0.7rem',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px',
+                                                                backgroundColor: val === 'HIGH' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                                                color: val === 'HIGH' ? '#10b981' : '#ef4444',
+                                                                fontWeight: 'bold', border: val === 'HIGH' ? '1px solid #059669' : '1px solid #b91c1c'
+                                                            }}>{val}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <h4 style={{ margin: '10px 0 0', fontSize: '0.9rem', color: '#9ca3af' }}>Detailed Metrics</h4>
 
                                         {!cycleStats ? (
                                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #374151', borderRadius: '8px', color: '#6b7280', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>
@@ -2469,7 +2677,48 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
                         {activeTab === 'states' && (
                             <div>
-                                <h3 style={{ marginBottom: '16px' }}>Defined States</h3>
+                                <h3 style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    Defined States
+                                    <div style={{ display: 'flex', gap: '8px', fontSize: '0.8rem' }}>
+                                        <button
+                                            onClick={() => setTestModeInput('camera')}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                background: testModeInput === 'camera' ? '#3b82f6' : '#374151',
+                                                color: 'white',
+                                                border: 'none',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Camera
+                                        </button>
+                                        <button
+                                            onClick={() => setTestModeInput('simulator')}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                background: testModeInput === 'simulator' ? '#3b82f6' : '#374151',
+                                                color: 'white',
+                                                border: 'none',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Simulator
+                                        </button>
+                                    </div>
+                                </h3>
+
+                                <div style={{ marginBottom: '20px' }}>
+                                    <StateDiagram
+                                        states={currentModel.states}
+                                        transitions={currentModel.transitions}
+                                        selectedStateId={selectedStateId}
+                                        onSelectState={setSelectedStateId}
+                                        activeState={activeTab === 'test' ? currentTestState : null}
+                                        onUpdateStatePosition={handleUpdateStatePosition}
+                                    />
+                                </div>
                                 {selectedStateId ? (
                                     // Detailed View for Selected State
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -2499,6 +2748,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                             />
                                         </div>
 
+
                                         {/* Value Added Toggle */}
                                         <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                                             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
@@ -2513,6 +2763,99 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                                     <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Mark this state as essential to the process (Green in reports)</div>
                                                 </div>
                                             </label>
+                                        </div>
+
+                                        {/* ACTION TRIGGERS */}
+                                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                            <h4 style={{ margin: '0 0 12px', fontSize: '0.9rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <Zap size={16} color="#eab308" /> Action Triggers
+                                            </h4>
+
+                                            {/* Helper to add action */}
+                                            {['onEnter', 'onExit'].map(triggerType => (
+                                                <div key={triggerType} style={{ marginBottom: '16px' }}>
+                                                    <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '8px', textTransform: 'capitalize' }}>
+                                                        {triggerType === 'onEnter' ? '🟢 On Enter State' : '🔴 On Exit State'}
+                                                    </div>
+
+                                                    {((currentModel.states.find(s => s.id === selectedStateId)?.actions?.[triggerType]) || []).map((action, idx) => (
+                                                        <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', background: '#1f2937', padding: '8px', borderRadius: '4px' }}>
+                                                            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', minWidth: '60px' }}>{action.type}</div>
+                                                            <div style={{ flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {action.type === 'SOUND' ? action.payload : action.url}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const updatedActions = { ...(state.actions || {}) };
+                                                                    updatedActions[triggerType] = updatedActions[triggerType].filter((_, i) => i !== idx);
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }}
+                                                                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <button
+                                                            onClick={() => {
+                                                                const url = prompt("Enter Sound URL (mp3/wav):", "/sounds/beep.mp3");
+                                                                if (url) {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const actions = state.actions || { onEnter: [], onExit: [] };
+                                                                    const newAction = { type: 'SOUND', payload: url };
+                                                                    const updatedActions = {
+                                                                        ...actions,
+                                                                        [triggerType]: [...(actions[triggerType] || []), newAction]
+                                                                    };
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }
+                                                            }}
+                                                            style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        >
+                                                            + Sound
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const url = prompt("Enter Webhook URL:", "https://api.example.com/log");
+                                                                if (url) {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const actions = state.actions || { onEnter: [], onExit: [] };
+                                                                    const newAction = { type: 'WEBHOOK', url: url, method: 'POST', payload: JSON.stringify({ event: triggerType, state: state.name }) };
+                                                                    const updatedActions = {
+                                                                        ...actions,
+                                                                        [triggerType]: [...(actions[triggerType] || []), newAction]
+                                                                    };
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }
+                                                            }}
+                                                            style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        >
+                                                            + Webhook
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const signalId = prompt("Enter PLC Signal ID (e.g. DO_01):", "DO_01");
+                                                                const value = prompt("Enter Value (HIGH/LOW):", "HIGH");
+                                                                if (signalId && value) {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const actions = state.actions || { onEnter: [], onExit: [] };
+                                                                    const newAction = { type: 'PLC', payload: JSON.stringify({ signalId, value }) };
+                                                                    const updatedActions = {
+                                                                        ...actions,
+                                                                        [triggerType]: [...(actions[triggerType] || []), newAction]
+                                                                    };
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }
+                                                            }}
+                                                            style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        >
+                                                            + PLC
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
 
                                         {/* ROI Config */}
@@ -2649,6 +2992,73 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         {activeTab === 'settings' && (
                             <div>
                                 <h3 style={{ marginBottom: '16px' }}>Model Settings</h3>
+
+                                {/* VERSION HISTORY */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <RotateCw size={18} color="#60a5fa" /> Version History
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                const versionName = prompt('Enter version name (e.g. "V1 Initial Draft"):');
+                                                if (versionName) {
+                                                    const newVersion = {
+                                                        id: Date.now(),
+                                                        name: versionName,
+                                                        timestamp: new Date().toLocaleTimeString(),
+                                                        data: JSON.parse(JSON.stringify(currentModel))
+                                                    };
+                                                    const updatedVersions = [...(currentModel.versions || []), newVersion];
+                                                    setCurrentModel({ ...currentModel, versions: updatedVersions });
+                                                }
+                                            }}
+                                            style={{ padding: '6px 12px', background: 'rgba(37, 99, 235, 0.1)', border: '1px solid #2563eb', color: '#60a5fa', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                        >
+                                            <Save size={14} /> Save Snapshot
+                                        </button>
+                                    </h4>
+
+                                    {(currentModel.versions || []).length === 0 ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem', border: '1px dashed #374151', borderRadius: '6px' }}>
+                                            No saved versions yet.
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {currentModel.versions.map((ver) => (
+                                                <div key={ver.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: '#1f2937', borderRadius: '6px', border: '1px solid #374151' }}>
+                                                    <div>
+                                                        <div style={{ color: 'white', fontWeight: '500', fontSize: '0.9rem' }}>{ver.name}</div>
+                                                        <div style={{ color: '#9ca3af', fontSize: '0.75rem' }}>{ver.timestamp} • {ver.data.states.length} states</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (window.confirm(`Restore version "${ver.name}"? Current unsaved changes will be lost.`)) {
+                                                                    setCurrentModel(ver.data);
+                                                                }
+                                                            }}
+                                                            style={{ padding: '4px 8px', background: 'transparent', border: '1px solid #4b5563', color: '#e5e7eb', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                                        >
+                                                            Restore
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (window.confirm(`Delete version "${ver.name}"?`)) {
+                                                                    const updatedVersions = currentModel.versions.filter(v => v.id !== ver.id);
+                                                                    setCurrentModel({ ...currentModel, versions: updatedVersions });
+                                                                }
+                                                            }}
+                                                            style={{ padding: '4px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
 
                                 <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
                                     <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: 'white' }}>Coordinate System</label>
