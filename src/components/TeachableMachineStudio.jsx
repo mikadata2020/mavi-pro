@@ -523,11 +523,28 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
             mediaRecorder.onstop = () => {
                 clearInterval(drawInterval);
                 const blob = new Blob(localChunks, { type: supportedType });
-                setRecordedClips(prev => [{
-                    id: Date.now(), url: URL.createObjectURL(blob), blob, mimeType: supportedType,
-                    startTime: currentStartTime.toFixed(2), endTime: currentEndTime.toFixed(2),
-                    timestamp: new Date().toLocaleTimeString(), name: `Clip_${prev.length + 1}`
-                }, ...prev]);
+
+                // Final guard against double entry
+                setRecordedClips(prev => {
+                    // Check if a clip with almost exact same time was just added
+                    const isDuplicate = prev.some(c =>
+                        Math.abs(parseFloat(c.startTime) - currentStartTime) < 0.01 &&
+                        Math.abs(parseFloat(c.endTime) - currentEndTime) < 0.01
+                    );
+                    if (isDuplicate) return prev;
+
+                    return [{
+                        id: `clip_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        url: URL.createObjectURL(blob),
+                        blob,
+                        mimeType: supportedType,
+                        startTime: currentStartTime.toFixed(2),
+                        endTime: currentEndTime.toFixed(2),
+                        timestamp: new Date().toLocaleTimeString(),
+                        name: `Clip_${prev.length + 1}`
+                    }, ...prev];
+                });
+
                 setIsRecording(false);
                 capturingRef.current = false;
             };
@@ -645,6 +662,9 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
                 </button>
                 <button style={{ ...styles.tab, ...(activeTab === 'tester' ? styles.activeTab : styles.inactiveTab) }} onClick={() => setActiveTab('tester')}>
                     <Terminal size={18} /> 3. Verification
+                </button>
+                <button style={{ ...styles.tab, ...(activeTab === 'cvat' ? styles.activeTab : styles.inactiveTab) }} onClick={() => setActiveTab('cvat')}>
+                    <Image size={18} /> 4. CVAT.ai
                 </button>
             </div>
 
@@ -778,28 +798,53 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
             )}
 
             {activeTab === 'trainer' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                    <div style={{ ...styles.card, maxWidth: '600px', textAlign: 'center', padding: '40px' }}>
-                        <div style={{ backgroundColor: '#1e293b', width: '80px', height: '80px', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', border: '1px solid #334155' }}>
-                            <ExternalLink size={40} color="#3b82f6" />
-                        </div>
-                        <h2 style={{ margin: '0 0 10px 0', fontSize: '1.8rem' }}>Smart Split Mode</h2>
-                        <p style={{ margin: '0 0 30px 0', color: '#94a3b8', lineHeight: '1.6' }}>
-                            Gunakan alur kerja terpisah untuk performa pelatihan yang maksimal.
-                        </p>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '30px', textAlign: 'left' }}>
-                            <div style={{ padding: '15px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155' }}>
-                                <div style={{ color: '#3b82f6', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '5px' }}>STEP 1</div>
-                                <div style={{ fontSize: '0.85rem' }}>Klik tombol di bawah untuk membuka TM di jendela baru.</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', padding: '0 20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', width: '100%', maxWidth: '1000px', margin: '0 auto' }}>
+                        {/* Teachable Machine Card */}
+                        <div style={{ ...styles.card, textAlign: 'center', padding: '30px' }}>
+                            <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', width: '60px', height: '60px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                <Bot size={30} color="#3b82f6" />
                             </div>
-                            <div style={{ padding: '15px', backgroundColor: '#0f172a', borderRadius: '10px', border: '1px solid #334155' }}>
-                                <div style={{ color: '#ec4899', fontWeight: 'bold', fontSize: '0.8rem', marginBottom: '5px' }}>STEP 2</div>
-                                <div style={{ fontSize: '0.85rem' }}>Susun jendela MAVi dan TM secara berdampingan.</div>
+                            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.4rem' }}>Teachable Machine</h3>
+                            <p style={{ margin: '0 0 20px 0', color: '#94a3b8', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                Cepat dan mudah. Cocok untuk pemula dan prototipe cepat langsung di browser.
+                            </p>
+                            <button style={{ ...styles.button, ...styles.primaryBtn, width: '100%', padding: '12px', justifyContent: 'center' }} onClick={() => window.open('https://teachablemachine.withgoogle.com/train/pose', '_blank', 'width=1000,height=800')}>
+                                <ExternalLink size={18} /> Launch TM Trainer
+                            </button>
+                        </div>
+
+                        {/* CVAT.ai Card */}
+                        <div style={{ ...styles.card, textAlign: 'center', padding: '30px' }}>
+                            <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', width: '60px', height: '60px', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                <Terminal size={30} color="#10b981" />
+                            </div>
+                            <h3 style={{ margin: '0 0 10px 0', fontSize: '1.4rem' }}>CVAT.ai (Professional)</h3>
+                            <p style={{ margin: '0 0 20px 0', color: '#94a3b8', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                                Standar industri. Gunakan untuk anotasi dataset besar dan pelatihan model profesional.
+                            </p>
+                            <button style={{ ...styles.button, backgroundColor: '#10b981', color: 'white', width: '100%', padding: '12px', justifyContent: 'center' }} onClick={() => window.open('https://cvat.ai', '_blank')}>
+                                <ExternalLink size={18} /> Open CVAT.ai
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ ...styles.card, maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+                        <h4 style={{ margin: 0, color: '#3b82f6' }}>Alur Kerja Integrasi</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginTop: '15px' }}>
+                            <div style={{ padding: '10px', backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+                                <div style={{ color: '#94a3b8', fontWeight: 'bold', fontSize: '0.7rem', marginBottom: '5px' }}>1. SLICE & EXTRACT</div>
+                                <div style={{ fontSize: '0.8rem' }}>Gunakan Video Slicer untuk mengambil klip dan klik 🖼️ (Extract Images).</div>
+                            </div>
+                            <div style={{ padding: '10px', backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+                                <div style={{ color: '#94a3b8', fontWeight: 'bold', fontSize: '0.7rem', marginBottom: '5px' }}>2. ANNOTATE & TRAIN</div>
+                                <div style={{ fontSize: '0.8rem' }}>Upload ZIP ke CVAT/TM untuk melatih model klasifikasi atau pose.</div>
+                            </div>
+                            <div style={{ padding: '10px', backgroundColor: '#0f172a', borderRadius: '8px', border: '1px solid #334155' }}>
+                                <div style={{ color: '#94a3b8', fontWeight: 'bold', fontSize: '0.7rem', marginBottom: '5px' }}>3. DEPLOY & TEST</div>
+                                <div style={{ fontSize: '0.8rem' }}>Salin link model ke tab "Tester" untuk digunakan di MAVi.</div>
                             </div>
                         </div>
-                        <button style={{ ...styles.button, ...styles.primaryBtn, width: '100%', padding: '15px', justifyContent: 'center' }} onClick={() => window.open('https://teachablemachine.withgoogle.com/train/pose', '_blank', 'width=1000,height=800')}>
-                            <ExternalLink size={20} /> Launch External Trainer
-                        </button>
                     </div>
                 </div>
             )}
@@ -879,6 +924,74 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
                                 <div style={{ fontSize: '1rem', color: '#cbd5e1' }}>Confidence: {(prediction.probability * 100).toFixed(1)}%</div>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'cvat' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', height: '100%', padding: '0 20px', maxWidth: '1100px', margin: '0 auto' }}>
+                    <div style={{ ...styles.card, borderBottom: '4px solid #10b981' }}>
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                            <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', padding: '20px', borderRadius: '15px' }}>
+                                <Image size={40} color="#10b981" />
+                            </div>
+                            <div>
+                                <h2 style={{ margin: 0 }}>CVAT.ai Professional Tooling</h2>
+                                <p style={{ margin: '5px 0 0 0', color: '#94a3b8' }}>Computer Vision Annotation Tool untuk dataset industri.</p>
+                            </div>
+                            <div style={{ marginLeft: 'auto' }}>
+                                <button style={{ ...styles.button, backgroundColor: '#10b981', color: 'white' }} onClick={() => window.open('https://cvat.ai', '_blank')}>
+                                    <ExternalLink size={18} /> Go to CVAT.ai
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        <div style={styles.card}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Upload size={20} color="#3b82f6" /> Cara Integrasi CVAT
+                            </h3>
+                            <ul style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.6', paddingLeft: '20px' }}>
+                                <li><strong>Export:</strong> Gunakan tab "Dataset Prep" untuk memotong klip dan klik 🖼️ (Extract Images).</li>
+                                <li><strong>Cloud Upload:</strong> Login ke CVAT.ai, buat "New Task", dan upload file ZIP yang baru saja diunduh.</li>
+                                <li><strong>Annotation:</strong> Lakukan pelabelan (bounding box, polygons, atau skeleton) di CVAT.</li>
+                                <li><strong>Train:</strong> Gunakan data dari CVAT untuk melatih model YOLO, PoseNet, atau lainnya.</li>
+                            </ul>
+                        </div>
+
+                        <div style={styles.card}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Bot size={20} color="#ec4899" /> Optimal Settings
+                            </h3>
+                            <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: 0 }}>
+                                Gunakan setting berikut di CVAT untuk hasil terbaik dengan MAVi:
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                                <div style={{ padding: '8px', backgroundColor: '#0f172a', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    <span style={{ color: '#10b981' }}>Image Quality:</span> 90% (sudah diatur otomatis saat export)
+                                </div>
+                                <div style={{ padding: '8px', backgroundColor: '#0f172a', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    <span style={{ color: '#10b981' }}>Frame Rate:</span> 5-10 FPS (rekomendasi untuk motion analysis)
+                                </div>
+                                <div style={{ padding: '8px', backgroundColor: '#0f172a', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    <span style={{ color: '#10b981' }}>Data Format:</span> COCO, Pascal VOC, atau CVAT for Images.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ ...styles.card, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#0f172a' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <Bot size={24} color="#3b82f6" />
+                            <div>
+                                <div style={{ fontWeight: 'bold' }}>Model Deployment</div>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Setelah model selesai dilatih, masukkan URL model ke tab "Tester".</div>
+                            </div>
+                        </div>
+                        <button style={{ ...styles.button, ...styles.secondaryBtn }} onClick={() => setActiveTab('tester')}>
+                            Setup Model Tester
+                        </button>
                     </div>
                 </div>
             )}

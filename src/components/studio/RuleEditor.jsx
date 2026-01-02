@@ -148,7 +148,8 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                         return a[params.component || 'y'];
                     }
                 }
-                case 'TEACHABLE_MACHINE': {
+                case 'TEACHABLE_MACHINE':
+                case 'CVAT_MODEL': {
                     // This will be populated by the inference loop in ModelBuilder
                     return rule.lastValue || null;
                 }
@@ -178,7 +179,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                 default: return false;
             }
         }
-        if (rule.type === 'TEACHABLE_MACHINE') {
+        if (rule.type === 'TEACHABLE_MACHINE' || rule.type === 'CVAT_MODEL') {
             if (!val) return null;
             return val.className === params.targetClass && val.probability >= params.threshold;
         }
@@ -198,7 +199,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         } else if (rule.type === 'POSE_RELATION') {
             displayVal = val.toFixed(2);
             suffix = '';
-        } else if (rule.type === 'TEACHABLE_MACHINE') {
+        } else if (rule.type === 'TEACHABLE_MACHINE' || rule.type === 'CVAT_MODEL') {
             if (!val) return null;
             displayVal = `${val.className} (${(val.probability * 100).toFixed(0)}%)`;
             suffix = '';
@@ -774,10 +775,10 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                     </div>
                 )}
 
-                {rule.type === 'TEACHABLE_MACHINE' && (
+                {(rule.type === 'TEACHABLE_MACHINE' || rule.type === 'CVAT_MODEL') && (
                     <div style={{ ...styles.paramRow, flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Model:</span>
+                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>{rule.type === 'CVAT_MODEL' ? 'Custom Model:' : 'Model:'}</span>
                             <select
                                 style={styles.paramSelect}
                                 value={rule.params.modelId || ''}

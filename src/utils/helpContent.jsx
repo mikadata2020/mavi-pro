@@ -260,28 +260,32 @@ export const helpContent = {
                 <h3 style={{ color: '#ffd700', marginTop: '20px' }}>📌 Fungsi</h3>
                 <p>Pusat pengelolaan model AI kustom dan pembuatan data latihan untuk Google Teachable Machine.</p>
 
-                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>✂️ Video Slicer (Buat Dataset)</h3>
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>✂️ Video Slicer & Image Extraction</h3>
                 <ol>
                     <li>Upload video proses kerja</li>
-                    <li>Gunakan slider <strong>Start</strong> dan <strong>End</strong> untuk menandai gerakan spesifik (misal: saat operator menyolder)</li>
+                    <li>Gunakan slider <strong>Start</strong> dan <strong>End</strong> untuk menandai gerakan spesifik</li>
                     <li>Klik <strong>Capture Clip</strong> untuk merekam potongan tersebut</li>
-                    <li>Download klip dari gallery. Gunakan klip ini sebagai contoh di <a href="https://teachablemachine.withgoogle.com/train/pose" target="_blank" rel="noreferrer" style={{ color: '#ffd700', textDecoration: 'underline' }}>situs Teachable Machine</a></li>
+                    <li>Klik tombol 🖼️ (Extract Images) pada clip gallery untuk mengekstrak frame video menjadi file ZIP.</li>
                 </ol>
 
-                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🚀 Load & Test Model</h3>
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🚀 Trainer: TM vs CVAT.ai</h3>
+                <ul>
+                    <li><strong>Google Teachable Machine</strong>: Ideal untuk prototipe cepat dan training pose/image sederhana langsung di browser.</li>
+                    <li><strong>CVAT.ai (Professional)</strong>: Standar industri untuk anotasi dataset besar. Gunakan file ZIP dari Video Slicer untuk diupload ke CVAT untuk anotasi profesional.</li>
+                </ul>
+
+                <h3 style={{ color: '#ffd700', marginTop: '20px' }}>🧪 Load & Test Model</h3>
                 <ol>
-                    <li>Setelah melatih model di Teachable Machine, klik <strong>Export Model</strong> &rarr; <strong>Update my cloud model</strong></li>
-                    <li>Copy URL yang muncul (link <code>https://teachablemachine...</code>)</li>
-                    <li>Kembali ke MAVi, pilih tipe (Pose/Image) dan paste URL tersebut</li>
-                    <li>Klik <strong>Load Model</strong></li>
-                    <li>Klik <strong>Start Test</strong> untuk melihat prediksi AI secara real-time pada video</li>
+                    <li>Setelah model siap, copy URL model (untuk TM) atau endpoint model kustom Anda.</li>
+                    <li>Pilih tipe (Pose/Image) dan paste URL tersebut di MAVi.</li>
+                    <li>Klik <strong>Load Model</strong>.</li>
+                    <li>Gunakan model ini di <strong>Studio Model</strong> dengan memilih Rule Type: <strong>Teachable Machine</strong> atau <strong>CVAT / Custom Model</strong>.</li>
                 </ol>
 
                 <h3 style={{ color: '#ffd700', marginTop: '20px' }}>💡 Tips</h3>
                 <ul>
-                    <li>Pastikan klip video fokus pada satu gerakan saja</li>
-                    <li>Minimal 20-30 klip per kategori gerak untuk akurasi tinggi</li>
-                    <li>Model yang sudah diload bisa langsung dipakai di <strong>Studio Model</strong> sebagai Rule</li>
+                    <li>Gunakan CVAT.ai jika Anda membutuhkan anotasi yang sangat presisi oleh tim industrial engineer.</li>
+                    <li>Minimal 20-30 klip per kategori gerak untuk akurasi tinggi.</li>
                 </ul>
             </>
         )

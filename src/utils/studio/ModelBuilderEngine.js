@@ -7,6 +7,7 @@ export const RULE_TYPES = {
     OPERATOR_PROXIMITY: { label: 'Operator Proximity', description: 'Distance to another person' },
     POSE_MATCHING: { label: 'Golden Pose Match', description: 'Similarity to reference pose' },
     TEACHABLE_MACHINE: { label: 'Teachable Machine', description: 'Custom classification model (Image or Pose)' },
+    CVAT_MODEL: { label: 'CVAT / Custom Model', description: 'Industrial model trained via CVAT.ai' },
     ADVANCED_SCRIPT: { label: 'Advanced Script (DSL)', description: 'Write custom logic in text (e.g. hand.y < eye.y)' }
 };
 
