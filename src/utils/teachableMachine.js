@@ -23,11 +23,14 @@ export const loadScripts = () => {
         }
 
         if (isLoadingLibrary) {
-            // Simple polling if already loading
+            // Check every 100ms if library started or failed loading
             const checkParams = setInterval(() => {
                 if (isLibraryLoaded) {
                     clearInterval(checkParams);
                     resolve();
+                } else if (!isLoadingLibrary) {
+                    clearInterval(checkParams);
+                    reject(new Error('Library loading failed in another call'));
                 }
             }, 100);
             return;
@@ -79,6 +82,9 @@ export const loadImageScripts = () => {
                 if (isImageLibraryLoaded) {
                     clearInterval(checkParams);
                     resolve();
+                } else if (!isLoadingImageLibrary) {
+                    clearInterval(checkParams);
+                    reject(new Error('Image library loading failed in another call'));
                 }
             }, 100);
             return;
@@ -129,18 +135,22 @@ export const loadModelFromURL = async (url) => {
     await loadScripts();
     if (!window.tmPose) throw new Error('Teachable Machine library not loaded');
 
-    // Ensure URL ends with slash
-    if (!url.endsWith('/')) url = url + '/';
+    // Sanitize URL
+    let baseUrl = url.trim();
+    if (baseUrl.endsWith('model.json')) {
+        baseUrl = baseUrl.replace('model.json', '');
+    }
+    if (!baseUrl.endsWith('/')) baseUrl = baseUrl + '/';
 
-    const modelURL = url + "model.json";
-    const metadataURL = url + "metadata.json";
+    const modelURL = baseUrl + "model.json";
+    const metadataURL = baseUrl + "metadata.json";
 
     try {
         const model = await window.tmPose.load(modelURL, metadataURL);
         return model;
     } catch (error) {
         console.error("Error loading TM model from URL:", error);
-        throw new Error("Failed to load model from URL. Please check if the URL is correct (e.g., https://teachablemachine.withgoogle.com/models/.../)");
+        throw new Error("Failed to load model from URL. Please check if the URL is correct (e.g., https://teachablemachine.withgoogle.com/models/...)");
     }
 };
 
@@ -152,11 +162,15 @@ export const loadImageModelFromURL = async (url) => {
     await loadImageScripts();
     if (!window.tmImage) throw new Error('Teachable Machine Image library not loaded');
 
-    // Ensure URL ends with slash
-    if (!url.endsWith('/')) url = url + '/';
+    // Sanitize URL
+    let baseUrl = url.trim();
+    if (baseUrl.endsWith('model.json')) {
+        baseUrl = baseUrl.replace('model.json', '');
+    }
+    if (!baseUrl.endsWith('/')) baseUrl = baseUrl + '/';
 
-    const modelURL = url + "model.json";
-    const metadataURL = url + "metadata.json";
+    const modelURL = baseUrl + "model.json";
+    const metadataURL = baseUrl + "metadata.json";
 
     try {
         const model = await window.tmImage.load(modelURL, metadataURL);

@@ -598,11 +598,12 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
             setExtractingClipId(null);
         }
     };
-    const handleLoadModel = async () => {
-        if (!tmUrl) return;
+    const handleLoadModel = async (urlToLoad) => {
+        const url = urlToLoad || tmUrl;
+        if (!url) return;
         setIsLoading(true);
         try {
-            const loadedModel = tmType === 'pose' ? await loadModelFromURL(tmUrl) : await loadImageModelFromURL(tmUrl);
+            const loadedModel = tmType === 'pose' ? await loadModelFromURL(url) : await loadImageModelFromURL(url);
             setModel(loadedModel);
             alert('Model loaded successfully!');
         } catch (e) {
@@ -883,7 +884,7 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
                                     </select>
                                     <input type="text" style={styles.input} placeholder="Model URL..." value={tmUrl} onChange={(e) => setTmUrl(e.target.value)} />
                                 </div>
-                                <button style={{ ...styles.button, ...styles.primaryBtn, justifyContent: 'center' }} onClick={handleLoadModel} disabled={isLoading}>
+                                <button style={{ ...styles.button, ...styles.primaryBtn, justifyContent: 'center' }} onClick={() => handleLoadModel(tmUrl.trim())} disabled={isLoading}>
                                     {isLoading ? <RefreshCw size={18} className="animate-spin" /> : <CheckCircle size={18} />} {isLoading ? 'Loading...' : 'Load Model'}
                                 </button>
                                 {model && (
@@ -920,8 +921,8 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
                         {prediction && (
                             <div style={{ ...styles.card, borderLeft: '4px solid #3b82f6', padding: '15px' }}>
                                 <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>PREDICTION RESULT:</div>
-                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#3b82f6' }}>{prediction.className}</div>
-                                <div style={{ fontSize: '1rem', color: '#cbd5e1' }}>Confidence: {(prediction.probability * 100).toFixed(1)}%</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#3b82f6' }}>{prediction.bestClass}</div>
+                                <div style={{ fontSize: '1rem', color: '#cbd5e1' }}>Confidence: {(prediction.accuracy * 100).toFixed(1)}%</div>
                             </div>
                         )}
                     </div>
