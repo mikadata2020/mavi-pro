@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Upload, Scissors, Play, Pause, Download, Trash2, CheckCircle,
-    ExternalLink, RefreshCw, Save, Video, Bot, Terminal, HelpCircle, X
+    ExternalLink, RefreshCw, Save, Video, Bot, Terminal, HelpCircle, X,
+    Image, FolderArchive, Loader2
 } from 'lucide-react';
 import { loadModelFromURL, loadImageModelFromURL, predict } from '../utils/teachableMachine';
 import { helpContent } from '../utils/helpContent';
+import { extractFramesToZip } from '../utils/videoToImages';
+import { saveAs } from 'file-saver';
 
 // Static Styles
 const styles = {
@@ -370,6 +373,7 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
     const [isTesting, setIsTesting] = useState(false);
     const testLoopRef = useRef(null);
     const canvasRef = useRef(null);
+    const [extractingClipId, setExtractingClipId] = useState(null);
     const [savedModels, setSavedModels] = useState([]);
     const [modelName, setModelName] = useState('');
 
@@ -489,12 +493,13 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
             // Setup MediaRecorder with best possible format
             const stream = canvas.captureStream(30);
             const mimeTypes = [
+                'video/webm;codecs=vp9',
+                'video/webm;codecs=vp8',
+                'video/webm;codecs=h264',
+                'video/webm',
                 'video/mp4;codecs=h264',
                 'video/mp4;codecs=avc1',
-                'video/mp4',
-                'video/webm;codecs=h264',
-                'video/webm;codecs=vp8',
-                'video/webm'
+                'video/mp4'
             ];
             const supportedType = mimeTypes.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
 
@@ -563,6 +568,19 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
         videoRef.current.currentTime = Math.max(0, Math.min(duration, videoRef.current.currentTime + seconds));
     };
 
+    const handleExtractImages = async (clip) => {
+        if (!clip.blob) return;
+        setExtractingClipId(clip.id);
+        try {
+            const zipBlob = await extractFramesToZip(clip.blob, 5, clip.name.replace(/\s+/g, '_'));
+            saveAs(zipBlob, `${clip.name}_images.zip`);
+        } catch (err) {
+            console.error('Frame extraction failed:', err);
+            alert('Gagal mengambil gambar dari video: ' + err.message);
+        } finally {
+            setExtractingClipId(null);
+        }
+    };
     const handleLoadModel = async () => {
         if (!tmUrl) return;
         setIsLoading(true);
@@ -735,6 +753,14 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
                                             </div>
                                         </div>
                                         <div style={{ display: 'flex', gap: '2px' }}>
+                                            <button
+                                                title="Extract Images for TM"
+                                                style={{ background: 'none', border: 'none', color: '#10b981', cursor: extractingClipId === clip.id ? 'not-allowed' : 'pointer', padding: '4px' }}
+                                                onClick={() => handleExtractImages(clip)}
+                                                disabled={extractingClipId === clip.id}
+                                            >
+                                                {extractingClipId === clip.id ? <Loader2 size={16} className="animate-spin" /> : <FolderArchive size={16} />}
+                                            </button>
                                             <button title="Download" style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }} onClick={() => downloadClip(clip)}>
                                                 <Download size={16} />
                                             </button>
