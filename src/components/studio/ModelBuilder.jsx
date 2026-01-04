@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler, Undo, Redo, Copy, RotateCw, Upload, Download, FileJson, Zap } from 'lucide-react';
+import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler, Undo, Redo, Copy, RotateCw, Upload, Download, FileJson, Zap, ExternalLink, Sparkles } from 'lucide-react';
 import ObjectTracking from '../ObjectTracking'; // Reuse existing component for video + detection
 import RuleEditor from './RuleEditor';
 import StateDiagram from './StateDiagram';
 import CycleTimeChart from './CycleTimeChart';
 import PoseSimulator from './PoseSimulator';
 import { generatePDFReport } from '../../utils/studio/PDFReportGenerator';
+import WebcamCapture from '../features/WebcamCapture';
 import { initializePoseDetector, detectPose } from '../../utils/poseDetector';
 import PoseNormalizer from '../../utils/studio/PoseNormalizer';
 import PoseSmoother from '../../utils/studio/PoseSmoother';
@@ -16,6 +17,7 @@ import { generateAiRuleFromImage, validateAiRuleScript } from '../../utils/aiGen
 import useHistory from '../../hooks/useHistory';
 import { MODEL_TEMPLATES } from '../../utils/studio/ModelTemplates';
 import tmDetector from '../../utils/teachableMachineDetector';
+import roboflowDetector from '../../utils/roboflowDetector';
 
 const ModelBuilder = ({ model, onClose, onSave }) => {
     const [currentModel, setCurrentModel, undoModel, redoModel, canUndoModel, canRedoModel] = useHistory({
@@ -75,6 +77,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const [currentTestState, setCurrentTestState] = useState(null);
     const [cycleStats, setCycleStats] = useState(null);
     const [tmPredictions, setTmPredictions] = useState({}); // { [modelId]: prediction }
+    const [rfPredictions, setRfPredictions] = useState({}); // { [modelId]: detections[] }
     const [tmLoadingStates, setTmLoadingStates] = useState({}); // { [modelId]: boolean }
     const [tmFiles, setTmFiles] = useState({}); // { [modelId]: { model, weights, metadata } }
 
@@ -176,10 +179,83 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const handleFileUpload = (event) => {
         const file = event.target.files[0];
         if (file) {
+            console.log('File uploaded:', file.name);
             const url = URL.createObjectURL(file);
             setVideoSrc(url);
-            smootherRef.current.reset(); // Reset smoothing history on new file
+            setTestModeInput('video'); // Auto-switch to video mode
+            if (smootherRef.current) smootherRef.current.reset(); // Reset smoothing history on new file
         }
+        event.target.value = ''; // CRITICAL: Reset value so same file can be uploaded again
+    };
+
+    const handleAddRuleFromMeasurement = () => {
+
+        let targetStateId = selectedStateId;
+
+        // Auto-select if only one transition exists or only one source state exists
+        if (!targetStateId) {
+            const uniqueFromStates = [...new Set(currentModel.transitions.map(t => t.from))];
+            if (uniqueFromStates.length === 1) {
+                targetStateId = uniqueFromStates[0];
+                setSelectedStateId(targetStateId); // Sync UI
+            } else if (currentModel.transitions.length === 1) {
+                targetStateId = currentModel.transitions[0].from;
+                setSelectedStateId(targetStateId);
+            } else {
+                alert("No state selected. Please select a transition/state in 'Rules & Logic' tab first.");
+                return;
+            }
+        }
+
+        const validTransitions = currentModel.transitions.filter(t => t.from === targetStateId);
+
+        if (validTransitions.length === 0) {
+            alert("No transition found starting from the selected state. Add a transition in 'Rules & Logic' first.");
+            return;
+        }
+
+        // Default to the first transition found
+        const targetTransition = validTransitions[0];
+
+        const newRule = {
+            id: `rule_meas_${Date.now()}`,
+            type: measurementResult.angle !== null ? 'POSE_ANGLE' : 'POSE_RELATION',
+            params: {}
+        };
+
+        if (newRule.type === 'POSE_ANGLE') {
+            newRule.params = {
+                jointA: selectedMeasurePoints[0],
+                jointB: selectedMeasurePoints[1],
+                jointC: selectedMeasurePoints[2],
+                operator: '<',
+                value: Math.round(measurementResult.angle)
+            };
+        } else {
+            newRule.params = {
+                jointA: selectedMeasurePoints[0],
+                targetType: 'POINT',
+                jointB: selectedMeasurePoints[1],
+                operator: '<',
+                value: parseFloat((measurementResult.distance / 100).toFixed(4)) // Convert back from percentage if needed, or check usage
+            };
+            // Note: measurementResult.distance is multiplied by 100 in handleCanvasClick (line 149), so divide by 100 
+            // to store normalized value (0-1) which is standard for logic
+        }
+
+        const updatedCondition = {
+            ...targetTransition.condition,
+            rules: [...targetTransition.condition.rules, newRule]
+        };
+
+        handleUpdateTransition(targetTransition.id, { condition: updatedCondition });
+
+        setMeasurementResult(null);
+        setSelectedMeasurePoints([]);
+        setMeasurementMode(null); // Exit measurement mode
+
+        // Ensure "Rules & Logic" tab is active so they can see it
+        setActiveTab('rules');
     };
 
     // IP Camera Recording Handlers
@@ -350,13 +426,26 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     // Smooth all detected poses
                     const smoothedPoses = poses.map(p => ({
                         ...p,
-                        keypoints: smootherRef.current.smooth(p.keypoints, p.id || 0) // Assume smoother can handle IDs
+                        keypoints: smootherRef.current.smooth(p.keypoints, p.id || 0)
                     }));
 
-                    setActivePose(smoothedPoses[0]); // Keep primary active pose for legacy UI
+                    setActivePose(smoothedPoses[0]);
 
-                    // Draw Visualizations (Pass all poses for inter-operator rules)
-                    drawVisualizations(smoothedPoses[0], null, null, smoothedPoses);
+                    // --- DETECTION PHASE ---
+                    let currentTmPredictions = {};
+                    if (currentModel.tmModels && currentModel.tmModels.length > 0) {
+                        currentTmPredictions = await tmDetector.predictAll(videoRef.current);
+                        setTmPredictions(currentTmPredictions);
+                    }
+
+                    let currentRfPredictions = {};
+                    if (currentModel.rfModels && currentModel.rfModels.length > 0) {
+                        currentRfPredictions = await roboflowDetector.detectAll(videoRef.current, currentModel.rfModels, smoothedPoses[0]);
+                        setRfPredictions(currentRfPredictions);
+                    }
+
+                    // Draw Visualizations with fresh detections
+                    drawVisualizations(smoothedPoses[0], null, null, smoothedPoses, currentRfPredictions);
 
                     // TEST MODE EXECUTION
                     if (activeTab === 'test') {
@@ -365,65 +454,55 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             engineRef.current.loadModel(currentModel);
                             engineRef.current.onCycleComplete = (stats) => {
                                 setCycleStats(stats);
-                                console.log("♻️ Cycle Analytics Updated:", stats);
                             };
+                            // Force an initial log to prove console works
+                            engineRef.current.addLog(0, videoRef.current.currentTime, "System", "Test Mode Active - Waiting for operator...");
+                            setTestLogs([...engineRef.current.getLogs()]);
                             console.log("Test Engine Started with Model:", currentModel.name);
                         }
 
-                        // Run Teachable Machine Inference
-                        let currentTmPredictions = {};
-                        if (currentModel.tmModels && currentModel.tmModels.length > 0) {
-                            currentTmPredictions = await tmDetector.predictAll(videoRef.current);
-                            setTmPredictions(currentTmPredictions);
-                        }
-
-                        // Run Engine with all poses
-                        engineRef.current.processFrame({
+                        // Run Engine with all data and capture result
+                        const result = engineRef.current.processFrame({
                             poses: smoothedPoses,
                             objects: [],
                             hands: [],
                             timestamp: videoRef.current.currentTime,
-                            teachableMachine: currentTmPredictions
+                            teachableMachine: currentTmPredictions,
+                            roboflow: currentRfPredictions
                         });
 
-                        // Update UI
-                        const logs = engineRef.current.getLogs();
-                        if (logs.length !== testLogs.length) {
-                            setTestLogs([...logs]);
-                        }
+                        // Update UI Logs immediately from result
+                        setTestLogs([...result.logs]);
 
                         // Update Timeline Data
-                        if (engineRef.current.timelineEvents) {
-                            const activeEvents = [];
-                            engineRef.current.activeTracks.forEach((track, id) => {
-                                activeEvents.push({
-                                    state: track.currentState,
-                                    startTime: track.stateEnterTime || track.enterTime,
-                                    endTime: videoRef.current.currentTime,
-                                    isActive: true
-                                });
-                            });
-
-                            setTimelineData([...engineRef.current.timelineEvents, ...activeEvents]);
+                        if (result.timelineEvents) {
+                            const activeEvents = result.tracks.map(t => ({
+                                state: t.state,
+                                startTime: videoRef.current.currentTime - parseFloat(t.duration), // Rough estimate
+                                endTime: videoRef.current.currentTime,
+                                isActive: true
+                            }));
+                            setTimelineData([...result.timelineEvents, ...activeEvents]);
                         }
 
-                        // Visualize Current State of Track 1 (Primary)
-                        const primaryTrack = engineRef.current.activeTracks.get(1) || engineRef.current.activeTracks.values().next().value;
-                        if (primaryTrack) {
-                            setCurrentTestState(primaryTrack.currentState);
+                        // Visualize Current State
+                        if (result.tracks && result.tracks.length > 0) {
+                            setCurrentTestState(result.tracks[0].state);
 
-                            // Sync TM results back to rules for live UI indicator
-                            if (currentTmPredictions) { // Changed from currentTmPrediction to currentTmPredictions
-                                currentModel.transitions.forEach(t => {
-                                    t.condition.rules.forEach(r => {
-                                        if (r.type === 'TEACHABLE_MACHINE') {
-                                            // This part needs to be more specific if r.lastValue is a single prediction
-                                            // For now, just ensuring it doesn't break
-                                            // r.lastValue = currentTmPredictions; // This might not be correct if r.lastValue expects a single value
+                            // Sync Predictions back to rules for live UI indicator
+                            currentModel.transitions.forEach(t => {
+                                t.condition.rules.forEach(r => {
+                                    if (r.type === 'TEACHABLE_MACHINE') {
+                                        r.lastValue = r.params.modelId ? currentTmPredictions[r.params.modelId] : Object.values(currentTmPredictions)[0];
+                                    } else if (r.type === 'ROBOFLOW_DETECTION') {
+                                        if (r.params.modelId) {
+                                            r.lastValue = currentRfPredictions[r.params.modelId];
+                                        } else {
+                                            r.lastValue = Object.values(currentRfPredictions).flat();
                                         }
-                                    });
+                                    }
                                 });
-                            }
+                            });
                         }
                     }
                 }
@@ -446,7 +525,35 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     const smoothed = smootherRef.current.smooth(poses[0].keypoints);
                     const pose = { ...poses[0], keypoints: smoothed };
                     setActivePose(pose);
-                    drawVisualizations(pose);
+
+                    // Also run one-off Roboflow if needed
+                    let rfData = {};
+                    if (currentModel.rfModels && currentModel.rfModels.length > 0) {
+                        rfData = await roboflowDetector.detectAll(videoRef.current, currentModel.rfModels, pose);
+                        setRfPredictions(rfData);
+                    }
+
+                    drawVisualizations(pose, null, null, [pose], rfData);
+
+                    // Run one-off inference to update state while paused
+                    if (activeTab === 'test') {
+                        if (!engineRef.current) {
+                            engineRef.current = new InferenceEngine();
+                            engineRef.current.loadModel(currentModel);
+                        }
+
+                        engineRef.current.processFrame({
+                            poses: [pose],
+                            objects: [],
+                            hands: [],
+                            timestamp: videoRef.current.currentTime,
+                            roboflow: rfData
+                        });
+
+                        const primaryTrack = engineRef.current.activeTracks.get(1) || engineRef.current.activeTracks.values().next().value;
+                        setCurrentTestState(primaryTrack?.currentState);
+                        setTestLogs([...engineRef.current.getLogs()]);
+                    }
                 }
             });
         }
@@ -1064,7 +1171,35 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         });
     };
 
-    const drawVisualizations = (pose, overridePoints = null, overrideResults = null, allPoses = null) => {
+    const drawRoboflowDetections = (ctx, rfPredictions) => {
+        if (!rfPredictions || !canvasRef.current) return;
+        const canvas = canvasRef.current;
+
+        Object.entries(rfPredictions).forEach(([modelId, detections]) => {
+            if (!Array.isArray(detections)) return;
+
+            detections.forEach(det => {
+                const [x, y, w, h] = det.bbox;
+
+                // Draw bounding box
+                ctx.strokeStyle = '#8b5cf6'; // Violet for Roboflow
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x * canvas.width, y * canvas.height, w * canvas.width, h * canvas.height);
+
+                // Draw label
+                ctx.fillStyle = '#8b5cf6';
+                ctx.font = 'bold 12px Inter';
+                const label = `${det.class} ${(det.confidence * 100).toFixed(0)}%`;
+                const textWidth = ctx.measureText(label).width;
+
+                ctx.fillRect(x * canvas.width, y * canvas.height - 20, textWidth + 10, 20);
+                ctx.fillStyle = 'white';
+                ctx.fillText(label, x * canvas.width + 5, y * canvas.height - 5);
+            });
+        });
+    };
+
+    const drawVisualizations = (pose, overridePoints = null, overrideResults = null, allPoses = null, currentRfPredictions = null) => {
         if (!canvasRef.current || !pose) return;
         const ctx = canvasRef.current.getContext('2d');
         const vw = videoRef.current ? videoRef.current.videoWidth : 1;
@@ -1077,6 +1212,11 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
         if (visOptions.skeleton) drawSkeleton(ctx, pose);
         if (visOptions.rules) drawRulesVisuals(ctx, pose, allPoses);
+
+        // Draw Roboflow Bounding Boxes
+        if (visOptions.rules) {
+            drawRoboflowDetections(ctx, currentRfPredictions || rfPredictions);
+        }
 
         if (visOptions.roi && selectedStateId) {
             const state = currentModel.states.find(s => s.id === selectedStateId);
@@ -1198,148 +1338,53 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                 </h2>
 
                 <div style={{ lineHeight: '1.6', fontSize: '0.95rem' }}>
-                    <p>Sistem ini dirancang untuk membuat <strong>"Aturan Gerakan" (Motion Rules)</strong> tanpa koding, menggunakan logika <strong>Finite State Machine (FSM)</strong>.</p>
+                    <p>Sistem ini dirancang untuk membuat <strong>"Aturan Gerakan" (Motion Rules)</strong> tanpa koding, menggunakan logika <strong>Finite State Machine (FSM)</strong> dan <strong>AI Object Detection</strong>.</p>
 
-                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>1. Konsep Dasar: State Machine (FSM)</h3>
-                    <p>Bayangkan pekerjaan sebagai serangkaian "Status" (Steps).</p>
-                    <ul style={{ marginLeft: '20px', listStyleType: 'disc', color: '#d1d5db' }}>
-                        <li>Contoh: <code>Diam</code> → <code>Ambil Barang</code> → <code>Pasang</code> → <code>Selesai</code>.</li>
-                        <li>Tugas Anda adalah mendefinisikan <strong>KAPAN</strong> sistem harus pindah antar status tersebut.</li>
+                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>1. Alur Kerja Utama</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#3b82f6' }}>Langkah 1: Definisi Alur (Steps & States)</strong>
+                            <p style={{ fontSize: '0.85rem', color: '#d1d5db', marginTop: '5px' }}>
+                                Tentukan langkah kerja operator di tab <strong>Steps</strong>. Misal: 1. Idle, 2. Picking, 3. Assembly. Tentukan ROI (zona kerja) untuk setiap langkah.
+                            </p>
+                        </div>
+                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <strong style={{ color: '#10b981' }}>Langkah 2: Logika Pemicu (Rules)</strong>
+                            <p style={{ fontSize: '0.85rem', color: '#d1d5db', marginTop: '5px' }}>
+                                Hubungkan antar langkah di tab <strong>Rules & Logic</strong>. Gunakan data Pose (Sendi) atau data <strong>Roboflow (Objek)</strong> untuk memicu perpindahan status.
+                            </p>
+                        </div>
+                    </div>
+
+                    <h3 style={{ color: '#a855f7', marginTop: '20px' }}>2. Integrasi AI (Roboflow YOLO)</h3>
+                    <p>Mendeteksi APD, komponen, atau alat kerja menggunakan model AI kustom.</p>
+                    <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
+                        <ul style={{ marginLeft: '20px', color: '#d1d5db', fontSize: '0.9rem' }}>
+                            <li><strong>Konfigurasi:</strong> Masuk ke tab <code>Settings</code> → <code>Roboflow Models</code>. Masukkan API Key dan Project ID Anda.</li>
+                            <li><strong>Demo:</strong> Klik tombol <code>✨ Try Demo</code> untuk simulasi deteksi Helm (PPE) secara otomatis.</li>
+                            <li><strong>Rule:</strong> Gunakan tipe rule <code>Roboflow Detection</code>, ketik nama objek (misal: <code>helmet</code>), dan tentukan ambang batas (threshold, misal: 0.5 untuk 50%).</li>
+                        </ul>
+                    </div>
+
+                    <h3 style={{ color: '#f59e0b', marginTop: '20px' }}>3. Melakukan Pengujian (Test Run)</h3>
+                    <p style={{ fontSize: '0.9rem', color: '#d1d5db' }}>Uji logika Anda dengan video atau webcam untuk memastikan Model berjalan dengan benar.</p>
+                    <ul style={{ marginLeft: '20px', color: '#d1d5db', fontSize: '0.85rem' }}>
+                        <li><strong>Panel Kiri:</strong> Digunakan khusus untuk visualisasi (Video, Boneka Pose, dan Kotak Deteksi Objek).</li>
+                        <li><strong>Live Console:</strong> Memantau log sistem secara real-time. Jika tertulis "Operator Detected", berarti sistem sudah mulai memproses data.</li>
+                        <li><strong>Visual Timeline:</strong> Grafik warna di bagian atas panel kanan menunjukkan kapan transisi terjadi dan berapa lama durasinya.</li>
+                        <li><strong>Cycle Analytics:</strong> Menghitung VA/NVA ratio secara otomatis setelah siklus kerja selesai.</li>
                     </ul>
 
-                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>2. Workflow Pembuatan Model</h3>
+                    <h3 style={{ color: '#ef4444', marginTop: '20px' }}>4. Tips Akurasi</h3>
+                    <ul style={{ marginLeft: '20px', color: '#d1d5db', fontSize: '0.85rem' }}>
+                        <li><strong>Indikator Warna:</strong> Jika rule Anda menyala biru (Current Value), berarti syarat tersebut sedang dipenuhi oleh operator.</li>
+                        <li><strong>Holding Time:</strong> Jika transisi terlalu sensitif, tambahkan "Holding Time" (detik) pada setting transisi agar status tidak pindah terlalu cepat.</li>
+                        <li><strong>Refresh:</strong> Jika data tidak muncul, lakukan simpan model dan refresh browser (Ctrl+Shift+R).</li>
+                    </ul>
 
-                    <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
-                        <strong style={{ color: '#eab308' }}>Tahap A: Siapkan Data (Tab "Pose Data")</strong>
-                        <ol style={{ marginLeft: '20px', marginTop: '5px', color: '#d1d5db' }}>
-                            <li>Upload video referensi operator.</li>
-                            <li>Buka tab <strong>Pose Data (33)</strong>.</li>
-                            <li>Lihat nilai <strong>X/Y</strong> real-time dari 33 titik tubuh saat gerakan terjadi.</li>
-                            <li><em>Tips:</em> Perhatikan nilai saat transisi terjadi (misal: Saat tangan diangkat, <code>wrist.y</code> menjadi lebih kecil dari <code>nose.y</code>).</li>
-                        </ol>
-                    </div>
-
-                    <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
-                        <strong style={{ color: '#eab308' }}>Tahap B: Buat State (Tab "States")</strong>
-                        <ol style={{ marginLeft: '20px', marginTop: '5px', color: '#d1d5db' }}>
-                            <li>Buat State baru, misal: <strong>"Idle"</strong> dan <strong>"Lifting"</strong>.</li>
-                            <li>(Opsional) Gambar <strong>ROI</strong> (Kotak Hijau) di video untuk menandai area kerja.</li>
-                            <li>(Opsional) Klik <strong>Capture Frame</strong> untuk menyimpan pose referensi.</li>
-                        </ol>
-                    </div>
-
-                    <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
-                        <strong style={{ color: '#eab308' }}>Tahap C: Buat Aturan (Tab "Rules & Logic")</strong>
-                        <ol style={{ marginLeft: '20px', marginTop: '5px', color: '#d1d5db' }}>
-                            <li>Hubungkan State: Pilih <strong>From: Idle</strong> → <strong>To: Lifting</strong>.</li>
-                            <li>Klik <strong>+ Add Rule</strong> pada transisi tersebut.</li>
-                            <li>Pilih Tipe Rule <strong>"Point Relation"</strong>.</li>
-                            <li>Contoh Logika: <code>Right Wrist (y)</code> <code>&lt;</code> <code>Nose (y)</code>.</li>
-                            <li><em>Artinya:</em> "Pindah ke Lifting JIKA Pergelangan Tangan LEBIH TINGGI dari Hidung".</li>
-                        </ol>
-                    </div>
-
-                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>3. Saat Dijalankan (Live Engine)</h3>
-                    <p>Sistem akan memantau CCTV/Webcam secara terus menerus. Jika operator melakukan gerakan yang memenuhi syarat Rule (misal: mengangkat tangan), sistem otomatis pindah Status dan mencatat <strong>Cycle Time</strong> secara akurat.</p>
-
-                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>4. Tipe Rule (Aturan) & Penggunaannya</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #3b82f6' }}>
-                            <strong style={{ color: '#60a5fa' }}>Joint Angle (Sudut Sendi)</strong>
-                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Menghitung sudut derajat antara 3 titik tubuh (misal: Bahu-Siku-Pergelangan Tangan).</p>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Lengan lurus (Angle &gt; 160°) atau menekuk (Angle &lt; 90°).</p>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #10b981' }}>
-                            <strong style={{ color: '#10b981' }}>Pose Relation (Hubungan XYZ)</strong>
-                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Membandingkan posisi satu titik terhadap titik lain atau nilai koordinat tertentu.</p>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Pergelangan tangan di atas hidung (Wrist.y &lt; Nose.y) untuk pekerjaan di atas kepala.</p>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
-                            <strong style={{ color: '#f59e0b' }}>Pose Velocity (Kecepatan)</strong>
-                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Mengukur seberapa cepat satu titik tubuh bergerak (pixel/detik).</p>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Mendeteksi mulai gerak (Speed &gt; 100) atau berhenti (Speed &lt; 10).</p>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ec4899' }}>
-                            <strong style={{ color: '#ec4899' }}>Object in ROI (Deteksi Objek)</strong>
-                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Mendeteksi keberadaan objek tertentu (Helm, Kotak, dll) di dalam zona ROI.</p>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Fitur Baru:</em> Klik ikon pensil (✎) untuk memasukkan <strong>Nama Objek Custom</strong> jika tidak ada di list standar.</p>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
-                            <strong style={{ color: '#8b5cf6' }}>Advanced Script (DSL)</strong>
-                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Tulis logika kompleks bebas menggunakan teks script.</p>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Syntax:</em> <code>dist(A, B)</code>, <code>angle(A, B, C)</code>, <code>joint.x</code>, <code>joint.y</code>.</p>
-                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> <code>dist(right_wrist, nose) &lt; 0.2 AND right_wrist.y &lt; nose.y</code></p>
-                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#a78bfa' }}>✨ Gunakan tombol <strong>"AI Logic Check"</strong> untuk memvalidasi script Anda.</p>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #ef4444' }}>
-                            <strong style={{ color: '#ef4444' }}>Object Proximity (Kedekatan Objek)</strong>
-                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Mengukur jarak antara titik tubuh (tangan) dengan objek yang terdeteksi AI.</p>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Tangan menyentuh "Part Box" (Distance &lt; 50px).</p>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
-                            <strong style={{ color: '#8b5cf6' }}>Golden Pose Match (Referensi Emas)</strong>
-                            <p style={{ margin: '4px 0', fontSize: '0.85rem' }}>Membandingkan seluruh pose saat ini dengan rekaman pose ideal (Pose Emas).</p>
-                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af' }}><em>Contoh:</em> Verifikasi postur berdiri standar (Similarity &gt; 90%).</p>
-                        </div>
-                    </div>
-
-                    <h3 style={{ color: '#60a5fa', marginTop: '20px' }}>5. 📚 Contoh Kasus Penggunaan (Use Cases)</h3>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
-                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
-                            <strong style={{ color: '#eab308' }}>Kasus 1: Menghitung Jumlah Rakitan</strong>
-                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
-                                Menghitung berapa kali operator mengambil part dari box.
-                            </p>
-                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
-                                <li><strong>State 1 (Idle):</strong> Tangan jauh dari box.</li>
-                                <li><strong>Rule (Idle &rarr; Pick):</strong> <code>Hand Proximity</code> ke "Parts Box" &lt; 10cm.</li>
-                                <li><strong>State 2 (Picking):</strong> Tangan berada di dalam area box.</li>
-                                <li><strong>Return Rule:</strong> <code>Hand Proximity</code> &gt; 20cm.</li>
-                            </ul>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
-                            <strong style={{ color: '#ef4444' }}>Kasus 2: Safety - Tangan di Zona Bahaya</strong>
-                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
-                                Alarm jika tangan masuk area mesin saat mesin aktif.
-                            </p>
-                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
-                                <li><strong>Object:</strong> Gambar ROI di area mesin ("Danger Zone").</li>
-                                <li><strong>Rule:</strong> <code>Object in ROI</code> (Hand in Danger Zone).</li>
-                                <li><strong>Action:</strong> Trigger Audio Alert / Stop Signal.</li>
-                            </ul>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
-                            <strong style={{ color: '#10b981' }}>Kasus 3: Ergonomi - Kerja di Atas Kepala</strong>
-                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
-                                Mendeteksi postur kerja tidak ergonomis (Overhead Work).
-                            </p>
-                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
-                                <li><strong>Logic:</strong> Membandingkan Wrist Y dengan Nose Y.</li>
-                                <li><strong>Script (DSL):</strong> <code>right_wrist.y &lt; nose.y</code> (Ingat: Y=0 di atas).</li>
-                                <li><strong>Output:</strong> Catat durasi postur buruk.</li>
-                            </ul>
-                        </div>
-
-                        <div style={{ backgroundColor: '#111827', padding: '15px', borderRadius: '8px', border: '1px solid #374151' }}>
-                            <strong style={{ color: '#8b5cf6' }}>Kasus 4: Dua Tangan Bersamaan (Simultaneous)</strong>
-                            <p style={{ margin: '8px 0', fontSize: '0.85rem', color: '#d1d5db' }}>
-                                Memastikan operator mengangkat beban dengan dua tangan.
-                            </p>
-                            <ul style={{ paddingLeft: '20px', fontSize: '0.8rem', color: '#9ca3af' }}>
-                                <li><strong>Script (DSL):</strong> <code>dist(left_wrist, object) &lt; 0.1 AND dist(right_wrist, object) &lt; 0.1</code></li>
-                                <li><strong>Benefit:</strong> Mencegah cedera punggung akibat angkat beban tidak seimbang.</li>
-                            </ul>
-                        </div>
-                    </div>
+                    <p style={{ marginTop: '20px', fontSize: '0.8rem', color: '#9ca3af', fontStyle: 'italic', textAlign: 'center' }}>
+                        Tarik garis pembatas di tengah untuk menyesuaikan ukuran layar video dan editor.
+                    </p>
                 </div>
             </div>
         </div>
@@ -1529,13 +1574,16 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
             alignItems: 'center'
         },
         titleInput: {
-            background: 'transparent',
-            border: 'none',
+            background: 'rgba(0,0,0,0.2)',
+            border: '1px solid #374151',
+            borderRadius: '6px',
+            padding: '4px 12px',
             color: 'white',
             fontSize: '1.25rem',
             fontWeight: 'bold',
             outline: 'none',
-            width: '300px'
+            width: '400px',
+            transition: 'all 0.2s'
         },
         saveButton: {
             display: 'flex',
@@ -1552,7 +1600,8 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         workspace: {
             flex: 1,
             display: 'grid',
-            gridTemplateColumns: isMaximized ? '300px 1fr' : `${leftPanelWidth}% 1px 1fr`,
+            gridTemplateColumns: isMaximized ? '0px 0px 1fr' : `${leftPanelWidth}% 1px 1fr`,
+            gridTemplateRows: '1fr',
             overflow: 'hidden',
             backgroundColor: '#111827',
             transition: isMaximized ? 'grid-template-columns 0.4s' : 'none'
@@ -1650,7 +1699,10 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         },
         tabs: {
             display: 'flex',
-            borderBottom: '1px solid #374151'
+            borderBottom: '1px solid #374151',
+            backgroundColor: '#111827',
+            padding: '0 10px',
+            gap: '4px'
         },
         tab: (active) => ({
             padding: '12px 16px',
@@ -1776,6 +1828,16 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         value={currentModel.name}
                         onChange={(e) => setCurrentModel({ ...currentModel, name: e.target.value })}
                         style={styles.titleInput}
+                        onFocus={(e) => {
+                            e.target.style.background = '#111827';
+                            e.target.style.borderColor = '#3b82f6';
+                            e.target.style.boxShadow = '0 0 0 2px rgba(59, 130, 246, 0.2)';
+                        }}
+                        onBlur={(e) => {
+                            e.target.style.background = 'rgba(0,0,0,0.2)';
+                            e.target.style.borderColor = '#374151';
+                            e.target.style.boxShadow = 'none';
+                        }}
                     />
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -1849,10 +1911,34 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                         overflow: 'hidden'
                     }}>
                         {testModeInput === 'simulator' ? (
-                            <div style={{ width: '100%', height: '100%' }}>
+                            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                                 <PoseSimulator onPoseUpdate={handlePoseDetected} />
+                                <button
+                                    onClick={() => setTestModeInput(videoSrc ? 'video' : 'camera')}
+                                    style={{
+                                        position: 'absolute',
+                                        bottom: '20px',
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        zIndex: 100,
+                                        padding: '10px 24px',
+                                        background: '#1f2937',
+                                        border: '1px solid #3b82f6',
+                                        color: 'white',
+                                        borderRadius: '30px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
+                                        fontWeight: '600',
+                                        fontSize: '0.9rem'
+                                    }}
+                                >
+                                    <ArrowLeft size={18} /> Kembali ke {videoSrc ? 'Video' : 'Kamera'}
+                                </button>
                             </div>
-                        ) : videoSrc ? (
+                        ) : (testModeInput === 'video' && videoSrc) ? (
                             <>
                                 <video
                                     ref={videoRef}
@@ -1990,55 +2076,24 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                             }}>RULER</div>
 
                                             <button
-                                                onClick={() => {
-                                                    setMeasurementMode(measurementMode === 'distance' ? null : 'distance');
-                                                    setSelectedMeasurePoints([]);
-                                                    setMeasurementResult(null);
-                                                }}
+                                                onClick={() => setMeasurementMode(measurementMode === 'distance' ? null : 'distance')}
                                                 style={{
-                                                    width: '44px',
-                                                    height: '44px',
-                                                    borderRadius: '12px',
-                                                    backgroundColor: measurementMode === 'distance' ? '#2563eb' : 'transparent',
-                                                    color: measurementMode === 'distance' ? 'white' : '#9ca3af',
-                                                    border: 'none',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    transition: 'all 0.2s'
+                                                    backgroundColor: measurementMode === 'distance' ? '#3b82f6' : 'transparent',
+                                                    border: 'none', padding: '10px', borderRadius: '12px', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
                                                 }}
-                                                title="Measure Distance (Select 2 points)"
+                                                title="Measure Distance"
                                             >
                                                 <Ruler size={20} />
                                             </button>
-
                                             <button
-                                                onClick={() => {
-                                                    setMeasurementMode(measurementMode === 'angle' ? null : 'angle');
-                                                    setSelectedMeasurePoints([]);
-                                                    setMeasurementResult(null);
-                                                }}
+                                                onClick={() => setMeasurementMode(measurementMode === 'angle' ? null : 'angle')}
                                                 style={{
-                                                    width: '44px',
-                                                    height: '44px',
-                                                    borderRadius: '12px',
-                                                    backgroundColor: measurementMode === 'angle' ? '#2563eb' : 'transparent',
-                                                    color: measurementMode === 'angle' ? 'white' : '#9ca3af',
-                                                    border: 'none',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    transition: 'all 0.2s',
-                                                    fontSize: '0.7rem',
-                                                    fontWeight: 'bold'
+                                                    backgroundColor: measurementMode === 'angle' ? '#3b82f6' : 'transparent',
+                                                    border: 'none', padding: '10px', borderRadius: '12px', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
                                                 }}
-                                                title="Measure Angle (Select 3 points)"
+                                                title="Measure Angle"
                                             >
-                                                <Activity size={18} />
-                                                <span style={{ fontSize: '0.6rem' }}>DEG</span>
+                                                <RotateCw size={20} />
                                             </button>
 
                                             {(measurementMode || selectedMeasurePoints.length > 0) && (
@@ -2070,23 +2125,23 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                         {/* RESULT DISPLAY */}
                                         {measurementResult && (
                                             <div style={{
-                                                position: 'absolute',
-                                                bottom: '80px',
-                                                left: '20px',
-                                                zIndex: 50,
                                                 backgroundColor: 'rgba(31, 41, 55, 0.4)',
-                                                borderRadius: '12px',
-                                                padding: '12px 16px',
-                                                color: 'white',
-                                                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                                                backdropFilter: 'blur(4px)',
+                                                borderRadius: '16px',
+                                                padding: '12px',
                                                 border: '1px solid #374151',
-                                                width: 'fit-content',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                gap: '8px'
+                                                color: 'white',
+                                                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                                                width: '160px',
+                                                animation: 'fadeIn 0.3s ease-out'
                                             }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                                    <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>RESULT</span>
+                                                    <button onClick={() => { setMeasurementResult(null); setSelectedMeasurePoints([]); }} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
+                                                </div>
+
                                                 {measurementResult.distance !== null && (
-                                                    <div style={{ borderBottom: measurementResult.angle !== null ? '1px solid #374151' : 'none', paddingBottom: measurementResult.angle !== null ? '8px' : '0' }}>
+                                                    <div style={{ marginBottom: '8px' }}>
                                                         <div style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: '600', marginBottom: '2px' }}>DISTANCE</div>
                                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline' }}>
                                                             <div style={{ fontSize: '1.2rem', fontWeight: '800' }}>{measurementResult.distance.toFixed(1)}<span style={{ fontSize: '0.7rem', color: '#60a5fa', marginLeft: '2px' }}>%</span></div>
@@ -2103,6 +2158,28 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                                         </div>
                                                     </div>
                                                 )}
+
+                                                <button
+                                                    onClick={handleAddRuleFromMeasurement}
+                                                    style={{
+                                                        marginTop: '8px',
+                                                        width: '100%',
+                                                        padding: '8px',
+                                                        backgroundColor: '#2563eb',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        borderRadius: '8px',
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: '600',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        gap: '6px'
+                                                    }}
+                                                >
+                                                    <Plus size={14} /> Add to Rule
+                                                </button>
                                             </div>
                                         )}
 
@@ -2122,6 +2199,83 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                     </div>
                                 )}
                             </>
+                        ) : testModeInput === 'camera' ? (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', backgroundColor: '#000' }}>
+                                <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 100, width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <WebcamCapture videoRef={videoRef} onWebcamStarted={() => {
+                                        if (canvasRef.current && videoRef.current) {
+                                            canvasRef.current.width = videoRef.current.clientWidth;
+                                            canvasRef.current.height = videoRef.current.clientHeight;
+                                        }
+                                    }} />
+
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                        <button
+                                            onClick={() => fileInputRef.current.click()}
+                                            style={{
+                                                flex: 1,
+                                                padding: '10px',
+                                                backgroundColor: 'rgba(31, 41, 55, 0.8)',
+                                                backdropFilter: 'blur(4px)',
+                                                border: '1px solid #374151',
+                                                borderRadius: '8px',
+                                                color: '#60a5fa',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                fontSize: '0.9rem',
+                                                fontWeight: '600',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <Upload size={18} /> {videoSrc ? 'Change Video' : 'Upload Video'}
+                                        </button>
+
+                                        {videoSrc && (
+                                            <button
+                                                onClick={() => setTestModeInput('video')}
+                                                style={{
+                                                    flex: 1,
+                                                    padding: '10px',
+                                                    backgroundColor: 'rgba(59, 130, 246, 0.8)',
+                                                    backdropFilter: 'blur(4px)',
+                                                    border: '1px solid #60a5fa',
+                                                    borderRadius: '8px',
+                                                    color: 'white',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '8px',
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: '600',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                <Video size={18} /> View loaded Video
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                <video
+                                    ref={videoRef}
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                />
+                                <canvas
+                                    ref={canvasRef}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0, left: 0, width: '100%', height: '100%',
+                                        pointerEvents: 'none',
+                                        zIndex: 10
+                                    }}
+                                />
+                            </div>
                         ) : (
                             <div style={styles.emptyState}>
                                 <div style={styles.emptyIcon}>
@@ -2333,115 +2487,112 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     )}
                 </div>
 
-                {/* VISUAL TIMELINE (Test Mode) */}
-                {videoSrc && activeTab === 'test' && (
-                    <div style={{
-                        height: '50px',
-                        backgroundColor: '#111827',
-                        borderTop: '1px solid #374151',
-                        padding: '5px 10px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '0.7rem', color: '#9ca3af' }}>
-                            <span>00:00</span>
-                            <span>Timeline Visualization</span>
-                            {videoRef.current && <span>{videoRef.current.duration?.toFixed(2)}s</span>}
-                        </div>
-                        <div style={{
-                            height: '24px',
-                            backgroundColor: '#374151',
-                            position: 'relative',
-                            borderRadius: '4px',
-                            overflow: 'hidden',
-                            cursor: 'pointer'
+                {/* Resizer */}
+                {!isMaximized && (
+                    <div
+                        style={styles.resizer}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsResizing(true);
                         }}
-                            onClick={(e) => {
-                                // Global seek on bar click
-                                if (!videoRef.current) return;
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const x = e.clientX - rect.left;
-                                const pct = x / rect.width;
-                                videoRef.current.currentTime = pct * videoRef.current.duration;
-                            }}
-                        >
-                            {timelineData.map((event, idx) => {
-                                const duration = videoRef.current ? videoRef.current.duration : 1;
-                                if (!duration) return null;
-
-                                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-                                const colorIdx = (typeof event.state === 'string' ? event.state.length : 0) % colors.length;
-                                // Simple deterministic color
-
-                                const left = (event.startTime / duration) * 100;
-                                let width = ((event.endTime - event.startTime) / duration) * 100;
-                                if (width < 0.5) width = 0.5; // Min width visibility
-
-                                return (
-                                    <div
-                                        key={idx}
-                                        style={{
-                                            position: 'absolute',
-                                            left: `${left}%`,
-                                            width: `${width}%`,
-                                            height: '100%',
-                                            backgroundColor: colors[colorIdx],
-                                            opacity: event.isActive ? 1 : 0.8,
-                                            borderRight: '1px solid rgba(0,0,0,0.2)',
-                                            fontSize: '0.6rem',
-                                            color: 'white',
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            paddingLeft: '2px',
-                                            lineHeight: '24px'
-                                        }}
-                                        title={`${event.state}: ${event.startTime.toFixed(2)}s - ${event.endTime.toFixed(2)}s`}
-                                    >
-                                        {width > 5 && event.state}
-                                    </div>
-                                );
-                            })}
-                            {/* Playhead Indicator */}
-                            <div style={{
-                                position: 'absolute',
-                                left: `${(videoRef.current?.currentTime / (videoRef.current?.duration || 1)) * 100}%`,
-                                top: 0, bottom: 0, width: '2px', backgroundColor: 'white', zIndex: 10,
-                                boxShadow: '0 0 4px rgba(0,0,0,0.5)'
-                            }} />
+                    >
+                        <div style={styles.resizerHandle}>
+                            <div style={styles.resizerBar} />
+                            <div style={styles.resizerBar} />
+                            <div style={styles.resizerBar} />
                         </div>
                     </div>
                 )}
 
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    style={{ display: 'none' }}
-                    accept="video/*"
-                    onChange={handleFileUpload}
-                />
-
-                {/* Resizer */}
-                {
-                    !isMaximized && (
-                        <div
-                            style={styles.resizer}
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                setIsResizing(true);
+                {/* Right Panel: Editor & Statistics */}
+                <div style={styles.rightPanel}>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        style={{ display: 'none' }}
+                        accept="video/*"
+                        onChange={handleFileUpload}
+                    />
+                    {/* VISUAL TIMELINE (Always at the top of right panel when testing) */}
+                    {videoSrc && activeTab === 'test' && (
+                        <div style={{
+                            height: '60px',
+                            backgroundColor: '#111827',
+                            borderBottom: '1px solid #374151',
+                            padding: '10px 16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.7rem', color: '#9ca3af', fontWeight: 'bold' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Activity size={12} color="#3b82f6" />
+                                    <span>MOTION TIMELINE</span>
+                                </div>
+                                {videoRef.current && <span>{videoRef.current.currentTime.toFixed(2)}s / {videoRef.current.duration?.toFixed(2)}s</span>}
+                            </div>
+                            <div style={{
+                                height: '28px',
+                                backgroundColor: '#1f2937',
+                                position: 'relative',
+                                borderRadius: '6px',
+                                border: '1px solid #374151',
+                                overflow: 'hidden',
+                                cursor: 'crosshair'
                             }}
-                        >
-                            <div style={styles.resizerHandle}>
-                                <div style={styles.resizerBar} />
-                                <div style={styles.resizerBar} />
-                                <div style={styles.resizerBar} />
+                                onClick={(e) => {
+                                    if (!videoRef.current) return;
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const x = e.clientX - rect.left;
+                                    const pct = x / rect.width;
+                                    videoRef.current.currentTime = pct * videoRef.current.duration;
+                                }}
+                            >
+                                {timelineData.map((event, idx) => {
+                                    const duration = videoRef.current ? videoRef.current.duration : 1;
+                                    if (!duration) return null;
+
+                                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                                    const colorIdx = (typeof event.state === 'string' ? event.state.length : 0) % colors.length;
+
+                                    const left = (event.startTime / duration) * 100;
+                                    let width = ((event.endTime - event.startTime) / duration) * 100;
+                                    if (width < 0.5) width = 0.5;
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                position: 'absolute',
+                                                left: `${left}%`,
+                                                width: `${width}%`,
+                                                height: '100%',
+                                                backgroundColor: colors[colorIdx],
+                                                opacity: event.isActive ? 1 : 0.8,
+                                                borderRight: '1px solid rgba(0,0,0,0.2)',
+                                                fontSize: '0.65rem',
+                                                color: 'white',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                paddingLeft: '4px',
+                                                lineHeight: '28px',
+                                                fontWeight: '600'
+                                            }}
+                                            title={`${event.state}: ${event.startTime.toFixed(2)}s - ${event.endTime.toFixed(2)}s`}
+                                        >
+                                            {width > 8 && event.state}
+                                        </div>
+                                    );
+                                })}
+                                <div style={{
+                                    position: 'absolute',
+                                    left: `${(videoRef.current?.currentTime / (videoRef.current?.duration || 1)) * 100}%`,
+                                    top: 0, bottom: 0, width: '2px', backgroundColor: '#fff', zIndex: 10,
+                                    boxShadow: '0 0 8px rgba(255,255,255,0.8)'
+                                }} />
                             </div>
                         </div>
-                    )
-                }
-
-                {/* Right Panel: Editor */}
-                <div style={styles.rightPanel}>
+                    )}
                     {/* Maximize Toggle */}
                     <button
                         style={styles.maximizeBtn}
@@ -2474,40 +2625,89 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     <div style={styles.content} className="custom-scrollbar">
                         {activeTab === 'test' && (
                             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', gap: '8px', padding: '0 10px' }}>
                                     <button
-                                        onClick={() => setTestModeInput('camera')}
+                                        onClick={() => fileInputRef.current.click()}
                                         style={{
-                                            padding: '6px 16px',
-                                            borderRadius: '6px',
-                                            background: testModeInput === 'camera' ? '#3b82f6' : '#1f2937',
-                                            color: 'white',
+                                            padding: '8px 16px',
+                                            borderRadius: '8px',
+                                            background: '#111827',
+                                            color: '#60a5fa',
                                             border: '1px solid #374151',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: '6px',
-                                            fontSize: '0.85rem'
+                                            gap: '8px',
+                                            fontSize: '0.85rem',
+                                            flex: 0.8,
+                                            justifyContent: 'center',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        title="Ganti atau Upload Video Baru"
+                                    >
+                                        <Upload size={16} /> {videoSrc ? 'Change' : 'Upload Video'}
+                                    </button>
+                                    {videoSrc && (
+                                        <button
+                                            onClick={() => setTestModeInput('video')}
+                                            style={{
+                                                padding: '8px 16px',
+                                                borderRadius: '8px',
+                                                background: testModeInput === 'video' ? '#3b82f6' : '#111827',
+                                                color: 'white',
+                                                border: testModeInput === 'video' ? '1px solid #60a5fa' : '1px solid #374151',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                fontSize: '0.85rem',
+                                                flex: 1,
+                                                justifyContent: 'center',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <Video size={16} /> Reference Video
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setTestModeInput('camera')}
+                                        style={{
+                                            padding: '8px 16px',
+                                            borderRadius: '8px',
+                                            background: testModeInput === 'camera' ? '#3b82f6' : '#111827',
+                                            color: 'white',
+                                            border: testModeInput === 'camera' ? '1px solid #60a5fa' : '1px solid #374151',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontSize: '0.85rem',
+                                            flex: 1,
+                                            justifyContent: 'center',
+                                            transition: 'all 0.2s'
                                         }}
                                     >
-                                        <Camera size={14} /> Live Camera
+                                        <Camera size={16} /> Live Camera
                                     </button>
                                     <button
                                         onClick={() => setTestModeInput('simulator')}
                                         style={{
-                                            padding: '6px 16px',
-                                            borderRadius: '6px',
-                                            background: testModeInput === 'simulator' ? '#3b82f6' : '#1f2937',
+                                            padding: '8px 16px',
+                                            borderRadius: '8px',
+                                            background: testModeInput === 'simulator' ? '#8b5cf6' : '#111827',
                                             color: 'white',
-                                            border: '1px solid #374151',
+                                            border: testModeInput === 'simulator' ? '1px solid #a78bfa' : '1px solid #374151',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: '6px',
-                                            fontSize: '0.85rem'
+                                            gap: '8px',
+                                            fontSize: '0.85rem',
+                                            flex: 1,
+                                            justifyContent: 'center',
+                                            transition: 'all 0.2s'
                                         }}
                                     >
-                                        <Activity size={14} /> Simulator
+                                        <Activity size={16} /> Simulator
                                     </button>
                                 </div>
                                 <div style={{
@@ -2672,6 +2872,9 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 onAiSuggest={handleAiSuggestRule}
                                 onAiValidateScript={handleAiValidateScript}
                                 tmModels={currentModel.tmModels}
+                                rfModels={currentModel.rfModels}
+                                selectedStateId={selectedStateId}
+                                onSelectState={setSelectedStateId}
                             />
                         )}
 
@@ -2706,6 +2909,23 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                         >
                                             Simulator
                                         </button>
+                                        <button
+                                            onClick={handleAddState}
+                                            style={{
+                                                padding: '4px 12px',
+                                                borderRadius: '4px',
+                                                background: 'rgba(59, 130, 246, 0.1)',
+                                                color: '#60a5fa',
+                                                border: '1px dashed #3b82f6',
+                                                cursor: 'pointer',
+                                                fontSize: '0.8rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                            }}
+                                        >
+                                            <Plus size={14} /> Add State
+                                        </button>
                                     </div>
                                 </h3>
 
@@ -2717,6 +2937,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                         onSelectState={setSelectedStateId}
                                         activeState={activeTab === 'test' ? currentTestState : null}
                                         onUpdateStatePosition={handleUpdateStatePosition}
+                                        onAddTransition={handleAddTransition}
                                     />
                                 </div>
                                 {selectedStateId ? (
@@ -3191,9 +3412,110 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                         </div>
                                     ))}
 
-                                    {(!currentModel.tmModels || currentModel.tmModels.length === 0) && (
+                                </div>
+
+                                {/* ROBOFLOW CONFIGURATION */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Database size={18} color="#a855f7" /> Roboflow Models
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    const demoModel = {
+                                                        id: `rf_demo_${Date.now()}`,
+                                                        name: 'PPE Demo (YOLO)',
+                                                        apiKey: 'DEMO',
+                                                        projectId: 'ppe-detection',
+                                                        version: 1
+                                                    };
+                                                    setCurrentModel(m => ({ ...m, rfModels: [...(m.rfModels || []), demoModel] }));
+                                                }}
+                                                style={{ padding: '6px 12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: '#60a5fa', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                <Sparkles size={14} /> Try Demo
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const newModel = { id: `rf_${Date.now()}`, name: 'Roboflow Model', apiKey: '', projectUrl: '', version: 1 };
+                                                    setCurrentModel(m => ({ ...m, rfModels: [...(m.rfModels || []), newModel] }));
+                                                }}
+                                                style={{ padding: '6px 12px', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid #a855f7', color: '#a855f7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                <Plus size={14} /> Add Model
+                                            </button>
+                                        </div>
+                                    </h4>
+
+                                    {(currentModel.rfModels || []).map((m, idx) => (
+                                        <div key={m.id} style={{ marginBottom: idx === currentModel.rfModels.length - 1 ? 0 : '16px', padding: '12px', background: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                                <input
+                                                    type="text"
+                                                    value={m.name}
+                                                    onChange={(e) => {
+                                                        const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, name: e.target.value } : rm);
+                                                        setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                    }}
+                                                    style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #4b5563', color: 'white', fontSize: '0.9rem', width: '200px', fontWeight: 'bold', outline: 'none' }}
+                                                />
+                                                <button
+                                                    onClick={() => {
+                                                        const updated = currentModel.rfModels.filter(rm => rm.id !== m.id);
+                                                        setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                    }}
+                                                    style={{ padding: '4px', background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.5fr', gap: '10px' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>API Key</label>
+                                                    <input
+                                                        type="password"
+                                                        value={m.apiKey || ''}
+                                                        onChange={(e) => {
+                                                            const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, apiKey: e.target.value } : rm);
+                                                            setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                        }}
+                                                        style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Project ID</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="helm-safety-xhv2j"
+                                                        value={m.projectUrl || ''}
+                                                        onChange={(e) => {
+                                                            const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, projectUrl: e.target.value } : rm);
+                                                            setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                        }}
+                                                        style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Ver.</label>
+                                                    <input
+                                                        type="number"
+                                                        value={m.version || 1}
+                                                        onChange={(e) => {
+                                                            const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, version: parseInt(e.target.value) || 1 } : rm);
+                                                            setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                        }}
+                                                        style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {(!currentModel.rfModels || currentModel.rfModels.length === 0) && (
                                         <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '0.85rem' }}>
-                                            No Teachable Machine models configured.
+                                            No Roboflow models configured.
                                         </div>
                                     )}
                                 </div>
@@ -3252,6 +3574,8 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
                         {activeTab === 'extraction' && (
                             <div>
+
+
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                     <h3 style={{ margin: 0 }}>Pose Extraction Data</h3>
                                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>

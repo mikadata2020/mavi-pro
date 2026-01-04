@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
     Upload, Scissors, Play, Pause, Download, Trash2, CheckCircle,
     ExternalLink, RefreshCw, Save, Video, Bot, Terminal, HelpCircle, X,
-    Image, FolderArchive, Loader2
+    Image, FolderArchive, Loader2, Database
 } from 'lucide-react';
 import { loadModelFromURL, loadImageModelFromURL, predict } from '../utils/teachableMachine';
 import { helpContent } from '../utils/helpContent';
@@ -667,6 +667,9 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
                 <button style={{ ...styles.tab, ...(activeTab === 'cvat' ? styles.activeTab : styles.inactiveTab) }} onClick={() => setActiveTab('cvat')}>
                     <Image size={18} /> 4. CVAT.ai
                 </button>
+                <button style={{ ...styles.tab, ...(activeTab === 'roboflow' ? styles.activeTab : styles.inactiveTab) }} onClick={() => setActiveTab('roboflow')}>
+                    <Database size={18} /> 5. Roboflow
+                </button>
             </div>
 
             {showHelp && (
@@ -993,6 +996,61 @@ const TeachableMachineStudio = ({ videoSrc: initialVideoSrc }) => {
                         <button style={{ ...styles.button, ...styles.secondaryBtn }} onClick={() => setActiveTab('tester')}>
                             Setup Model Tester
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'roboflow' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', height: '100%', padding: '0 20px', maxWidth: '1100px', margin: '0 auto' }}>
+                    <div style={{ ...styles.card, borderBottom: '4px solid #7e22ce' }}>
+                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                            <div style={{ backgroundColor: 'rgba(126, 34, 206, 0.1)', padding: '20px', borderRadius: '15px' }}>
+                                <Database size={40} color="#7e22ce" />
+                            </div>
+                            <div>
+                                <h2 style={{ margin: 0 }}>Roboflow Dataset Management</h2>
+                                <p style={{ margin: '5px 0 0 0', color: '#94a3b8' }}>Organisasi, Augmentasi, dan Preprocessing Dataset.</p>
+                            </div>
+                            <div style={{ marginLeft: 'auto' }}>
+                                <button style={{ ...styles.button, backgroundColor: '#7e22ce', color: 'white' }} onClick={() => window.open('https://roboflow.com', '_blank')}>
+                                    <ExternalLink size={18} /> Go to Roboflow
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        <div style={styles.card}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Upload size={20} color="#3b82f6" /> Cara Integrasi Roboflow
+                            </h3>
+                            <ul style={{ fontSize: '0.9rem', color: '#cbd5e1', lineHeight: '1.6', paddingLeft: '20px' }}>
+                                <li><strong>Upload:</strong> Unggah hasil label dari CVAT atau gambar mentah langsung ke Roboflow.</li>
+                                <li><strong>Pre-processing:</strong> Resize otomatis (wajib agar semua gambar sama ukurannya).</li>
+                                <li><strong>Augmentation:</strong> Tambahkan variasi (Flip, Rotate, Blur, Noise) untuk memperkuat model.</li>
+                                <li><strong>Export:</strong> Download dataset siap pakai dengan format YOLO, TensorFlow, dll.</li>
+                            </ul>
+                        </div>
+
+                        <div style={styles.card}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Bot size={20} color="#ec4899" /> Why Roboflow?
+                            </h3>
+                            <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: 0 }}>
+                                Roboflow menyempurnakan dataset CVAT Anda sebelum training.
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                                <div style={{ padding: '8px', backgroundColor: '#0f172a', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    <span style={{ color: '#a855f7' }}>Auto-Split:</span> Otomatis membagi data menjadi Train (70%), Valid (20%), Test (10%).
+                                </div>
+                                <div style={{ padding: '8px', backgroundColor: '#0f172a', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    <span style={{ color: '#a855f7' }}>Health Check:</span> Mendeteksi gambar duplikat atau label yang hilang.
+                                </div>
+                                <div style={{ padding: '8px', backgroundColor: '#0f172a', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                    <span style={{ color: '#a855f7' }}>Format Conversion:</span> Konversi otomatis dari format CVAT ke format training apa pun.
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

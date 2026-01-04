@@ -19,18 +19,43 @@ class InferenceEngine {
         this.angleCalculator = new AngleCalculator();
     }
 
+    evaluateComparison(val, operator, target, target2 = null) {
+        if (val === null || val === undefined) return false;
+
+        switch (operator) {
+            case '>': return val > target;
+            case '<': return val < target;
+            case '>=': return val >= target;
+            case '<=': return val <= target;
+            case '=': return Math.abs(val - target) < 0.05; // Fuzzy equality
+            case '!=': return Math.abs(val - target) >= 0.05;
+            case 'BETWEEN': return val >= target && val <= (target2 !== null ? target2 : target);
+            default: return false; // Default safe fallthrough
+        }
+    }
+
     /**
      * Load a motion model definition
      * @param {Object} model - The model defined in Studio
      */
     loadModel(model) {
-        if (!model || !model.statesList || !model.statesList.length) {
-            console.warn("InferenceEngine: Invalid model loaded");
+        if (!model) return;
+
+        // Handle both 'states' and 'statesList' for flexibility
+        const states = model.statesList || model.states || [];
+        if (states.length === 0) {
+            console.warn("InferenceEngine: Invalid model loaded - no states found");
             return;
         }
+
+        // Standardize internally to statesList if needed
+        if (!model.statesList) {
+            model.statesList = states;
+        }
+
         this.model = model;
         this.reset();
-        console.log(`InferenceEngine: Loaded model "${model.name}" with ${model.statesList.length} states`);
+        console.log(`InferenceEngine: Loaded model "${model.name}" with ${states.length} states`);
     }
 
     reset() {
@@ -104,7 +129,7 @@ class InferenceEngine {
         return state ? !!state.isVA : false;
     }
 
-    updateFSM(track, pose, objects, hands, timestamp) {
+    updateFSM(track, pose, objects, hands, timestamp, allTracks, data = {}) {
         const currentStateId = track.currentState;
         const currentState = this.model.statesList.find(s => s.id === currentStateId);
 
@@ -330,7 +355,8 @@ class InferenceEngine {
             case 'OBJECT_IN_ROI': return this.checkObjectInROI(params, objects);
             case 'OPERATOR_PROXIMITY': return this.checkOperatorProximity(params, pose, allTracks, track.id);
             case 'TEACHABLE_MACHINE': return this.checkTeachableMachine(params, data.teachableMachine);
-            case 'ADVANCED_SCRIPT': return RuleScriptParser.evaluate(params.script, { pose, objects, hands, allTracks, tm: data.teachableMachine });
+            case 'ROBOFLOW_DETECTION': return this.checkRoboflow(params, data.roboflow);
+            case 'ADVANCED_SCRIPT': return RuleScriptParser.evaluate(params.script, { pose, objects, hands, allTracks, tm: data.teachableMachine, roboflow: data.roboflow });
             default: return false;
         }
     }
@@ -350,7 +376,31 @@ class InferenceEngine {
         const prediction = tmData[modelId];
         if (!prediction) return false;
 
-        return prediction.className === targetClass && prediction.probability >= threshold;
+        return prediction.className?.toLowerCase() === targetClass?.toLowerCase() && prediction.probability >= threshold;
+    }
+
+    checkRoboflow(params, roboflowData) {
+        if (!roboflowData) return false;
+
+        const { modelId, targetClass, threshold = 0.5 } = params;
+
+        // If no modelId is specified, check all available predictions
+        if (!modelId) {
+            return Object.values(roboflowData).some(detections =>
+                Array.isArray(detections) && detections.some(det =>
+                    det.class?.toLowerCase() === targetClass?.toLowerCase() && det.confidence >= threshold
+                )
+            );
+        }
+
+        // Find detections from the specific model
+        const detections = roboflowData[modelId];
+        if (!detections || detections.length === 0) return false;
+
+        // Check if target class exists with sufficient confidence
+        return detections.some(det =>
+            det.class?.toLowerCase() === targetClass?.toLowerCase() && det.confidence >= threshold
+        );
     }
 
     checkOperatorProximity(params, pose, allTracks, currentTrackId) {
@@ -375,7 +425,7 @@ class InferenceEngine {
             if (!otherJoint) return false;
 
             const dist = Math.hypot(myJoint.x - otherJoint.x, myJoint.y - otherJoint.y);
-            return operator === '<' ? dist < distance : dist > distance;
+            return this.evaluateComparison(dist, operator, distance);
         });
     }
 
@@ -412,13 +462,8 @@ class InferenceEngine {
         const { joint, operator, value } = params;
         if (!track || !track.velocities || typeof track.velocities[joint] === 'undefined') return false;
         const speed = track.velocities[joint];
-        switch (operator) {
-            case '>': return speed > value;
-            case '<': return speed < value;
-            case '>=': return speed >= value;
-            case '<=': return speed <= value;
-            default: return false;
-        }
+        const { value2 } = params;
+        return this.evaluateComparison(speed, operator, value, value2);
     }
 
     calculateVelocities(prevPose, currPose, dt) {
@@ -464,6 +509,12 @@ class InferenceEngine {
             case '>': return valA > valB;
             case '<': return valA < valB;
             case '=': return Math.abs(valA - valB) < 0.05;
+            case '>=': return valA >= valB;
+            case '<=': return valA <= valB;
+            case '!=': return Math.abs(valA - valB) >= 0.05;
+            case 'BETWEEN':
+                const maxVal = params.value2 !== undefined ? params.value2 : valB;
+                return valA >= valB && valA <= maxVal;
             default: return false;
         }
     }
@@ -480,9 +531,11 @@ class InferenceEngine {
         const pA = getKeypoint(pose.keypoints, jointA);
         const pB = getKeypoint(pose.keypoints, jointB);
         const pC = getKeypoint(pose.keypoints, jointC);
+
         if (!pA || !pB || !pC) return false;
         const angle = this.angleCalculator.calculateAngle(pA, pB, pC);
-        return operator === '>' ? angle > value : angle < value;
+        const { value2 } = params;
+        return this.evaluateComparison(angle, operator, value, value2);
     }
 
     checkHandGesture(params, hands) {
@@ -504,7 +557,7 @@ class InferenceEngine {
         return hands.some(hand => {
             const handLandmark = hand[landmark] || hand[0];
             const dist = Math.hypot(handLandmark.x - bodyKeypoint.x, handLandmark.y - bodyKeypoint.y);
-            return operator === '<' ? dist < distance : dist > distance;
+            return this.evaluateComparison(dist, operator, distance);
         });
     }
 
@@ -520,6 +573,10 @@ class InferenceEngine {
             trackId, type, message
         });
         if (this.logs.length > 50) this.logs.pop();
+    }
+
+    getLogs() {
+        return this.logs;
     }
 }
 

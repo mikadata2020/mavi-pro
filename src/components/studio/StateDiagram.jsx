@@ -13,12 +13,16 @@ const StateDiagram = ({
     onSelectTransition,
     selectedStateId,
     selectedTransitionId,
-    onUpdateStatePosition
+    onUpdateStatePosition,
+    onAddTransition
 }) => {
     const svgRef = useRef(null);
     const [nodePositions, setNodePositions] = useState({});
     const [dragging, setDragging] = useState(null);
+    const [connectingFrom, setConnectingFrom] = useState(null);
+    const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+    const [onNode, setOnNode] = useState(null);
 
     // Initialize positions from props or default layout
     useEffect(() => {
@@ -124,23 +128,50 @@ const StateDiagram = ({
         });
     };
 
-    const handleMouseMove = (e) => {
-        if (!dragging) return;
+    const handleConnectStart = (e, stateId) => {
+        e.stopPropagation();
+        e.preventDefault();
         const svgRect = svgRef.current.getBoundingClientRect();
-        const newX = e.clientX - svgRect.left - dragOffset.x;
-        const newY = e.clientY - svgRect.top - dragOffset.y;
-
-        setNodePositions(prev => ({
-            ...prev,
-            [dragging]: { x: Math.max(50, Math.min(550, newX)), y: Math.max(30, Math.min(370, newY)) }
-        }));
+        setConnectingFrom(stateId);
+        setMousePos({
+            x: e.clientX - svgRect.left,
+            y: e.clientY - svgRect.top
+        });
     };
 
-    const handleMouseUp = () => {
+    const handleMouseMove = (e) => {
+        const svgRect = svgRef.current.getBoundingClientRect();
+        const currentX = e.clientX - svgRect.left;
+        const currentY = e.clientY - svgRect.top;
+
+        if (dragging) {
+            const newX = currentX - dragOffset.x;
+            const newY = currentY - dragOffset.y;
+
+            setNodePositions(prev => ({
+                ...prev,
+                [dragging]: { x: Math.max(50, Math.min(550, newX)), y: Math.max(30, Math.min(370, newY)) }
+            }));
+        }
+
+        if (connectingFrom) {
+            setMousePos({ x: currentX, y: currentY });
+        }
+    };
+
+    const handleMouseUp = (e) => {
         if (dragging && onUpdateStatePosition) {
             onUpdateStatePosition(dragging, nodePositions[dragging]);
         }
+
+        if (connectingFrom && onNode && onNode !== connectingFrom) {
+            if (onAddTransition) {
+                onAddTransition(connectingFrom, onNode);
+            }
+        }
+
         setDragging(null);
+        setConnectingFrom(null);
     };
 
     // Calculate arrow path between two nodes
@@ -292,7 +323,7 @@ const StateDiagram = ({
                 }}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
+                onMouseLeave={() => { setDragging(null); setConnectingFrom(null); }}
             >
                 {/* Arrow marker definition */}
                 <defs>
@@ -317,6 +348,20 @@ const StateDiagram = ({
                         <polygon points="0 0, 10 3.5, 0 7" fill="#22c55e" />
                     </marker>
                 </defs>
+
+                {connectingFrom && (
+                    <line
+                        x1={nodePositions[connectingFrom]?.x}
+                        y1={nodePositions[connectingFrom]?.y}
+                        x2={mousePos.x}
+                        y2={mousePos.y}
+                        stroke="#3b82f6"
+                        strokeWidth="3"
+                        strokeDasharray="5,5"
+                        markerEnd="url(#arrowhead)"
+                        style={{ pointerEvents: 'none' }}
+                    />
+                )}
 
                 {/* Transition arrows */}
                 {transitions.map(t => {
@@ -358,6 +403,8 @@ const StateDiagram = ({
                     const pos = nodePositions[state.id] || { x: 100, y: 100 };
                     const color = getStateColor(state.id);
                     const isStart = state.id === 's_start' || state.name.toLowerCase().includes('start');
+                    const isActive = currentState === state.id;
+                    const isSelected = selectedStateId === state.id;
 
                     return (
                         <g
@@ -391,12 +438,26 @@ const StateDiagram = ({
                                 </circle>
                             )}
 
-                            {/* Node circle */}
+                            {/* Target Highlight Glow when connecting */}
+                            {connectingFrom && onNode === state.id && connectingFrom !== state.id && (
+                                <circle
+                                    r="45"
+                                    fill="rgba(59, 130, 246, 0.2)"
+                                    stroke="#3b82f6"
+                                    strokeWidth="2"
+                                    strokeDasharray="4,4"
+                                >
+                                    <animate attributeName="r" values="40;48;40" dur="1.5s" repeatCount="indefinite" />
+                                </circle>
+                            )}
+
+                            {/* State Circle */}
                             <circle
-                                r="40"
-                                fill="#1f2937"
+                                r="35"
+                                fill={isActive ? 'rgba(34, 197, 94, 0.1)' : isSelected ? 'rgba(59, 130, 246, 0.1)' : '#1f2937'}
                                 stroke={color}
-                                strokeWidth="3"
+                                strokeWidth={isSelected || isActive ? '3' : '2'}
+                                style={{ transition: 'all 0.2s' }}
                             />
 
                             {/* Start indicator */}
@@ -459,6 +520,38 @@ const StateDiagram = ({
                                     <Play size={12} fill="#22c55e" />
                                 </g>
                             )}
+
+                            {/* Connection Handle (Small circle to drag from) */}
+                            <circle
+                                r="12"
+                                cx="35"
+                                cy="-35"
+                                fill="#3b82f6"
+                                stroke="white"
+                                strokeWidth="2"
+                                style={{ cursor: 'crosshair', pointerEvents: 'auto' }}
+                                onMouseDown={(e) => handleConnectStart(e, state.id)}
+                            />
+                            <text
+                                x="35"
+                                y="-35"
+                                textAnchor="middle"
+                                dy="0.35em"
+                                fontSize="10"
+                                fill="white"
+                                style={{ pointerEvents: 'none' }}
+                            >
+                                +
+                            </text>
+
+                            {/* Drop Zone / Mouse Over detection */}
+                            <circle
+                                r="50"
+                                fill="transparent"
+                                style={{ cursor: connectingFrom ? 'copy' : (dragging ? 'grabbing' : 'pointer') }}
+                                onMouseEnter={() => setOnNode(state.id)}
+                                onMouseLeave={() => setOnNode(null)}
+                            />
                         </g>
                     );
                 })}
@@ -498,7 +591,7 @@ const StateDiagram = ({
                     Branching (Check Logic)
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

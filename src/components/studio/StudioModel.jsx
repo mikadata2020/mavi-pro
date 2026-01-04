@@ -66,6 +66,13 @@ const StudioModel = () => {
         }
     };
 
+    const handleRenameModel = (id, currentName) => {
+        const newName = window.prompt('Masukkan nama baru untuk model ini:', currentName);
+        if (newName && newName !== currentName) {
+            setModels(models.map(m => m.id === id ? { ...m, name: newName } : m));
+        }
+    };
+
     const handleCloseBuilder = () => {
         setIsBuilderActive(false);
         setSelectedModel(null);
@@ -561,6 +568,7 @@ const StudioModel = () => {
                                         onClick={(e) => { e.stopPropagation(); handleEditModel(model); }}
                                         onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#374151'; e.currentTarget.style.color = 'white'; }}
                                         onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af'; }}
+                                        title="Buka Editor"
                                     >
                                         <Edit3 size={16} />
                                     </button>
@@ -569,14 +577,35 @@ const StudioModel = () => {
                                         onClick={(e) => { e.stopPropagation(); handleDeleteModel(model.id); }}
                                         onMouseOver={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'; e.currentTarget.style.color = '#f87171'; }}
                                         onMouseOut={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = '#9ca3af'; }}
+                                        title="Delete Model"
                                     >
                                         <Trash2 size={16} />
                                     </button>
                                 </div>
                             </div>
 
-                            <h3 style={styles.cardTitle}>{model.name}</h3>
-                            <p style={styles.cardDesc}>{model.description}</p>
+                            <h3
+                                style={{ ...styles.cardTitle, cursor: 'pointer' }}
+                                onClick={(e) => { e.stopPropagation(); handleRenameModel(model.id, model.name); }}
+                                title="Klik untuk ganti nama"
+                                onMouseOver={(e) => e.currentTarget.style.color = '#60a5fa'}
+                                onMouseOut={(e) => e.currentTarget.style.color = 'white'}
+                            >
+                                {model.name}
+                            </h3>
+                            <p
+                                style={{ ...styles.cardDesc, cursor: 'pointer' }}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newDesc = window.prompt('Masukkan deskripsi baru:', model.description);
+                                    if (newDesc !== null) {
+                                        setModels(models.map(m => m.id === model.id ? { ...m, description: newDesc } : m));
+                                    }
+                                }}
+                                title="Klik untuk ganti deskripsi"
+                            >
+                                {model.description}
+                            </p>
 
                             <div style={styles.cardFooter}>
                                 <div style={styles.statItem}>

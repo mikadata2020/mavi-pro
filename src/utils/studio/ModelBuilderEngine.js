@@ -8,6 +8,7 @@ export const RULE_TYPES = {
     POSE_MATCHING: { label: 'Golden Pose Match', description: 'Similarity to reference pose' },
     TEACHABLE_MACHINE: { label: 'Teachable Machine', description: 'Custom classification model (Image or Pose)' },
     CVAT_MODEL: { label: 'CVAT / Custom Model', description: 'Industrial model trained via CVAT.ai' },
+    ROBOFLOW_DETECTION: { label: 'Roboflow Detection', description: 'Custom object detection via Roboflow' },
     ADVANCED_SCRIPT: { label: 'Advanced Script (DSL)', description: 'Write custom logic in text (e.g. hand.y < eye.y)' }
 };
 

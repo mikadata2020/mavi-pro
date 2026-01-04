@@ -6,7 +6,31 @@ import JointSelector from './JointSelector';
 import ScriptAutoComplete from './ScriptAutoComplete';
 import { Sparkles, Loader2 } from 'lucide-react';
 
-const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript, tmModels = [] }) => {
+const OPERATORS = [
+    { value: '<', label: '<' },
+    { value: '>', label: '>' },
+    { value: '<=', label: '<=' },
+    { value: '>=', label: '>=' },
+    { value: '=', label: '=' },
+    { value: '!=', label: '!=' },
+    { value: 'BETWEEN', label: 'Between' }
+];
+
+const evaluateComparison = (val, operator, target, target2 = null) => {
+    if (val === null || val === undefined) return null;
+    switch (operator) {
+        case '>': return val > target;
+        case '<': return val < target;
+        case '>=': return val >= target;
+        case '<=': return val <= target;
+        case '=': return Math.abs(val - target) < 0.05;
+        case '!=': return Math.abs(val - target) >= 0.05;
+        case 'BETWEEN': return val >= target && val <= (target2 !== null ? target2 : target);
+        default: return false;
+    }
+};
+
+const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript, tmModels = [], rfModels = [], selectedStateId, onSelectState }) => {
     const [fromState, setFromState] = useState('');
     const [toState, setToState] = useState('');
     const [showSelector, setShowSelector] = useState(false);
@@ -149,6 +173,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                     }
                 }
                 case 'TEACHABLE_MACHINE':
+                case 'ROBOFLOW_DETECTION':
                 case 'CVAT_MODEL': {
                     // This will be populated by the inference loop in ModelBuilder
                     return rule.lastValue || null;
@@ -165,22 +190,21 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
 
         const params = rule.params;
 
-        if (rule.type === 'POSE_ANGLE') {
-            return params.operator === '<' ? val < params.value : val > params.value;
+        if (rule.type === 'POSE_ANGLE' || rule.type === 'POSE_VELOCITY' ||
+            rule.type === 'HAND_PROXIMITY' || rule.type === 'OBJECT_PROXIMITY' || rule.type === 'OPERATOR_PROXIMITY') {
+            return evaluateComparison(val, params.operator, params.value, params.value2);
         }
 
         if (rule.type === 'POSE_RELATION') {
-            if (params.targetType === 'POINT') return true;
-            const valB = params.value;
-            switch (params.operator) {
-                case '<': return val < valB;
-                case '>': return val > valB;
-                case '=': return Math.abs(val - valB) < 0.05;
-                default: return false;
-            }
+            if (params.targetType === 'POINT') return true; // Complex relation
+            return evaluateComparison(val, params.operator, params.value, params.value2);
         }
-        if (rule.type === 'TEACHABLE_MACHINE' || rule.type === 'CVAT_MODEL') {
+        if (rule.type === 'TEACHABLE_MACHINE' || rule.type === 'ROBOFLOW_DETECTION' || rule.type === 'CVAT_MODEL') {
             if (!val) return null;
+            if (rule.type === 'ROBOFLOW_DETECTION') {
+                // val is an array of detections
+                return Array.isArray(val) && val.some(det => det.class === params.targetClass && det.confidence >= params.threshold);
+            }
             return val.className === params.targetClass && val.probability >= params.threshold;
         }
         return null;
@@ -199,9 +223,14 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
         } else if (rule.type === 'POSE_RELATION') {
             displayVal = val.toFixed(2);
             suffix = '';
-        } else if (rule.type === 'TEACHABLE_MACHINE' || rule.type === 'CVAT_MODEL') {
+        } else if (rule.type === 'TEACHABLE_MACHINE' || rule.type === 'ROBOFLOW_DETECTION' || rule.type === 'CVAT_MODEL') {
             if (!val) return null;
-            displayVal = `${val.className} (${(val.probability * 100).toFixed(0)}%)`;
+            if (rule.type === 'ROBOFLOW_DETECTION') {
+                const best = Array.isArray(val) ? val.find(d => d.class === rule.params.targetClass) : null;
+                displayVal = best ? `${best.class} (${(best.confidence * 100).toFixed(0)}%)` : 'No Match';
+            } else {
+                displayVal = `${val.className} (${(val.probability * 100).toFixed(0)}%)`;
+            }
             suffix = '';
         }
 
@@ -388,9 +417,17 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                         value={rule.type}
                         onChange={(e) => handleUpdateRule(transitionId, rule.id, { type: e.target.value })}
                     >
-                        {Object.entries(RULE_TYPES).map(([key, val]) => (
-                            <option key={key} value={key}>{val.label}</option>
-                        ))}
+                        <option value="POSE_ANGLE">Joint Angle</option>
+                        <option value="POSE_RELATION">Pose Relation (XYZ)</option>
+                        <option value="POSE_VELOCITY">Pose Velocity (Speed)</option>
+                        <option value="OBJECT_PROXIMITY">Object Proximity</option>
+                        <option value="OBJECT_IN_ROI">Object in ROI</option>
+                        <option value="OPERATOR_PROXIMITY">Operator Proximity</option>
+                        <option value="POSE_MATCHING">Golden Pose Match</option>
+                        <option value="TEACHABLE_MACHINE">Teachable Machine</option>
+                        <option value="ROBOFLOW_DETECTION">Roboflow Detection</option>
+                        <option value="CVAT_MODEL">CVAT / Custom Model</option>
+                        <option value="ADVANCED_SCRIPT">Advanced Script (DSL)</option>
                     </select>
 
                     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -443,20 +480,30 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             </button>
                         </div>
                         <select
-                            style={{ ...styles.paramSelect, width: '60px' }}
+                            style={{ ...styles.paramSelect, width: '90px' }}
                             value={rule.params.operator}
                             onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
                         >
-                            <option value="<">{'<'}</option>
-                            <option value=">">{'>'}</option>
+                            {OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
                         </select>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <input
                                 type="number"
                                 style={styles.input}
                                 value={rule.params.value}
                                 onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value: parseInt(e.target.value) } })}
                             />
+                            {rule.params.operator === 'BETWEEN' && (
+                                <>
+                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                    <input
+                                        type="number"
+                                        style={styles.input}
+                                        value={rule.params.value2 || rule.params.value}
+                                        onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value2: parseInt(e.target.value) } })}
+                                    />
+                                </>
+                            )}
                             {renderLiveValue(rule)}
                         </div>
                         <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>deg</span>
@@ -489,11 +536,11 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                         </select>
 
                         <select
-                            style={{ ...styles.paramSelect, width: '60px' }}
+                            style={{ ...styles.paramSelect, width: '90px' }}
                             value={rule.params.operator || '<'}
                             onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
                         >
-                            {['>', '<', '=', '!=', '>='].map(op => <option key={op} value={op}>{op}</option>)}
+                            {OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
                         </select>
 
                         <select
@@ -531,7 +578,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                 {renderLiveValue(rule)}
                             </div>
                         ) : (
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <input
                                     type="number"
                                     step="0.01"
@@ -539,6 +586,18 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                     value={rule.params.value || 0}
                                     onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value: parseFloat(e.target.value) } })}
                                 />
+                                {rule.params.operator === 'BETWEEN' && (
+                                    <>
+                                        <span style={{ color: '#9ca3af' }}>-</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            style={styles.input}
+                                            value={rule.params.value2 || (rule.params.value || 0)}
+                                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value2: parseFloat(e.target.value) } })}
+                                        />
+                                    </>
+                                )}
                                 {renderLiveValue(rule)}
                             </div>
                         )}
@@ -555,20 +614,30 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
                         </select>
                         <select
-                            style={{ ...styles.paramSelect, width: '60px' }}
+                            style={{ ...styles.paramSelect, width: '90px' }}
                             value={rule.params.operator}
                             onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
                         >
-                            <option value="<">{'<'}</option>
-                            <option value=">">{'>'}</option>
+                            {OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
                         </select>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <input
                                 type="number"
                                 style={styles.input}
                                 value={rule.params.value}
                                 onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value: parseFloat(e.target.value) } })}
                             />
+                            {rule.params.operator === 'BETWEEN' && (
+                                <>
+                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                    <input
+                                        type="number"
+                                        style={styles.input}
+                                        value={rule.params.value2 || rule.params.value}
+                                        onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value2: parseFloat(e.target.value) } })}
+                                    />
+                                </>
+                            )}
                             {renderLiveValue(rule)}
                         </div>
                     </div>
@@ -594,14 +663,13 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
                         </select>
                         <select
-                            style={{ ...styles.paramSelect, width: '60px' }}
+                            style={{ ...styles.paramSelect, width: '90px' }}
                             value={rule.params.operator || '<'}
                             onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
                         >
-                            <option value="<">{'<'}</option>
-                            <option value=">">{'>'}</option>
+                            {OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
                         </select>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <input
                                 type="number"
                                 step="0.01"
@@ -609,6 +677,18 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                 value={rule.params.distance || 0.1}
                                 onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, distance: parseFloat(e.target.value) } })}
                             />
+                            {rule.params.operator === 'BETWEEN' && (
+                                <>
+                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        style={styles.input}
+                                        value={rule.params.value2 || 0.2}
+                                        onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value2: parseFloat(e.target.value) } })}
+                                    />
+                                </>
+                            )}
                             {renderLiveValue(rule)}
                         </div>
                     </div>
@@ -632,14 +712,13 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             {JOINTS.map(j => <option key={j} value={j}>{j}</option>)}
                         </select>
                         <select
-                            style={{ ...styles.paramSelect, width: '60px' }}
+                            style={{ ...styles.paramSelect, width: '90px' }}
                             value={rule.params.operator || '<'}
                             onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
                         >
-                            <option value="<">{'<'}</option>
-                            <option value=">">{'>'}</option>
+                            {OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
                         </select>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <input
                                 type="number"
                                 step="0.01"
@@ -647,6 +726,18 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                 value={rule.params.distance || 0.1}
                                 onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, distance: parseFloat(e.target.value) } })}
                             />
+                            {rule.params.operator === 'BETWEEN' && (
+                                <>
+                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        style={styles.input}
+                                        value={rule.params.value2 || 0.2}
+                                        onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value2: parseFloat(e.target.value) } })}
+                                    />
+                                </>
+                            )}
                             {renderLiveValue(rule)}
                         </div>
                     </div>
@@ -732,14 +823,13 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             {[1, 2, 3, 4].map(id => <option key={id} value={id}>Track {id}</option>)}
                         </select>
                         <select
-                            style={{ ...styles.paramSelect, width: '60px' }}
+                            style={{ ...styles.paramSelect, width: '90px' }}
                             value={rule.params.operator || '<'}
                             onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, operator: e.target.value } })}
                         >
-                            <option value="<">{'<'}</option>
-                            <option value=">">{'>'}</option>
+                            {OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
                         </select>
-                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <input
                                 type="number"
                                 step="0.05"
@@ -747,6 +837,18 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                                 value={rule.params.distance || 0.2}
                                 onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, distance: parseFloat(e.target.value) } })}
                             />
+                            {rule.params.operator === 'BETWEEN' && (
+                                <>
+                                    <span style={{ color: '#9ca3af' }}>-</span>
+                                    <input
+                                        type="number"
+                                        step="0.05"
+                                        style={styles.input}
+                                        value={rule.params.value2 || 0.4}
+                                        onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, value2: parseFloat(e.target.value) } })}
+                                    />
+                                </>
+                            )}
                             {renderLiveValue(rule)}
                         </div>
                         <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>units</span>
@@ -775,19 +877,22 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                     </div>
                 )}
 
-                {(rule.type === 'TEACHABLE_MACHINE' || rule.type === 'CVAT_MODEL') && (
+                {(rule.type === 'TEACHABLE_MACHINE' || rule.type === 'ROBOFLOW_DETECTION' || rule.type === 'CVAT_MODEL') && (
                     <div style={{ ...styles.paramRow, flexWrap: 'wrap', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>{rule.type === 'CVAT_MODEL' ? 'Custom Model:' : 'Model:'}</span>
+                            <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
+                                {rule.type === 'ROBOFLOW_DETECTION' ? 'Roboflow Model:' : (rule.type === 'CVAT_MODEL' ? 'Custom Model:' : 'Model:')}
+                            </span>
                             <select
                                 style={styles.paramSelect}
                                 value={rule.params.modelId || ''}
                                 onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, modelId: e.target.value } })}
                             >
                                 <option value="">Any (Default)</option>
-                                {tmModels.map(m => (
-                                    <option key={m.id} value={m.id}>{m.name}</option>
-                                ))}
+                                {rule.type === 'ROBOFLOW_DETECTION' ?
+                                    (rfModels || []).map(m => <option key={m.id} value={m.id}>{m.name}</option>) :
+                                    (tmModels || []).map(m => <option key={m.id} value={m.id}>{m.name}</option>)
+                                }
                             </select>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -912,7 +1017,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
             {/* Create Transition */}
             <div style={styles.createSection}>
                 <h3 style={styles.sectionTitle}>
-                    <Activity size={18} /> Add State Transition
+                    <Activity size={18} /> Add State Transition (Roboflow Enabled)
                 </h3>
                 <div style={styles.controls}>
                     <select
@@ -955,10 +1060,18 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                 {transitions.map(transition => {
                     const fromName = states.find(s => s.id === transition.from)?.name || 'Unknown';
                     const toName = states.find(s => s.id === transition.to)?.name || 'Unknown';
+                    const isSelected = selectedStateId === transition.from;
 
                     return (
-                        <div key={transition.id} style={styles.transitionCard}>
-                            <div style={styles.cardHeader}>
+                        <div key={transition.id} style={{
+                            ...styles.transitionCard,
+                            border: isSelected ? '1px solid #3b82f6' : '1px solid #374151',
+                            boxShadow: isSelected ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}>
+                            <div
+                                style={{ ...styles.cardHeader, cursor: 'pointer', backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : styles.cardHeader.backgroundColor }}
+                                onClick={() => onSelectState && onSelectState(transition.from)}
+                            >
                                 <div style={styles.flow}>
                                     <span style={styles.stateBadge}>{fromName}</span>
                                     <ArrowRight size={16} color="#6b7280" />
