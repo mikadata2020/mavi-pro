@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Trash2, ArrowRight, Check, Activity, MousePointer2, Copy } from 'lucide-react';
+import { Plus, Trash2, ArrowRight, Check, Activity, MousePointer2, Copy, Video, Target, Info } from 'lucide-react';
 import { RULE_TYPES, JOINTS } from '../../utils/studio/ModelBuilderEngine';
 import { getDetectableClasses } from '../../utils/objectDetector';
 import JointSelector from './JointSelector';
@@ -30,7 +30,7 @@ const evaluateComparison = (val, operator, target, target2 = null) => {
     }
 };
 
-const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript, tmModels = [], rfModels = [], selectedStateId, onSelectState }) => {
+const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript, tmModels = [], rfModels = [], selectedStateId, onSelectState, onCaptureSequence }) => {
     const [fromState, setFromState] = useState('');
     const [toState, setToState] = useState('');
     const [showSelector, setShowSelector] = useState(false);
@@ -852,6 +852,83 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             {renderLiveValue(rule)}
                         </div>
                         <span style={{ color: '#9ca3af', fontSize: '0.8rem' }}>units</span>
+                    </div>
+                )}
+
+                {rule.type === 'SEQUENCE_MATCH' && (
+                    <div style={{ ...styles.paramRow, flexDirection: 'column', alignItems: 'flex-start', gap: '10px', width: '100%' }}>
+                        <div style={{ ...styles.paramRow, width: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Threshold:</span>
+                                <input
+                                    type="number"
+                                    step="0.05"
+                                    min="0.05"
+                                    max="1.0"
+                                    style={{ ...styles.input, width: '70px' }}
+                                    value={rule.params.threshold || 0.4}
+                                    onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, threshold: parseFloat(e.target.value) } })}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ color: '#9ca3af', fontSize: '0.85rem' }}>Window Size:</span>
+                                <input
+                                    type="number"
+                                    step="10"
+                                    min="10"
+                                    max="300"
+                                    style={{ ...styles.input, width: '70px' }}
+                                    value={rule.params.bufferSize || 60}
+                                    onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, bufferSize: parseInt(e.target.value) } })}
+                                />
+                                <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>frames</span>
+                            </div>
+                        </div>
+
+                        <div style={{
+                            width: '100%',
+                            padding: '12px',
+                            backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between'
+                        }}>
+                            <div>
+                                <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Target size={14} color="#60a5fa" />
+                                    {rule.params.targetSequence ? `Template Captured (${rule.params.targetSequence.length} frames)` : 'No Template Recorded'}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>
+                                    Record a motion to compare against.
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => onCaptureSequence && onCaptureSequence(transitionId, rule.id, rule.params.bufferSize || 60)}
+                                style={{
+                                    padding: '8px 16px',
+                                    backgroundColor: '#2563eb',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 'bold',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }}
+                            >
+                                <Video size={14} /> Capture Motion
+                            </button>
+                        </div>
+
+                        {rule.params.targetSequence && (
+                            <div style={{ fontSize: '0.7rem', color: '#10b981', fontStyle: 'italic' }}>
+                                ✨ Reference sequence successfully stored in model.
+                            </div>
+                        )}
                     </div>
                 )}
 

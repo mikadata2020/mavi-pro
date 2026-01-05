@@ -7,6 +7,7 @@ import AngleCalculator from '../angleCalculator';
 import { getKeypoint } from '../poseDetector';
 import PoseNormalizer from './PoseNormalizer';
 import RuleScriptParser from './RuleScriptParser';
+import { dtwEngine } from './DTWEngine';
 
 class InferenceEngine {
     constructor() {
@@ -84,7 +85,8 @@ class InferenceEngine {
                     currentState: this.model.statesList[0].id,
                     stateEnterTime: timestamp,
                     lastUpdate: timestamp,
-                    transitionCandidates: {}
+                    transitionCandidates: {},
+                    poseBuffer: [] // Buffer for DTW sequence matching
                 });
                 this.addLog(trackId, timestamp, "System", `Operator ${trackId} detected. Starting in ${this.model.statesList[0].name}`);
             }
@@ -100,6 +102,11 @@ class InferenceEngine {
 
             track.lastUpdate = timestamp;
             track.prevPose = pose;
+
+            // Update pose buffer (keep last 3 seconds of motion @ ~30fps = 90 frames)
+            if (!track.poseBuffer) track.poseBuffer = [];
+            track.poseBuffer.push(pose);
+            if (track.poseBuffer.length > 90) track.poseBuffer.shift();
 
             this.updateFSM(track, pose, objects, hands, timestamp, this.activeTracks);
         });
@@ -356,9 +363,22 @@ class InferenceEngine {
             case 'OPERATOR_PROXIMITY': return this.checkOperatorProximity(params, pose, allTracks, track.id);
             case 'TEACHABLE_MACHINE': return this.checkTeachableMachine(params, data.teachableMachine);
             case 'ROBOFLOW_DETECTION': return this.checkRoboflow(params, data.roboflow);
+            case 'SEQUENCE_MATCH': return this.checkSequenceMatch(params, track);
             case 'ADVANCED_SCRIPT': return RuleScriptParser.evaluate(params.script, { pose, objects, hands, allTracks, tm: data.teachableMachine, roboflow: data.roboflow });
             default: return false;
         }
+    }
+
+    checkSequenceMatch(params, track) {
+        const { targetSequence, threshold = 0.4, bufferSize = 60 } = params;
+        if (!track.poseBuffer || track.poseBuffer.length < 10) return false;
+        if (!targetSequence || targetSequence.length === 0) return false;
+
+        // Take the last N frames from buffer for comparison
+        const currentWindow = track.poseBuffer.slice(-Math.min(track.poseBuffer.length, bufferSize));
+
+        const result = dtwEngine.compute(currentWindow, targetSequence);
+        return result.normalizedDistance < (threshold || 0.4);
     }
 
     checkTeachableMachine(params, tmData) {
