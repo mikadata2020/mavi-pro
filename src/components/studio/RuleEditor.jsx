@@ -424,6 +424,7 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                         <option value="OBJECT_IN_ROI">Object in ROI</option>
                         <option value="OPERATOR_PROXIMITY">Operator Proximity</option>
                         <option value="POSE_MATCHING">Golden Pose Match</option>
+                        <option value="SEQUENCE_MATCH">Motion Sequence Match (DTW)</option>
                         <option value="TEACHABLE_MACHINE">Teachable Machine</option>
                         <option value="ROBOFLOW_DETECTION">Roboflow Detection</option>
                         <option value="CVAT_MODEL">CVAT / Custom Model</option>
