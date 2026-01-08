@@ -103,10 +103,10 @@ class InferenceEngine {
             track.lastUpdate = timestamp;
             track.prevPose = pose;
 
-            // Update pose buffer (keep last 3 seconds of motion @ ~30fps = 90 frames)
+            // Update pose buffer (keep last 60 seconds of motion @ ~30fps = 1800 frames)
             if (!track.poseBuffer) track.poseBuffer = [];
-            track.poseBuffer.push(pose);
-            if (track.poseBuffer.length > 90) track.poseBuffer.shift();
+            track.poseBuffer.push({ pose, timestamp });
+            if (track.poseBuffer.length > 1800) track.poseBuffer.shift();
 
             this.updateFSM(track, pose, objects, hands, timestamp, this.activeTracks);
         });
@@ -375,7 +375,9 @@ class InferenceEngine {
         if (!targetSequence || targetSequence.length === 0) return false;
 
         // Take the last N frames from buffer for comparison
-        const currentWindow = track.poseBuffer.slice(-Math.min(track.poseBuffer.length, bufferSize));
+        const currentWindow = track.poseBuffer
+            .slice(-Math.min(track.poseBuffer.length, bufferSize))
+            .map(item => item.pose);
 
         const result = dtwEngine.compute(currentWindow, targetSequence);
         return result.normalizedDistance < (threshold || 0.4);

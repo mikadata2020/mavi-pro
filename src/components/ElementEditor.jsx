@@ -5,10 +5,11 @@ import NarrationRecorder from './NarrationRecorder';
 import { THERBLIGS } from '../constants/therbligs.jsx';
 import { chatWithAI } from '../utils/aiGenerator';
 
-function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeasurements, narration = null, onNarrationChange }) {
+function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeasurements, narration = null, onNarrationChange, videoState }) {
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
     const [editingId, setEditingId] = useState(null);
+    const [stopwatches, setStopwatches] = useState({}); // { [elementId]: { manual: startTime, auto: startTime, ... } }
     const [editName, setEditName] = useState('');
     const [editCategory, setEditCategory] = useState('');
     const [editTherblig, setEditTherblig] = useState('');
@@ -16,6 +17,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     const [editManual, setEditManual] = useState(0);
     const [editAuto, setEditAuto] = useState(0);
     const [editWalk, setEditWalk] = useState(0);
+    const [editWait, setEditWait] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterCategory, setFilterCategory] = useState('all');
     const [filterTherblig, setFilterTherblig] = useState('all');
@@ -122,14 +124,18 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         const manual = parseFloat(editManual) || 0;
         const auto = parseFloat(editAuto) || 0;
         const walk = parseFloat(editWalk) || 0;
+        const waiting = parseFloat(editWait) || 0;
         const duration = endTime - startTime;
-        const totalSplit = manual + auto + walk;
+        const totalSplit = manual + auto + walk + waiting;
 
-        // Check if total split equals duration (with small tolerance for floating point errors)
-        // Skip check if total split is 0 (user hasn't entered breakdown yet)
-        if (totalSplit > 0 && Math.abs(totalSplit - duration) > 0.01) {
-            alert(`Total waktu Manual (${manual.toFixed(2)}) + Auto (${auto.toFixed(2)}) + Walk (${walk.toFixed(2)}) = ${totalSplit.toFixed(2)}s\nHarus sama dengan durasi elemen (${duration.toFixed(2)}s)!`);
+        if (totalSplit > duration + 0.01) { // 0.01 tolerance for floating point
+            alert(`Total waktu (M+A+W+L = ${totalSplit.toFixed(2)}s) tidak boleh melebihi durasi elemen (${duration.toFixed(2)}s).`);
             return;
+        }
+
+        // Soften validation: only warn for under-allocation, don't block
+        if (totalSplit > 0 && Math.abs(totalSplit - duration) > 0.05 && totalSplit < duration) {
+            console.warn(`Breakdown sum (${totalSplit.toFixed(2)}) != duration (${duration.toFixed(2)})`);
         }
 
         onUpdateMeasurements(measurements.map(m => m.id === editingId ? {
@@ -141,6 +147,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
             manualTime: parseFloat(editManual) || 0,
             autoTime: parseFloat(editAuto) || 0,
             walkTime: parseFloat(editWalk) || 0,
+            waitingTime: parseFloat(editWait) || 0,
             startTime: startTime,
             endTime: endTime,
             duration: endTime - startTime
@@ -157,6 +164,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         setEditManual(0);
         setEditAuto(0);
         setEditWalk(0);
+        setEditWait(0);
         setEditStartTime(0);
         setEditEndTime(0);
     };
@@ -209,6 +217,56 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         const updated = [...measurements];
         updated.splice(index, 1, firstPart, secondPart);
         onUpdateMeasurements(updated);
+    };
+
+    const handleQuickCategorize = (id, type) => {
+        if (!videoState || !videoState.currentTime) {
+            alert('Playback video required for stopwatch.');
+            return;
+        }
+
+        const currentTime = videoState.currentTime;
+        const currentStopwatches = stopwatches[id] || {};
+        const isAlreadyRunning = currentStopwatches[type] !== undefined;
+
+        if (isAlreadyRunning) {
+            // STOPPING: Calculate delta and add to element
+            const startTime = currentStopwatches[type];
+            const delta = Math.max(0, currentTime - startTime);
+
+            onUpdateMeasurements(measurements.map(m => {
+                if (m.id === id) {
+                    const newValue = (m[`${type}Time`] || 0) + delta;
+
+                    return {
+                        ...m,
+                        [`${type}Time`]: newValue,
+                        waitingTime: type === 'waiting' ? newValue : (m.waitingTime || 0)
+                    };
+                }
+                return m;
+            }));
+
+            // Clear this specific stopwatch
+            const nextStopwatches = { ...currentStopwatches };
+            delete nextStopwatches[type];
+
+            setStopwatches({
+                ...stopwatches,
+                [id]: nextStopwatches
+            });
+        } else {
+            // STARTING: Record start time
+            const nextStopwatches = {
+                ...currentStopwatches,
+                [type]: currentTime
+            };
+
+            setStopwatches({
+                ...stopwatches,
+                [id]: nextStopwatches
+            });
+        }
     };
 
     const getFilteredAndSortedMeasurements = () => {
@@ -351,6 +409,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                             <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ffd700' }}>Manual</th>
                             <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#00ff00' }}>Auto</th>
                             <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ff4d4d' }}>Walk</th>
+                            <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#f97316' }}>Loss (L)</th>
                             <th style={{ padding: '4px', border: '1px solid #444', width: '100px', fontSize: '0.7rem' }}>Therblig</th>
 
                             <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Start (s)</th>
@@ -464,6 +523,23 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                         </td>
                                         <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
+                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'center', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                        >
+                                            {editingId === el.id ? (
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editWait}
+                                                    onChange={(e) => setEditWait(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                                                    style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: '#f97316', fontSize: '0.85rem', textAlign: 'center' }}
+                                                />
+                                            ) : (
+                                                <span style={{ color: '#f97316' }}>{el.waitingTime ? el.waitingTime.toFixed(2) : '-'}</span>
+                                            )}
+                                        </td>
+                                        <td
+                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
                                             {editingId === el.id ? (
@@ -484,39 +560,17 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                         </td>
 
                                         <td
-                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
-                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#aaa', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#888' }}
                                         >
-                                            {editingId === el.id ? (
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={editStartTime}
-                                                    onChange={(e) => setEditStartTime(e.target.value)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                                                    style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem', textAlign: 'right' }}
-                                                />
-                                            ) : el.startTime.toFixed(2)}
+                                            {el.startTime.toFixed(2)}
                                         </td>
                                         <td
-                                            onClick={() => editingId !== el.id && handleStartEdit(el)}
-                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#aaa', cursor: editingId !== el.id ? 'pointer' : 'default' }}
+                                            style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#888' }}
                                         >
-                                            {editingId === el.id ? (
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    value={editEndTime}
-                                                    onChange={(e) => setEditEndTime(e.target.value)}
-                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                                                    style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem', textAlign: 'right' }}
-                                                />
-                                            ) : el.endTime.toFixed(2)}
+                                            {el.endTime.toFixed(2)}
                                         </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right' }}>
-                                            {editingId === el.id ? (
-                                                (parseFloat(editEndTime) - parseFloat(editStartTime)).toFixed(2)
-                                            ) : el.duration.toFixed(2)}
+                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontWeight: 'bold' }}>
+                                            {(el.endTime - el.startTime).toFixed(2)}
                                         </td>
                                         <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
                                             {editingId === el.id ? (
@@ -526,13 +580,88 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                 </div>
                                             ) : (
                                                 <div style={{ display: 'flex', gap: '3px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                                                    <button onClick={() => handleMoveUp(originalIndex)} disabled={originalIndex === 0} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: originalIndex === 0 ? '#333' : '#555', border: 'none', color: 'white', cursor: originalIndex === 0 ? 'not-allowed' : 'pointer', borderRadius: '3px' }} title="Pindah ke atas">▲</button>
-                                                    <button onClick={() => handleMoveDown(originalIndex)} disabled={originalIndex === measurements.length - 1} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: originalIndex === measurements.length - 1 ? '#333' : '#555', border: 'none', color: 'white', cursor: originalIndex === measurements.length - 1 ? 'not-allowed' : 'pointer', borderRadius: '3px' }} title="Pindah ke bawah">▼</button>
-                                                    <button onClick={() => handleSplit(el)} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: '#d97706', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '3px' }} title="Split Element">✂️</button>
+
+                                                    {/* Quick Categorize Buttons (Stopwatch Style) */}
+                                                    <div style={{ display: 'flex', gap: '2px', border: '1px solid #444', padding: '1px', borderRadius: '3px', backgroundColor: '#222' }}>
+                                                        <button
+                                                            onClick={() => handleQuickCategorize(el.id, 'manual')}
+                                                            style={{
+                                                                padding: '3px 6px',
+                                                                fontSize: '0.7rem',
+                                                                backgroundColor: stopwatches[el.id]?.manual !== undefined ? '#ffd700' : '#444',
+                                                                boxShadow: stopwatches[el.id]?.manual !== undefined ? '0 0 8px #ffd700' : 'none',
+                                                                border: 'none',
+                                                                color: stopwatches[el.id]?.manual !== undefined ? '#000' : '#888',
+                                                                fontWeight: 'bold',
+                                                                cursor: 'pointer',
+                                                                borderRadius: '2px',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            title={stopwatches[el.id]?.manual !== undefined ? "Stop Manual Tracking" : "Start Manual Tracking"}
+                                                        >
+                                                            M
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleQuickCategorize(el.id, 'auto')}
+                                                            style={{
+                                                                padding: '3px 6px',
+                                                                fontSize: '0.7rem',
+                                                                backgroundColor: stopwatches[el.id]?.auto !== undefined ? '#00ff00' : '#444',
+                                                                boxShadow: stopwatches[el.id]?.auto !== undefined ? '0 0 8px #00ff00' : 'none',
+                                                                border: 'none',
+                                                                color: stopwatches[el.id]?.auto !== undefined ? '#000' : '#888',
+                                                                fontWeight: 'bold',
+                                                                cursor: 'pointer',
+                                                                borderRadius: '2px',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            title={stopwatches[el.id]?.auto !== undefined ? "Stop Auto Tracking" : "Start Auto Tracking"}
+                                                        >
+                                                            A
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleQuickCategorize(el.id, 'walk')}
+                                                            style={{
+                                                                padding: '3px 6px',
+                                                                fontSize: '0.7rem',
+                                                                backgroundColor: stopwatches[el.id]?.walk !== undefined ? '#ff4d4d' : '#444',
+                                                                boxShadow: stopwatches[el.id]?.walk !== undefined ? '0 0 8px #ff4d4d' : 'none',
+                                                                border: 'none',
+                                                                color: stopwatches[el.id]?.walk !== undefined ? '#fff' : '#888',
+                                                                fontWeight: 'bold',
+                                                                cursor: 'pointer',
+                                                                borderRadius: '2px',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            title={stopwatches[el.id]?.walk !== undefined ? "Stop Walk Tracking" : "Start Walk Tracking"}
+                                                        >
+                                                            W
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleQuickCategorize(el.id, 'waiting')}
+                                                            style={{
+                                                                padding: '3px 6px',
+                                                                fontSize: '0.7rem',
+                                                                backgroundColor: stopwatches[el.id]?.waiting !== undefined ? '#f97316' : '#444',
+                                                                boxShadow: stopwatches[el.id]?.waiting !== undefined ? '0 0 8px #f97316' : 'none',
+                                                                border: 'none',
+                                                                color: stopwatches[el.id]?.waiting !== undefined ? '#fff' : '#888',
+                                                                fontWeight: 'bold',
+                                                                cursor: 'pointer',
+                                                                borderRadius: '2px',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            title={stopwatches[el.id]?.waiting !== undefined ? "Stop Loss Tracking" : "Start Loss Tracking"}
+                                                        >
+                                                            L
+                                                        </button>
+                                                    </div>
+
                                                     <button onClick={() => handleStartEdit(el)} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: '#05a', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '3px' }} title="Edit">✎</button>
                                                     <button onClick={() => handleDelete(el.id)} style={{ padding: '3px 6px', fontSize: '0.7rem', backgroundColor: '#a00', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '3px' }} title="Hapus">🗑</button>
                                                 </div>
-                                            )}
+                                            )
+                                            }
                                         </td>
                                     </tr>
                                 );
@@ -560,100 +689,102 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                         }
                     </tbody >
                 </table >
-            </div>
+            </div >
 
             {/* AI Chat Panel */}
-            {showChat && (
-                <div style={{
-                    position: 'fixed',
-                    right: isChatFullscreen ? '0' : '20px',
-                    bottom: isChatFullscreen ? '0' : '20px',
-                    top: isChatFullscreen ? '0' : 'auto',
-                    left: isChatFullscreen ? '0' : 'auto',
-                    width: isChatFullscreen ? '100%' : '400px',
-                    height: isChatFullscreen ? '100%' : '500px',
-                    backgroundColor: '#1e1e1e',
-                    border: '1px solid #444',
-                    borderRadius: isChatFullscreen ? '0' : '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    zIndex: 1000,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-                }}>
-                    {/* Chat Header */}
-                    <div style={{ padding: '10px', backgroundColor: '#2d2d2d', borderBottom: '1px solid #444', borderRadius: isChatFullscreen ? '0' : '8px 8px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.2rem' }}>⏱️</span>
-                            <div>
-                                <div style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem' }}>Mavi Engineer</div>
-                                <div style={{ color: '#888', fontSize: '0.7rem' }}>Analyzing {measurements.length} elements</div>
+            {
+                showChat && (
+                    <div style={{
+                        position: 'fixed',
+                        right: isChatFullscreen ? '0' : '20px',
+                        bottom: isChatFullscreen ? '0' : '20px',
+                        top: isChatFullscreen ? '0' : 'auto',
+                        left: isChatFullscreen ? '0' : 'auto',
+                        width: isChatFullscreen ? '100%' : '400px',
+                        height: isChatFullscreen ? '100%' : '500px',
+                        backgroundColor: '#1e1e1e',
+                        border: '1px solid #444',
+                        borderRadius: isChatFullscreen ? '0' : '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        zIndex: 1000,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+                    }}>
+                        {/* Chat Header */}
+                        <div style={{ padding: '10px', backgroundColor: '#2d2d2d', borderBottom: '1px solid #444', borderRadius: isChatFullscreen ? '0' : '8px 8px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '1.2rem' }}>⏱️</span>
+                                <div>
+                                    <div style={{ color: 'white', fontWeight: 'bold', fontSize: '0.9rem' }}>Mavi Engineer</div>
+                                    <div style={{ color: '#888', fontSize: '0.7rem' }}>Analyzing {measurements.length} elements</div>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => setIsChatFullscreen(!isChatFullscreen)}
+                                    style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}
+                                    title={isChatFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                                >
+                                    {isChatFullscreen ? '⊡' : '⊞'}
+                                </button>
+                                <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                                onClick={() => setIsChatFullscreen(!isChatFullscreen)}
-                                style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}
-                                title={isChatFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                            >
-                                {isChatFullscreen ? '⊡' : '⊞'}
-                            </button>
-                            <button onClick={() => setShowChat(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
-                        </div>
-                    </div>
 
-                    {/* Chat Messages */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {chatHistory.length === 0 ? (
-                            <div style={{ color: '#666', textAlign: 'center', marginTop: '20px', fontSize: '0.85rem' }}>
-                                <p>👋 Halo! Saya AI Industrial Engineer.</p>
-                                <p style={{ marginTop: '10px' }}>Tanyakan tentang:</p>
-                                <ul style={{ textAlign: 'left', marginTop: '10px', lineHeight: '1.6' }}>
-                                    <li>Analisis cycle time</li>
-                                    <li>Saran optimasi proses</li>
-                                    <li>Identifikasi waste</li>
-                                    <li>Rekomendasi improvement</li>
-                                </ul>
-                            </div>
-                        ) : (
-                            chatHistory.map((msg, idx) => (
-                                <div key={idx} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                                    <div style={{ maxWidth: '80%', padding: '8px 12px', borderRadius: '8px', backgroundColor: msg.role === 'user' ? '#0078d4' : '#2d2d2d', color: 'white', fontSize: '0.85rem', lineHeight: '1.4', whiteSpace: 'pre-wrap' }}>
-                                        {msg.content}
+                        {/* Chat Messages */}
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {chatHistory.length === 0 ? (
+                                <div style={{ color: '#666', textAlign: 'center', marginTop: '20px', fontSize: '0.85rem' }}>
+                                    <p>👋 Halo! Saya AI Industrial Engineer.</p>
+                                    <p style={{ marginTop: '10px' }}>Tanyakan tentang:</p>
+                                    <ul style={{ textAlign: 'left', marginTop: '10px', lineHeight: '1.6' }}>
+                                        <li>Analisis cycle time</li>
+                                        <li>Saran optimasi proses</li>
+                                        <li>Identifikasi waste</li>
+                                        <li>Rekomendasi improvement</li>
+                                    </ul>
+                                </div>
+                            ) : (
+                                chatHistory.map((msg, idx) => (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                                        <div style={{ maxWidth: '80%', padding: '8px 12px', borderRadius: '8px', backgroundColor: msg.role === 'user' ? '#0078d4' : '#2d2d2d', color: 'white', fontSize: '0.85rem', lineHeight: '1.4', whiteSpace: 'pre-wrap' }}>
+                                            {msg.content}
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                            {isAiThinking && (
+                                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                                    <div style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: '#2d2d2d', color: '#888', fontSize: '0.85rem' }}>
+                                        <span>💭 Thinking...</span>
                                     </div>
                                 </div>
-                            ))
-                        )}
-                        {isAiThinking && (
-                            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                                <div style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: '#2d2d2d', color: '#888', fontSize: '0.85rem' }}>
-                                    <span>💭 Thinking...</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
 
-                    {/* Chat Input */}
-                    <div style={{ padding: '10px', borderTop: '1px solid #444', display: 'flex', gap: '8px' }}>
-                        <input
-                            type="text"
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyPress={(e) => e.key === 'Enter' && !isAiThinking && handleSendMessage()}
-                            placeholder="Tanyakan sesuatu..."
-                            disabled={isAiThinking}
-                            style={{ flex: 1, padding: '8px', backgroundColor: '#2d2d2d', border: '1px solid #444', borderRadius: '4px', color: 'white', fontSize: '0.85rem' }}
-                        />
-                        <button
-                            onClick={handleSendMessage}
-                            disabled={isAiThinking || !chatInput.trim()}
-                            style={{ padding: '8px 12px', backgroundColor: isAiThinking || !chatInput.trim() ? '#444' : '#0078d4', border: 'none', borderRadius: '4px', color: 'white', cursor: isAiThinking || !chatInput.trim() ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
-                        >
-                            {isAiThinking ? '⌛' : '→'}
-                        </button>
+                        {/* Chat Input */}
+                        <div style={{ padding: '10px', borderTop: '1px solid #444', display: 'flex', gap: '8px' }}>
+                            <input
+                                type="text"
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && !isAiThinking && handleSendMessage()}
+                                placeholder="Tanyakan sesuatu..."
+                                disabled={isAiThinking}
+                                style={{ flex: 1, padding: '8px', backgroundColor: '#2d2d2d', border: '1px solid #444', borderRadius: '4px', color: 'white', fontSize: '0.85rem' }}
+                            />
+                            <button
+                                onClick={handleSendMessage}
+                                disabled={isAiThinking || !chatInput.trim()}
+                                style={{ padding: '8px 12px', backgroundColor: isAiThinking || !chatInput.trim() ? '#444' : '#0078d4', border: 'none', borderRadius: '4px', color: 'white', cursor: isAiThinking || !chatInput.trim() ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}
+                            >
+                                {isAiThinking ? '⌛' : '→'}
+                            </button>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
 

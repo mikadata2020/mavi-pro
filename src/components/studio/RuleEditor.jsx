@@ -30,7 +30,7 @@ const evaluateComparison = (val, operator, target, target2 = null) => {
     }
 };
 
-const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript, tmModels = [], rfModels = [], selectedStateId, onSelectState, onCaptureSequence }) => {
+const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, onUpdateTransition, activePose, onAiSuggest, onAiValidateScript, tmModels = [], rfModels = [], selectedStateId, onSelectState, onCaptureSequence, captureBufferStatus }) => {
     const [fromState, setFromState] = useState('');
     const [toState, setToState] = useState('');
     const [showSelector, setShowSelector] = useState(false);
@@ -893,41 +893,117 @@ const RuleEditor = ({ states, transitions, onAddTransition, onDeleteTransition, 
                             borderRadius: '8px',
                             border: '1px solid rgba(59, 130, 246, 0.2)',
                             display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between'
+                            flexDirection: 'column',
+                            gap: '12px'
                         }}>
-                            <div>
-                                <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <Target size={14} color="#60a5fa" />
-                                    {rule.params.targetSequence ? `Template Captured (${rule.params.targetSequence.length} frames)` : 'No Template Recorded'}
+                            {/* Range Selection UI */}
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', backgroundColor: '#111827', padding: '10px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>Start Marker:</div>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            style={{ ...styles.input, width: '100%', padding: '6px' }}
+                                            value={rule.params.startTime !== undefined ? rule.params.startTime.toFixed(1) : ''}
+                                            placeholder="0.0"
+                                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, startTime: parseFloat(e.target.value) } })}
+                                        />
+                                        <button
+                                            onClick={() => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, startTime: captureBufferStatus?.videoTime || 0 } })}
+                                            style={{ padding: '4px 8px', backgroundColor: '#374151', border: '1px solid #4b5563', color: '#60a5fa', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                            title="Set to Current Video Time"
+                                        >
+                                            Set
+                                        </button>
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>
-                                    Record a motion to compare against.
+                                <div style={{ color: '#4b5563', paddingBottom: '16px' }}>&rarr;</div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>Finish Marker:</div>
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            style={{ ...styles.input, width: '100%', padding: '6px' }}
+                                            value={rule.params.endTime !== undefined ? rule.params.endTime.toFixed(1) : ''}
+                                            placeholder="0.0"
+                                            onChange={(e) => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, endTime: parseFloat(e.target.value) } })}
+                                        />
+                                        <button
+                                            onClick={() => handleUpdateRule(transitionId, rule.id, { params: { ...rule.params, endTime: captureBufferStatus?.videoTime || 0 } })}
+                                            style={{ padding: '4px 8px', backgroundColor: '#374151', border: '1px solid #4b5563', color: '#60a5fa', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                            title="Set to Current Video Time"
+                                        >
+                                            Set
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => onCaptureSequence && onCaptureSequence(transitionId, rule.id, rule.params.bufferSize || 60)}
-                                style={{
-                                    padding: '8px 16px',
-                                    backgroundColor: '#2563eb',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    fontSize: '0.8rem',
-                                    fontWeight: 'bold',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px'
-                                }}
-                            >
-                                <Video size={14} /> Capture Motion
-                            </button>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyItems: 'space-between', width: '100%', justifyContent: 'space-between' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', color: '#fff', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Target size={14} color="#60a5fa" />
+                                        {rule.params.targetSequence ? `Template captured (${rule.params.targetSequence.length || 0} frames)` : 'No Template Recorded'}
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>
+                                        {rule.params.targetSequence ? 'Ready to match.' : 'Select range & capture motion.'}
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => onCaptureSequence && onCaptureSequence(transitionId, rule.id, {
+                                        startTime: rule.params.startTime,
+                                        endTime: rule.params.endTime,
+                                        bufferSize: rule.params.bufferSize || 60
+                                    })}
+                                    disabled={rule.params.startTime === undefined || rule.params.endTime === undefined || rule.params.startTime >= rule.params.endTime}
+                                    style={{
+                                        padding: '8px 16px',
+                                        backgroundColor: (rule.params.startTime === undefined || rule.params.endTime === undefined || rule.params.startTime >= rule.params.endTime) ? '#374151' : '#2563eb',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 'bold',
+                                        cursor: (rule.params.startTime === undefined || rule.params.endTime === undefined || rule.params.startTime >= rule.params.endTime) ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        boxShadow: (rule.params.startTime === undefined || rule.params.endTime === undefined || rule.params.startTime >= rule.params.endTime) ? 'none' : '0 4px 12px rgba(37, 99, 235, 0.3)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    <Video size={14} />
+                                    {(rule.params.startTime === undefined || rule.params.endTime === undefined || rule.params.startTime >= rule.params.endTime) ? 'Select Range' : 'Capture Range'}
+                                </button>
+                            </div>
+
+                            {/* Progress Bar for Motion Buffer */}
+                            <div style={{ width: '100%' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#6b7280', marginBottom: '4px' }}>
+                                    <span>Motion Storage (last 60s):</span>
+                                    <span>{captureBufferStatus?.current || 0} / 1800 frames</span>
+                                </div>
+                                <div style={{ width: '100%', height: '6px', backgroundColor: '#1f2937', borderRadius: '3px', overflow: 'hidden', border: '1px solid #374151' }}>
+                                    <div style={{
+                                        width: `${Math.min(100, ((captureBufferStatus?.current || 0) / 1800) * 100)}%`,
+                                        height: '100%',
+                                        backgroundColor: '#3b82f6',
+                                        transition: 'width 0.3s ease-out'
+                                    }} />
+                                </div>
+                                {(!captureBufferStatus || captureBufferStatus.current < 10) && (
+                                    <div style={{ fontSize: '0.65rem', color: '#60a5fa', marginTop: '4px', fontStyle: 'italic' }}>
+                                        Play video to build motion memory...
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {rule.params.targetSequence && (
-                            <div style={{ fontSize: '0.7rem', color: '#10b981', fontStyle: 'italic' }}>
-                                ✨ Reference sequence successfully stored in model.
+                            <div style={{ fontSize: '0.7rem', color: '#10b981', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Check size={12} /> Reference sequence successfully stored in model.
                             </div>
                         )}
                     </div>

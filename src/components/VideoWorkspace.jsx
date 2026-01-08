@@ -997,6 +997,7 @@ function VideoWorkspace({
                         measurements={videoState.measurements}
                         videoName={videoSrc ? videoSrc.split('/').pop().split('.')[0] : 'Untitled'}
                         onUpdateMeasurements={updateMeasurements}
+                        videoState={videoState}
                     />
                 </div>
 

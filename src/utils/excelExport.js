@@ -12,22 +12,31 @@ export const exportToExcel = (measurements, videoName = 'Untitled') => {
         'No.': index + 1,
         'Nama Elemen': m.elementName,
         'Kategori': m.category,
-        'Waktu Mulai (s)': m.startTime.toFixed(2),
-        'Waktu Selesai (s)': m.endTime.toFixed(2),
-        'Durasi (s)': m.duration.toFixed(2)
+        'M (Manual)': (Number(m.manualTime) || 0).toFixed(2),
+        'A (Auto)': (Number(m.autoTime) || 0).toFixed(2),
+        'W (Walk)': (Number(m.walkTime) || 0).toFixed(2),
+        'L (Loss)': (Number(m.waitingTime) || 0).toFixed(2),
+        'Waktu Mulai (s)': (Number(m.startTime) || 0).toFixed(2),
+        'Waktu Selesai (s)': (Number(m.endTime) || 0).toFixed(2),
+        'Durasi (s)': (Number(m.duration) || 0).toFixed(2)
     }));
 
     // Calculate statistics
-    const totalTime = measurements.reduce((sum, m) => sum + m.duration, 0);
+    const totalTime = measurements.reduce((sum, m) => sum + (Number(m.duration) || 0), 0);
+    const totalManual = measurements.reduce((sum, m) => sum + (Number(m.manualTime) || 0), 0);
+    const totalAuto = measurements.reduce((sum, m) => sum + (Number(m.autoTime) || 0), 0);
+    const totalWalk = measurements.reduce((sum, m) => sum + (Number(m.walkTime) || 0), 0);
+    const totalLoss = measurements.reduce((sum, m) => sum + (Number(m.waitingTime) || 0), 0);
+
     const valueAddedTime = measurements
         .filter(m => m.category === 'Value-added')
-        .reduce((sum, m) => sum + m.duration, 0);
+        .reduce((sum, m) => sum + (Number(m.duration) || 0), 0);
     const nonValueAddedTime = measurements
         .filter(m => m.category === 'Non value-added')
-        .reduce((sum, m) => sum + m.duration, 0);
+        .reduce((sum, m) => sum + (Number(m.duration) || 0), 0);
     const wasteTime = measurements
         .filter(m => m.category === 'Waste')
-        .reduce((sum, m) => sum + m.duration, 0);
+        .reduce((sum, m) => sum + (Number(m.duration) || 0), 0);
 
     // Add summary rows
     data.push({});
@@ -35,6 +44,10 @@ export const exportToExcel = (measurements, videoName = 'Untitled') => {
         'No.': 'RINGKASAN',
         'Nama Elemen': '',
         'Kategori': '',
+        'M (Manual)': '',
+        'A (Auto)': '',
+        'W (Walk)': '',
+        'L (Loss)': '',
         'Waktu Mulai (s)': '',
         'Waktu Selesai (s)': '',
         'Durasi (s)': ''
@@ -43,6 +56,10 @@ export const exportToExcel = (measurements, videoName = 'Untitled') => {
         'No.': 'Total Waktu',
         'Nama Elemen': '',
         'Kategori': '',
+        'M (Manual)': totalManual.toFixed(2),
+        'A (Auto)': totalAuto.toFixed(2),
+        'W (Walk)': totalWalk.toFixed(2),
+        'L (Loss)': totalLoss.toFixed(2),
         'Waktu Mulai (s)': '',
         'Waktu Selesai (s)': '',
         'Durasi (s)': totalTime.toFixed(2)
@@ -51,25 +68,37 @@ export const exportToExcel = (measurements, videoName = 'Untitled') => {
         'No.': 'Value-added',
         'Nama Elemen': '',
         'Kategori': '',
+        'M (Manual)': '',
+        'A (Auto)': '',
+        'W (Walk)': '',
+        'L (Loss)': '',
         'Waktu Mulai (s)': '',
         'Waktu Selesai (s)': '',
-        'Durasi (s)': `${valueAddedTime.toFixed(2)} (${((valueAddedTime / totalTime) * 100).toFixed(1)}%)`
+        'Durasi (s)': `${valueAddedTime.toFixed(2)} ${totalTime > 0 ? `(${((valueAddedTime / totalTime) * 100).toFixed(1)}%)` : ''}`
     });
     data.push({
         'No.': 'Non value-added',
         'Nama Elemen': '',
         'Kategori': '',
+        'M (Manual)': '',
+        'A (Auto)': '',
+        'W (Walk)': '',
+        'L (Loss)': '',
         'Waktu Mulai (s)': '',
         'Waktu Selesai (s)': '',
-        'Durasi (s)': `${nonValueAddedTime.toFixed(2)} (${((nonValueAddedTime / totalTime) * 100).toFixed(1)}%)`
+        'Durasi (s)': `${nonValueAddedTime.toFixed(2)} ${totalTime > 0 ? `(${((nonValueAddedTime / totalTime) * 100).toFixed(1)}%)` : ''}`
     });
     data.push({
         'No.': 'Waste',
         'Nama Elemen': '',
         'Kategori': '',
+        'M (Manual)': '',
+        'A (Auto)': '',
+        'W (Walk)': '',
+        'L (Loss)': '',
         'Waktu Mulai (s)': '',
         'Waktu Selesai (s)': '',
-        'Durasi (s)': `${wasteTime.toFixed(2)} (${((wasteTime / totalTime) * 100).toFixed(1)}%)`
+        'Durasi (s)': `${wasteTime.toFixed(2)} ${totalTime > 0 ? `(${((wasteTime / totalTime) * 100).toFixed(1)}%)` : ''}`
     });
 
     // Create workbook
@@ -82,6 +111,10 @@ export const exportToExcel = (measurements, videoName = 'Untitled') => {
         { wch: 5 },  // No
         { wch: 30 }, // Nama Elemen
         { wch: 20 }, // Kategori
+        { wch: 12 }, // M
+        { wch: 12 }, // A
+        { wch: 12 }, // W
+        { wch: 12 }, // L
         { wch: 18 }, // Waktu Mulai
         { wch: 18 }, // Waktu Selesai
         { wch: 15 }  // Durasi

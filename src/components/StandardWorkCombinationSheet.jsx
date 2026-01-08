@@ -122,6 +122,7 @@ function StandardWorkCombinationSheet({ currentProject }) {
             'Manual Time': parseFloat(m.manualTime) || 0,
             'Auto Time': parseFloat(m.autoTime) || 0,
             'Walk Time': parseFloat(m.walkTime) || 0,
+            'Loss Time': parseFloat(m.waitingTime) || 0,
             'Timing Mode': m.timingMode || 'series',
             'Offset': m.offset || 0
         }));
@@ -249,16 +250,22 @@ function StandardWorkCombinationSheet({ currentProject }) {
             const measurements = selectedProject.measurements || [];
             // Map duration to manualTime if missing (similar to render logic, but persisted in state)
             const initializedMeasurements = measurements.map(m => {
-                const manual = parseFloat(m.manualTime) || 0;
-                const auto = parseFloat(m.autoTime) || 0;
-                const walk = parseFloat(m.walkTime) || 0;
-                const waiting = parseFloat(m.waitingTime) || 0;
+                const manual = parseFloat((parseFloat(m.manualTime) || 0).toFixed(1));
+                const auto = parseFloat((parseFloat(m.autoTime) || 0).toFixed(1));
+                const walk = parseFloat((parseFloat(m.walkTime) || 0).toFixed(1));
+                const waiting = parseFloat((parseFloat(m.waitingTime) || 0).toFixed(1));
 
                 if (manual === 0 && auto === 0 && walk === 0 && waiting === 0) {
                     const dur = parseFloat(m.duration) || (m.endTime && m.startTime ? m.endTime - m.startTime : 0) || 0;
-                    if (dur > 0) return { ...m, manualTime: dur };
+                    if (dur > 0) return { ...m, manualTime: parseFloat(dur.toFixed(1)) };
                 }
-                return m;
+                return {
+                    ...m,
+                    manualTime: manual,
+                    autoTime: auto,
+                    walkTime: walk,
+                    waitingTime: waiting
+                };
             });
             setProjectMeasurements(initializedMeasurements);
         } else {
@@ -266,6 +273,8 @@ function StandardWorkCombinationSheet({ currentProject }) {
         }
     }, [selectedProject]);
 
+    const [rulerExtraBuffer, setRulerExtraBuffer] = useState(30); // Default 30s buffer
+    const [zoomLevel, setZoomLevel] = useState(20); // Default 20px per second
     const [showColumnSettings, setShowColumnSettings] = useState(false);
 
     const toggleColumn = (columnId) => {
@@ -676,9 +685,11 @@ function StandardWorkCombinationSheet({ currentProject }) {
             );
         }
 
+
+
         const measurements = timedMeasurements;
         const rowHeight = 40;
-        const headerHeight = 40; // Matched with table header height
+        const headerHeight = 40; // Reverted to 40 to align with table
         const chartHeight = measurements.length * rowHeight + headerHeight;
 
         let maxDuration = 0;
@@ -687,16 +698,20 @@ function StandardWorkCombinationSheet({ currentProject }) {
         });
 
         // Dynamic chart width based on desired pixels per second for readability
-        const minPixelsPerSecond = 5; // Minimum 5 pixels per second for readability
-        const rulerBuffer = 30; // Fixed buffer in seconds
-        const maxScaleTime = Math.max(maxDuration + rulerBuffer, 10);
-        const chartWidth = Math.max(800, maxScaleTime * minPixelsPerSecond); // At least 800px or dynamic
-        const pixelsPerSecond = chartWidth / maxScaleTime;
+        const pixelsPerSecond = zoomLevel; // Use dynamic zoom level
+
+        // Ensure ruler covers both the max element duration AND the calculated cycle time (+ dynamic buffer)
+        const maxScaleTime = Math.max(
+            maxDuration + rulerExtraBuffer,
+            (tpsAnalysis.cycleTime || 0) + rulerExtraBuffer,
+            10
+        );
+        const chartWidth = Math.max(800, maxScaleTime * pixelsPerSecond); // At least 800px or dynamic based on fixed scale
 
         // Debug logging
         console.log('SWCS Ruler Debug:', {
             maxDuration,
-            rulerBuffer,
+            rulerExtraBuffer,
             maxScaleTime,
             chartWidth,
             pixelsPerSecond
@@ -706,35 +721,39 @@ function StandardWorkCombinationSheet({ currentProject }) {
             <div
                 className="swcs-chart-container"
                 style={{
-                    overflowX: 'auto',
+                    flex: '1',
+                    overflow: 'auto', // Enable both X and Y scrolling
                     backgroundColor: '#fff',
                     padding: '0',
                     borderRadius: '0',
                     cursor: drawMode ? 'crosshair' : 'default',
-                    scrollbarWidth: 'none', // Hide scrollbar for Firefox
-                    msOverflowStyle: 'none' // Hide scrollbar for IE/Edge
+                    border: '1px solid #ccc'
                 }}
             >
                 <style>
                     {`
-                        .swcs-chart-container::-webkit-scrollbar {
-                            display: none; /* Hide scrollbar for Chrome, Safari, Opera */
-                        }
+                        /* Restore default scrollbar */
                     `}
                 </style>
                 <svg
+                    key={chartWidth} // Force re-render when width changes
                     width={chartWidth}
                     height={chartHeight}
-                    style={{ display: 'block' }}
+                    style={{
+                        display: 'block',
+                        minWidth: '100%',
+                        backgroundColor: '#fff'
+                    }}
                     onClick={handleChartClick}
                 >
                     {/* Header Background */}
                     <rect x="0" y="0" width={chartWidth} height={headerHeight} fill="#eee" />
+
                     {/* Header Bottom Border (Light) */}
                     <line x1="0" y1={headerHeight} x2={chartWidth} y2={headerHeight} stroke="#ccc" strokeWidth="1" />
 
                     {/* Grid Lines */}
-                    {Array.from({ length: Math.ceil(maxScaleTime) + 1 }).map((_, i) => (
+                    {Array.from({ length: Math.ceil(maxScaleTime) + 20 }).map((_, i) => ( // Dynamic + Safety Buffer
                         <line
                             key={i}
                             x1={i * pixelsPerSecond}
@@ -748,7 +767,7 @@ function StandardWorkCombinationSheet({ currentProject }) {
                     ))}
 
                     {/* Ruler Ticks & Labels */}
-                    {Array.from({ length: Math.ceil(maxScaleTime) + 1 }).map((_, i) => {
+                    {Array.from({ length: Math.ceil(maxScaleTime) + 20 }).map((_, i) => { // Consistency with grid lines
                         const x = i * pixelsPerSecond;
                         let tickHeight = 0;
                         let showLabel = false;
@@ -1007,6 +1026,8 @@ function StandardWorkCombinationSheet({ currentProject }) {
         );
     };
 
+
+
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-secondary)', padding: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1065,6 +1086,61 @@ function StandardWorkCombinationSheet({ currentProject }) {
                     >
                         Export PDF
                     </button>
+
+                    {/* Ruler & Zoom Controls */}
+                    <div style={{ display: 'flex', gap: '5px', alignItems: 'center', marginLeft: '10px', backgroundColor: '#333', padding: '4px', borderRadius: '4px' }}>
+                        {/* Zoom Controls */}
+                        <div style={{ display: 'flex', gap: '2px', paddingRight: '5px', borderRight: '1px solid #555' }}>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.preventDefault(); setZoomLevel(prev => Math.max(5, prev - 5)); }}
+                                style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '2px' }}
+                                title="Zoom Out (Perkecil Skala)"
+                            >
+                                - Zoom
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => { e.preventDefault(); setZoomLevel(prev => Math.min(100, prev + 5)); }}
+                                style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '2px' }}
+                                title="Zoom In (Perbesar Skala)"
+                            >
+                                + Zoom
+                            </button>
+                        </div>
+
+                        {/* Buffer Controls */}
+                        <div style={{ display: 'flex', gap: '2px', paddingLeft: '5px' }}>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    console.log('Decrease Buffer Clicked');
+                                    setRulerExtraBuffer(prev => Math.max(10, prev - 10));
+                                }}
+                                style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '2px' }}
+                                title="Kurangi Durasi (Buffer)"
+                            >
+                                - Buffer
+                            </button>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    console.log('Increase Buffer Clicked');
+                                    setRulerExtraBuffer(prev => prev + 10);
+                                }}
+                                style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer', background: '#555', color: 'white', border: 'none', borderRadius: '2px' }}
+                                title="Tambah Durasi (Buffer)"
+                            >
+                                + Buffer
+                            </button>
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#ccc', marginLeft: '5px' }}>
+                            Zoom: {zoomLevel} | Buffer: {rulerExtraBuffer}s
+                        </span>
+                    </div>
+
                     {mode === 'manual' && (
                         <>
                             {/* Save/Load JSON */}
@@ -1383,9 +1459,10 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                 width: 'min-content',
                                 borderCollapse: 'separate',
                                 borderSpacing: '0',
-                                fontSize: '0.8rem',
+                                fontSize: '13px',
                                 tableLayout: 'fixed',
-                                border: 'none'
+                                border: 'none',
+                                fontFamily: 'Segoe UI, Roboto, Helvetica, Arial, sans-serif'
                             }}>
                                 <thead>
                                     <tr style={{ backgroundColor: '#eee', height: '40px' }}>
@@ -1412,7 +1489,9 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                                 whiteSpace: 'nowrap',
                                                 position: 'relative',
                                                 backgroundColor: col.bg || 'inherit',
-                                                fontSize: '0.75rem'
+                                                fontSize: '13px',
+                                                fontWeight: 'bold',
+                                                color: '#333'
                                             }} title={col.title}>
                                                 {col.label}
                                                 <div
@@ -1444,7 +1523,9 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                                 boxSizing: 'border-box',
                                                 whiteSpace: 'nowrap',
                                                 position: 'relative',
-                                                fontSize: col.id === 'quality' || col.id === 'safety' || col.id === 'kaizen' ? '1rem' : 'inherit'
+                                                fontSize: col.id === 'quality' || col.id === 'safety' || col.id === 'kaizen' ? '1rem' : '13px',
+                                                fontWeight: 'bold',
+                                                color: '#333'
                                             }} title={col.title}>
                                                 {col.label}
                                                 {col.id !== 'delete' && (
@@ -1464,73 +1545,82 @@ function StandardWorkCombinationSheet({ currentProject }) {
                                 <tbody>
                                     {timedMeasurements.map((m, idx) => (
                                         <tr key={idx} style={{ height: '40px' }}>
-                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.no }}>{idx + 1}</td>
-                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', height: '40px', boxSizing: 'border-box', width: columnWidths.name }}>
+                                            <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.no, fontSize: '13px' }}>{idx + 1}</td>
+                                            <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', height: '40px', boxSizing: 'border-box', width: columnWidths.name }}>
                                                 {mode === 'manual' ? (
                                                     <input
                                                         type="text"
                                                         value={m.elementName}
                                                         onChange={(e) => handleManualChange(idx, 'elementName', e.target.value)}
-                                                        style={{ width: '100%', height: '100%', border: 'none', padding: '0 5px', outline: 'none', boxSizing: 'border-box', background: 'transparent' }}
+
+                                                        style={{ width: '100%', height: '100%', border: 'none', padding: '0 5px', outline: 'none', boxSizing: 'border-box', background: 'transparent', fontSize: '13px', fontFamily: 'inherit' }}
                                                         placeholder="Element..."
                                                     />
-                                                ) : <div style={{ padding: '0 5px', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.elementName}</div>}
+                                                ) : <div style={{ padding: '0 5px', height: '100%', display: 'flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px' }}>{m.elementName}</div>}
                                             </td>
-                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.man }}>
+                                            <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.man }}>
                                                 <input
                                                     type="number"
+                                                    step="0.1"
                                                     value={m.manualTime}
                                                     onChange={(e) => handleManualChange(idx, 'manualTime', e.target.value)}
-                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                    onBlur={(e) => handleManualChange(idx, 'manualTime', parseFloat(e.target.value || 0).toFixed(1))}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '13px', fontWeight: '500', fontFamily: 'inherit' }}
                                                 />
                                             </td>
-                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.auto }}>
+                                            <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.auto }}>
                                                 <input
                                                     type="number"
+                                                    step="0.1"
                                                     value={m.autoTime}
                                                     onChange={(e) => handleManualChange(idx, 'autoTime', e.target.value)}
-                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                    onBlur={(e) => handleManualChange(idx, 'autoTime', parseFloat(e.target.value || 0).toFixed(1))}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '13px', fontWeight: '500', fontFamily: 'inherit' }}
                                                 />
                                             </td>
-                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.walk }}>
+                                            <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.walk }}>
                                                 <input
                                                     type="number"
+                                                    step="0.1"
                                                     value={m.walkTime}
                                                     onChange={(e) => handleManualChange(idx, 'walkTime', e.target.value)}
-                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                    onBlur={(e) => handleManualChange(idx, 'walkTime', parseFloat(e.target.value || 0).toFixed(1))}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '13px', fontWeight: '500', fontFamily: 'inherit' }}
                                                 />
                                             </td>
-                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.waiting, backgroundColor: '#fff5f5' }}>
+                                            <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', height: '40px', boxSizing: 'border-box', width: columnWidths.waiting, backgroundColor: '#fff5f5' }}>
                                                 <input
                                                     type="number"
+                                                    step="0.1"
                                                     value={m.waitingTime || 0}
                                                     onChange={(e) => handleManualChange(idx, 'waitingTime', e.target.value)}
-                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent' }}
+                                                    onBlur={(e) => handleManualChange(idx, 'waitingTime', parseFloat(e.target.value || 0).toFixed(1))}
+                                                    style={{ width: '100%', height: '100%', border: 'none', padding: '0', outline: 'none', textAlign: 'center', boxSizing: 'border-box', background: 'transparent', fontSize: '13px', fontWeight: '500', fontFamily: 'inherit' }}
                                                     placeholder="0"
                                                     title="Waiting Time (Waste)"
                                                 />
                                             </td>
                                             {/* Revised Columns: Start, Finish, Duration */}
                                             {columnVisibility.start && (
-                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '0.8rem', height: '40px', boxSizing: 'border-box', width: columnWidths.start }}>
-                                                    <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '13px', height: '40px', boxSizing: 'border-box', width: columnWidths.start }}>
+                                                    <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '500' }}>
                                                         {m._calculated ? m._calculated.startTime.toFixed(1) : '-'}
                                                     </div>
                                                 </td>
                                             )}
                                             {columnVisibility.finish && (
-                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '0.8rem', height: '40px', boxSizing: 'border-box', width: columnWidths.finish }}>
-                                                    <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', backgroundColor: '#f0faff', fontSize: '13px', height: '40px', boxSizing: 'border-box', width: columnWidths.finish }}>
+                                                    <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '500' }}>
                                                         {m._calculated ? m._calculated.finishTime.toFixed(1) : '-'}
                                                     </div>
                                                 </td>
                                             )}
                                             {columnVisibility.duration && (
-                                                <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', fontWeight: 'bold', height: '40px', boxSizing: 'border-box', width: columnWidths.duration }}>
+                                                <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', fontWeight: 'bold', height: '40px', boxSizing: 'border-box', width: columnWidths.duration, fontSize: '13px' }}>
                                                     {((parseFloat(m.manualTime) || 0) + (parseFloat(m.autoTime) || 0) + (parseFloat(m.walkTime) || 0) + (parseFloat(m.waitingTime) || 0)).toFixed(1)}
                                                 </td>
                                             )}
-                                            <td style={{ borderBottom: '1px solid black', borderRight: '1px solid black', padding: '0', textAlign: 'center', fontWeight: 'bold', height: '40px', boxSizing: 'border-box', width: columnWidths.total }}>
+                                            <td style={{ borderBottom: '1px solid #ccc', borderRight: '1px solid #ccc', padding: '0', textAlign: 'center', fontWeight: 'bold', height: '40px', boxSizing: 'border-box', width: columnWidths.total, fontSize: '13px' }}>
                                                 {((parseFloat(m.manualTime) || 0) + (parseFloat(m.autoTime) || 0) + (parseFloat(m.walkTime) || 0) + (parseFloat(m.waitingTime) || 0)).toFixed(1)}
                                             </td>
                                             {mode === 'manual' && (

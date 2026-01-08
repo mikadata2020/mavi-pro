@@ -80,6 +80,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const [rfPredictions, setRfPredictions] = useState({}); // { [modelId]: detections[] }
     const [tmLoadingStates, setTmLoadingStates] = useState({}); // { [modelId]: boolean }
     const [tmFiles, setTmFiles] = useState({}); // { [modelId]: { model, weights, metadata } }
+    const [captureBufferStatus, setCaptureBufferStatus] = useState({ current: 0, required: 60 }); // NEW: Track motion buffer for progress bar
 
     // MEASUREMENT TOOL STATES
     const [measurementMode, setMeasurementMode] = useState(null); // 'distance' | 'angle' | null
@@ -251,7 +252,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     return;
                 }
             }
-            
+
             if (!targetStateId) {
                 alert("No state selected. Please select a transition/state in 'Rules & Logic' tab first.");
             } else {
@@ -496,18 +497,21 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     // Draw Visualizations with fresh detections
                     drawVisualizations(smoothedPoses[0], null, null, smoothedPoses, currentRfPredictions);
 
-                    // TEST MODE EXECUTION
-                    if (activeTab === 'test') {
+                    // TEST MODE & BACKGROUND INFERENCE EXECUTION
+                    if (activeTab === 'test' || activeTab === 'rules') {
                         if (!engineRef.current) {
                             engineRef.current = new InferenceEngine();
                             engineRef.current.loadModel(currentModel);
                             engineRef.current.onCycleComplete = (stats) => {
                                 setCycleStats(stats);
                             };
-                            // Force an initial log to prove console works
-                            engineRef.current.addLog(0, videoRef.current.currentTime, "System", "Test Mode Active - Waiting for operator...");
-                            setTestLogs([...engineRef.current.getLogs()]);
-                            console.log("Test Engine Started with Model:", currentModel.name);
+                            engineRef.current.onStateChange = handleStateChange;
+
+                            if (activeTab === 'test') {
+                                engineRef.current.addLog(0, videoRef.current.currentTime, "System", "Test Mode Active - Waiting for operator...");
+                                setTestLogs([...engineRef.current.getLogs()]);
+                            }
+                            console.log("Inference Engine Started in Background:", currentModel.name);
                         }
 
                         // Run Engine with all data and capture result
@@ -520,38 +524,57 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             roboflow: currentRfPredictions
                         });
 
-                        // Update UI Logs immediately from result
-                        setTestLogs([...result.logs]);
-
-                        // Update Timeline Data
-                        if (result.timelineEvents) {
-                            const activeEvents = result.tracks.map(t => ({
-                                state: t.state,
-                                startTime: videoRef.current.currentTime - parseFloat(t.duration), // Rough estimate
-                                endTime: videoRef.current.currentTime,
-                                isActive: true
+                        // Update buffer status for UI progress bar
+                        const activeTracks = engineRef.current.activeTracks;
+                        if (activeTracks.size > 0) {
+                            const firstTrack = Array.from(activeTracks.values())[0];
+                            setCaptureBufferStatus(prev => ({
+                                ...prev,
+                                current: firstTrack.poseBuffer ? firstTrack.poseBuffer.length : 0,
+                                videoTime: videoRef.current ? videoRef.current.currentTime : 0
                             }));
-                            setTimelineData([...result.timelineEvents, ...activeEvents]);
+                        } else {
+                            setCaptureBufferStatus(prev => ({
+                                ...prev,
+                                current: 0,
+                                videoTime: videoRef.current ? videoRef.current.currentTime : 0
+                            }));
                         }
 
-                        // Visualize Current State
-                        if (result.tracks && result.tracks.length > 0) {
-                            setCurrentTestState(result.tracks[0].state);
+                        // Update UI Logs immediately from result
+                        if (activeTab === 'test') {
+                            setTestLogs([...result.logs]);
 
-                            // Sync Predictions back to rules for live UI indicator
-                            currentModel.transitions.forEach(t => {
-                                t.condition.rules.forEach(r => {
-                                    if (r.type === 'TEACHABLE_MACHINE') {
-                                        r.lastValue = r.params.modelId ? currentTmPredictions[r.params.modelId] : Object.values(currentTmPredictions)[0];
-                                    } else if (r.type === 'ROBOFLOW_DETECTION') {
-                                        if (r.params.modelId) {
-                                            r.lastValue = currentRfPredictions[r.params.modelId];
-                                        } else {
-                                            r.lastValue = Object.values(currentRfPredictions).flat();
+                            // Update Timeline Data
+                            if (result.timelineEvents) {
+                                const activeEvents = result.tracks.map(t => ({
+                                    state: t.state,
+                                    startTime: videoRef.current.currentTime - parseFloat(t.duration), // Rough estimate
+                                    endTime: videoRef.current.currentTime,
+                                    isActive: true
+                                }));
+                                setTimelineData([...result.timelineEvents, ...activeEvents]);
+                            }
+
+                            // Visualize Current State
+                            if (result.tracks && result.tracks.length > 0) {
+                                setCurrentTestState(result.tracks[0].state);
+
+                                // Sync Predictions back to rules for live UI indicator
+                                currentModel.transitions.forEach(t => {
+                                    t.condition.rules.forEach(r => {
+                                        if (r.type === 'TEACHABLE_MACHINE') {
+                                            r.lastValue = r.params.modelId ? currentTmPredictions[r.params.modelId] : Object.values(currentTmPredictions)[0];
+                                        } else if (r.type === 'ROBOFLOW_DETECTION') {
+                                            if (r.params.modelId) {
+                                                r.lastValue = currentRfPredictions[r.params.modelId];
+                                            } else {
+                                                r.lastValue = Object.values(currentRfPredictions).flat();
+                                            }
                                         }
-                                    }
+                                    });
                                 });
-                            });
+                            }
                         }
                     }
                 }
@@ -560,22 +583,21 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         };
 
         if (videoRef.current) {
-            videoRef.current.addEventListener('play', () => {
+            const handlePlay = () => {
                 setIsVideoPaused(false);
                 detectLoop();
-            });
-            videoRef.current.addEventListener('pause', () => {
+            };
+            const handlePause = () => {
                 setIsVideoPaused(true);
                 cancelAnimationFrame(animationFrameId);
-            });
-            videoRef.current.addEventListener('seeked', async () => {
+            };
+            const handleSeeked = async () => {
                 const poses = await detectPose(videoRef.current);
                 if (poses && poses.length > 0) {
                     const smoothed = smootherRef.current.smooth(poses[0].keypoints);
                     const pose = { ...poses[0], keypoints: smoothed };
                     setActivePose(pose);
 
-                    // Also run one-off Roboflow if needed
                     let rfData = {};
                     if (currentModel.rfModels && currentModel.rfModels.length > 0) {
                         rfData = await roboflowDetector.detectAll(videoRef.current, currentModel.rfModels, pose);
@@ -584,8 +606,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
                     drawVisualizations(pose, null, null, [pose], rfData);
 
-                    // Run one-off inference to update state while paused
-                    if (activeTab === 'test') {
+                    if (activeTab === 'test' || activeTab === 'rules') {
                         if (!engineRef.current) {
                             engineRef.current = new InferenceEngine();
                             engineRef.current.loadModel(currentModel);
@@ -599,12 +620,41 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                             roboflow: rfData
                         });
 
-                        const primaryTrack = engineRef.current.activeTracks.get(1) || engineRef.current.activeTracks.values().next().value;
-                        setCurrentTestState(primaryTrack?.currentState);
-                        setTestLogs([...engineRef.current.getLogs()]);
+                        const tracks = engineRef.current.activeTracks;
+                        if (tracks.size > 0) {
+                            const firstTrack = Array.from(tracks.values())[0];
+                            setCaptureBufferStatus(prev => ({
+                                ...prev,
+                                current: firstTrack.poseBuffer ? firstTrack.poseBuffer.length : 0,
+                                videoTime: videoRef.current.currentTime
+                            }));
+
+                            if (activeTab === 'test') {
+                                setCurrentTestState(firstTrack.currentState);
+                                setTestLogs([...engineRef.current.getLogs()]);
+                            }
+                        }
                     }
                 }
-            });
+            };
+
+            videoRef.current.addEventListener('play', handlePlay);
+            videoRef.current.addEventListener('pause', handlePause);
+            videoRef.current.addEventListener('seeked', handleSeeked);
+
+            // AUTO-START if playing
+            if (!videoRef.current.paused) {
+                handlePlay();
+            }
+
+            return () => {
+                if (videoRef.current) {
+                    videoRef.current.removeEventListener('play', handlePlay);
+                    videoRef.current.removeEventListener('pause', handlePause);
+                    videoRef.current.removeEventListener('seeked', handleSeeked);
+                }
+                cancelAnimationFrame(animationFrameId);
+            };
         }
     }, [videoSrc, visOptions, activeTab, currentModel, detectorReady, testModeInput]);
 
@@ -740,12 +790,42 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
     // Reset Engine when switching tabs
     useEffect(() => {
-        if (activeTab !== 'test') {
+        if (activeTab !== 'test' && activeTab !== 'rules') {
             engineRef.current = null;
             setTestLogs([]);
             setCurrentTestState(null);
+        } else {
+            // Initialize engine promptly when entering test or rules tab
+            if (!engineRef.current) {
+                engineRef.current = new InferenceEngine();
+                engineRef.current.loadModel(currentModel);
+                engineRef.current.onCycleComplete = (stats) => {
+                    setCycleStats(stats);
+                };
+                engineRef.current.onStateChange = handleStateChange;
+
+                // Process a single frame immediately if video is ready to "warm up" the engine
+                if (videoRef.current && activePose) {
+                    engineRef.current.processFrame({
+                        poses: [activePose],
+                        objects: [],
+                        hands: [],
+                        timestamp: videoRef.current.currentTime || 0,
+                        teachableMachine: tmPredictions,
+                        roboflow: rfPredictions
+                    });
+
+                    if (activeTab === 'test') {
+                        const logs = engineRef.current.getLogs();
+                        setTestLogs([...logs]);
+                    }
+                } else if (activeTab === 'test') {
+                    engineRef.current.addLog(0, 0, "System", "Test Mode Active - Ready for detection...");
+                    setTestLogs([...engineRef.current.getLogs()]);
+                }
+            }
         }
-    }, [activeTab]);
+    }, [activeTab, currentModel]);
 
     const handleSave = () => {
         // Prepare model object with all required fields for the engine
@@ -905,43 +985,83 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
         }
     };
 
-    const handleCaptureSequence = (transitionId, ruleId, bufferSize = 60) => {
+    const handleCaptureSequence = (transitionId, ruleId, options = {}) => {
+        const { startTime, endTime, bufferSize = 60 } = options;
+
         if (!engineRef.current) {
-            alert("Inference Engine is not active. Please start the video in Test Run mode.");
-            return;
+            if (activeTab === 'test' || activeTab === 'rules') {
+                engineRef.current = new InferenceEngine();
+                engineRef.current.loadModel(currentModel);
+            } else {
+                alert("Please switch to 'Rules & Logic' or 'Test Run' tab and play the video briefly.");
+                return;
+            }
         }
 
-        // Get the active operator's pose buffer
-        const tracks = engineRef.current.activeTracks;
+        let tracks = engineRef.current.activeTracks;
+
+        // If no tracks, try to create one from current pose if available
+        if (tracks.size === 0 && activePose) {
+            console.log("No active tracks found during capture, forcing track creation from current pose...");
+            engineRef.current.processFrame({
+                poses: [activePose],
+                timestamp: videoRef.current.currentTime,
+                objects: [],
+                hands: []
+            });
+            tracks = engineRef.current.activeTracks;
+        }
+
         if (tracks.size === 0) {
-            alert("No active operator detected in the frame.");
+            alert("No operator detected. Please play the video so the system can identify the operator.");
             return;
         }
 
-        const activeTrack = Array.from(tracks.values())[0]; // Take first track for now
-        if (!activeTrack.poseBuffer || activeTrack.poseBuffer.length < bufferSize) {
-            alert(`Insufficient motion data. Please wait for at least ${bufferSize} frames of motion.`);
+        const activeTrack = Array.from(tracks.values())[0];
+        if (!activeTrack.poseBuffer || activeTrack.poseBuffer.length === 0) {
+            alert("No motion data available in buffer.");
             return;
         }
 
-        // Capture the last N frames
-        const sequence = activeTrack.poseBuffer.slice(-bufferSize);
+        let sequence = [];
+        if (startTime !== undefined && endTime !== undefined) {
+            // Range-based capture
+            sequence = activeTrack.poseBuffer
+                .filter(item => item.timestamp >= startTime && item.timestamp <= endTime)
+                .map(item => item.pose);
+
+            if (sequence.length < 5) {
+                alert(`Too few frames in selected range (${sequence.length} frames). Please ensure the video was played through the selected range.`);
+                return;
+            }
+        } else {
+            // Traditional tail-based capture
+            sequence = activeTrack.poseBuffer.slice(-bufferSize).map(item => item.pose);
+            if (sequence.length < bufferSize) {
+                alert(`Insufficient data. Need ${bufferSize} frames, but only have ${sequence.length}.`);
+                return;
+            }
+        }
 
         // Update the rule in current model
         const transition = currentModel.transitions.find(t => t.id === transitionId);
         if (transition) {
-            // Find the specific rule to update
             const updatedRules = transition.condition.rules.map(r =>
-                r.id === ruleId ? { ...r, params: { ...r.params, targetSequence: sequence } } : r
+                r.id === ruleId ? {
+                    ...r,
+                    params: {
+                        ...r.params,
+                        targetSequence: sequence,
+                        startTime,
+                        endTime
+                    }
+                } : r
             );
 
             handleUpdateTransition(transitionId, {
-                condition: {
-                    ...transition.condition,
-                    rules: updatedRules
-                }
+                condition: { ...transition.condition, rules: updatedRules }
             });
-            alert(`Captured ${sequence.length} frames for reference motion.`);
+            alert(`Captured ${sequence.length} frames from ${startTime !== undefined ? `range ${startTime.toFixed(1)}s - ${endTime.toFixed(1)}s` : 'recent motion'}.`);
         }
     };
 
@@ -2576,175 +2696,196 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                     )}
                 </div>
 
-            {/* Resizer */}
-            {!isMaximized && (
-                <div
-                    style={{ ...styles.resizer, gridColumn: '2' }}
-                    onMouseDown={(e) => {
-                        e.preventDefault();
-                        setIsResizing(true);
-                    }}
-                >
-                    <div style={styles.resizerHandle}>
-                        <div style={styles.resizerBar} />
-                        <div style={styles.resizerBar} />
-                        <div style={styles.resizerBar} />
-                    </div>
-                </div>
-            )}
-
-            {/* Right Panel: Editor & Statistics */}
-            <div style={styles.rightPanel}>
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    style={{ display: 'none' }}
-                    accept="video/*"
-                    onChange={handleFileUpload}
-                />
-                {/* VISUAL TIMELINE (Always at the top of right panel when testing) */}
-                {videoSrc && activeTab === 'test' && (
-                    <div style={{
-                        height: '60px',
-                        backgroundColor: '#111827',
-                        borderBottom: '1px solid #374151',
-                        padding: '10px 16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.7rem', color: '#9ca3af', fontWeight: 'bold' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Activity size={12} color="#3b82f6" />
-                                <span>MOTION TIMELINE</span>
-                            </div>
-                            {videoRef.current && <span>{videoRef.current.currentTime.toFixed(2)}s / {videoRef.current.duration?.toFixed(2)}s</span>}
-                        </div>
-                        <div style={{
-                            height: '28px',
-                            backgroundColor: '#1f2937',
-                            position: 'relative',
-                            borderRadius: '6px',
-                            border: '1px solid #374151',
-                            overflow: 'hidden',
-                            cursor: 'crosshair'
+                {/* Resizer */}
+                {!isMaximized && (
+                    <div
+                        style={{ ...styles.resizer, gridColumn: '2' }}
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsResizing(true);
                         }}
-                            onClick={(e) => {
-                                if (!videoRef.current) return;
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const x = e.clientX - rect.left;
-                                const pct = x / rect.width;
-                                videoRef.current.currentTime = pct * videoRef.current.duration;
-                            }}
-                        >
-                            {timelineData.map((event, idx) => {
-                                const duration = videoRef.current ? videoRef.current.duration : 1;
-                                if (!duration) return null;
-
-                                const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-                                const colorIdx = (typeof event.state === 'string' ? event.state.length : 0) % colors.length;
-
-                                const left = (event.startTime / duration) * 100;
-                                let width = ((event.endTime - event.startTime) / duration) * 100;
-                                if (width < 0.5) width = 0.5;
-
-                                return (
-                                    <div
-                                        key={idx}
-                                        style={{
-                                            position: 'absolute',
-                                            left: `${left}%`,
-                                            width: `${width}%`,
-                                            height: '100%',
-                                            backgroundColor: colors[colorIdx],
-                                            opacity: event.isActive ? 1 : 0.8,
-                                            borderRight: '1px solid rgba(0,0,0,0.2)',
-                                            fontSize: '0.65rem',
-                                            color: 'white',
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            paddingLeft: '4px',
-                                            lineHeight: '28px',
-                                            fontWeight: '600'
-                                        }}
-                                        title={`${event.state}: ${event.startTime.toFixed(2)}s - ${event.endTime.toFixed(2)}s`}
-                                    >
-                                        {width > 8 && event.state}
-                                    </div>
-                                );
-                            })}
-                            <div style={{
-                                position: 'absolute',
-                                left: `${(videoRef.current?.currentTime / (videoRef.current?.duration || 1)) * 100}%`,
-                                top: 0, bottom: 0, width: '2px', backgroundColor: '#fff', zIndex: 10,
-                                boxShadow: '0 0 8px rgba(255,255,255,0.8)'
-                            }} />
+                    >
+                        <div style={styles.resizerHandle}>
+                            <div style={styles.resizerBar} />
+                            <div style={styles.resizerBar} />
+                            <div style={styles.resizerBar} />
                         </div>
                     </div>
                 )}
-                {/* Maximize Toggle */}
-                <button
-                    style={styles.maximizeBtn}
-                    onClick={() => setIsMaximized(!isMaximized)}
-                    onMouseOver={e => e.currentTarget.style.color = 'white'}
-                    onMouseOut={e => e.currentTarget.style.color = '#9ca3af'}
-                    title={isMaximized ? "Restore Layout" : "Maximize Editor"}
-                >
-                    {isMaximized ? <Plus size={14} style={{ transform: 'rotate(45deg)' }} /> : <Plus size={14} />}
-                </button>
-                <div style={styles.tabs}>
-                    {[
-                        { id: 'rules', label: 'Rules & Logic', icon: <Activity size={16} /> },
-                        { id: 'states', label: `Steps (${currentModel.states.length})`, icon: <Layers size={16} /> },
-                        { id: 'extraction', label: 'Data', icon: <Database size={16} /> },
-                        { id: 'test', label: 'Test Run', icon: <PlayCircle size={16} /> },
-                        { id: 'settings', label: 'Settings', icon: <Settings size={16} /> }
-                    ].map(t => (
-                        <div
-                            key={t.id}
-                            style={styles.tab(activeTab === t.id)}
-                            onClick={() => setActiveTab(t.id)}
-                        >
-                            {t.icon}
-                            {t.label}
-                        </div>
-                    ))}
-                </div>
 
-                <div style={styles.content} className="custom-scrollbar">
-                    {activeTab === 'test' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', gap: '8px', padding: '0 10px' }}>
-                                <button
-                                    onClick={() => fileInputRef.current.click()}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '8px',
-                                        background: '#111827',
-                                        color: '#60a5fa',
-                                        border: '1px solid #374151',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        fontSize: '0.85rem',
-                                        flex: 0.8,
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s'
-                                    }}
-                                    title="Ganti atau Upload Video Baru"
-                                >
-                                    <Upload size={16} /> {videoSrc ? 'Change' : 'Upload Video'}
-                                </button>
-                                {videoSrc && (
+                {/* Right Panel: Editor & Statistics */}
+                <div style={styles.rightPanel}>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        style={{ display: 'none' }}
+                        accept="video/*"
+                        onChange={handleFileUpload}
+                    />
+                    {/* VISUAL TIMELINE (Always at the top of right panel when testing) */}
+                    {videoSrc && activeTab === 'test' && (
+                        <div style={{
+                            height: '60px',
+                            backgroundColor: '#111827',
+                            borderBottom: '1px solid #374151',
+                            padding: '10px 16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '0.7rem', color: '#9ca3af', fontWeight: 'bold' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Activity size={12} color="#3b82f6" />
+                                    <span>MOTION TIMELINE</span>
+                                </div>
+                                {videoRef.current && <span>{videoRef.current.currentTime.toFixed(2)}s / {videoRef.current.duration?.toFixed(2)}s</span>}
+                            </div>
+                            <div style={{
+                                height: '28px',
+                                backgroundColor: '#1f2937',
+                                position: 'relative',
+                                borderRadius: '6px',
+                                border: '1px solid #374151',
+                                overflow: 'hidden',
+                                cursor: 'crosshair'
+                            }}
+                                onClick={(e) => {
+                                    if (!videoRef.current) return;
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const x = e.clientX - rect.left;
+                                    const pct = x / rect.width;
+                                    videoRef.current.currentTime = pct * videoRef.current.duration;
+                                }}
+                            >
+                                {timelineData.map((event, idx) => {
+                                    const duration = videoRef.current ? videoRef.current.duration : 1;
+                                    if (!duration) return null;
+
+                                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+                                    const colorIdx = (typeof event.state === 'string' ? event.state.length : 0) % colors.length;
+
+                                    const left = (event.startTime / duration) * 100;
+                                    let width = ((event.endTime - event.startTime) / duration) * 100;
+                                    if (width < 0.5) width = 0.5;
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            style={{
+                                                position: 'absolute',
+                                                left: `${left}%`,
+                                                width: `${width}%`,
+                                                height: '100%',
+                                                backgroundColor: colors[colorIdx],
+                                                opacity: event.isActive ? 1 : 0.8,
+                                                borderRight: '1px solid rgba(0,0,0,0.2)',
+                                                fontSize: '0.65rem',
+                                                color: 'white',
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                paddingLeft: '4px',
+                                                lineHeight: '28px',
+                                                fontWeight: '600'
+                                            }}
+                                            title={`${event.state}: ${event.startTime.toFixed(2)}s - ${event.endTime.toFixed(2)}s`}
+                                        >
+                                            {width > 8 && event.state}
+                                        </div>
+                                    );
+                                })}
+                                <div style={{
+                                    position: 'absolute',
+                                    left: `${(videoRef.current?.currentTime / (videoRef.current?.duration || 1)) * 100}%`,
+                                    top: 0, bottom: 0, width: '2px', backgroundColor: '#fff', zIndex: 10,
+                                    boxShadow: '0 0 8px rgba(255,255,255,0.8)'
+                                }} />
+                            </div>
+                        </div>
+                    )}
+                    {/* Maximize Toggle */}
+                    <button
+                        style={styles.maximizeBtn}
+                        onClick={() => setIsMaximized(!isMaximized)}
+                        onMouseOver={e => e.currentTarget.style.color = 'white'}
+                        onMouseOut={e => e.currentTarget.style.color = '#9ca3af'}
+                        title={isMaximized ? "Restore Layout" : "Maximize Editor"}
+                    >
+                        {isMaximized ? <Plus size={14} style={{ transform: 'rotate(45deg)' }} /> : <Plus size={14} />}
+                    </button>
+                    <div style={styles.tabs}>
+                        {[
+                            { id: 'rules', label: 'Rules & Logic', icon: <Activity size={16} /> },
+                            { id: 'states', label: `Steps (${currentModel.states.length})`, icon: <Layers size={16} /> },
+                            { id: 'extraction', label: 'Data', icon: <Database size={16} /> },
+                            { id: 'test', label: 'Test Run', icon: <PlayCircle size={16} /> },
+                            { id: 'settings', label: 'Settings', icon: <Settings size={16} /> }
+                        ].map(t => (
+                            <div
+                                key={t.id}
+                                style={styles.tab(activeTab === t.id)}
+                                onClick={() => setActiveTab(t.id)}
+                            >
+                                {t.icon}
+                                {t.label}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={styles.content} className="custom-scrollbar">
+                        {activeTab === 'test' && (
+                            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center', gap: '8px', padding: '0 10px' }}>
                                     <button
-                                        onClick={() => setTestModeInput('video')}
+                                        onClick={() => fileInputRef.current.click()}
                                         style={{
                                             padding: '8px 16px',
                                             borderRadius: '8px',
-                                            background: testModeInput === 'video' ? '#3b82f6' : '#111827',
+                                            background: '#111827',
+                                            color: '#60a5fa',
+                                            border: '1px solid #374151',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            fontSize: '0.85rem',
+                                            flex: 0.8,
+                                            justifyContent: 'center',
+                                            transition: 'all 0.2s'
+                                        }}
+                                        title="Ganti atau Upload Video Baru"
+                                    >
+                                        <Upload size={16} /> {videoSrc ? 'Change' : 'Upload Video'}
+                                    </button>
+                                    {videoSrc && (
+                                        <button
+                                            onClick={() => setTestModeInput('video')}
+                                            style={{
+                                                padding: '8px 16px',
+                                                borderRadius: '8px',
+                                                background: testModeInput === 'video' ? '#3b82f6' : '#111827',
+                                                color: 'white',
+                                                border: testModeInput === 'video' ? '1px solid #60a5fa' : '1px solid #374151',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                fontSize: '0.85rem',
+                                                flex: 1,
+                                                justifyContent: 'center',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            <Video size={16} /> Reference Video
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setTestModeInput('camera')}
+                                        style={{
+                                            padding: '8px 16px',
+                                            borderRadius: '8px',
+                                            background: testModeInput === 'camera' ? '#3b82f6' : '#111827',
                                             color: 'white',
-                                            border: testModeInput === 'video' ? '1px solid #60a5fa' : '1px solid #374151',
+                                            border: testModeInput === 'camera' ? '1px solid #60a5fa' : '1px solid #374151',
                                             cursor: 'pointer',
                                             display: 'flex',
                                             alignItems: 'center',
@@ -2755,1047 +2896,1027 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                             transition: 'all 0.2s'
                                         }}
                                     >
-                                        <Video size={16} /> Reference Video
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => setTestModeInput('camera')}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '8px',
-                                        background: testModeInput === 'camera' ? '#3b82f6' : '#111827',
-                                        color: 'white',
-                                        border: testModeInput === 'camera' ? '1px solid #60a5fa' : '1px solid #374151',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        fontSize: '0.85rem',
-                                        flex: 1,
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    <Camera size={16} /> Live Camera
-                                </button>
-                                <button
-                                    onClick={() => setTestModeInput('simulator')}
-                                    style={{
-                                        padding: '8px 16px',
-                                        borderRadius: '8px',
-                                        background: testModeInput === 'simulator' ? '#8b5cf6' : '#111827',
-                                        color: 'white',
-                                        border: testModeInput === 'simulator' ? '1px solid #a78bfa' : '1px solid #374151',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        fontSize: '0.85rem',
-                                        flex: 1,
-                                        justifyContent: 'center',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    <Activity size={16} /> Simulator
-                                </button>
-                            </div>
-                            <div style={{
-                                padding: '20px',
-                                backgroundColor: currentTestState ? '#064e3b' : '#374151',
-                                borderRadius: '12px',
-                                marginBottom: '20px',
-                                textAlign: 'center',
-                                border: currentTestState ? '2px solid #10b981' : '1px solid #4b5563',
-                                transition: 'all 0.3s'
-                            }}>
-                                <h4 style={{ margin: 0, color: '#9ca3af', fontSize: '0.9rem', uppercase: true }}>Current State</h4>
-                                <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white', marginTop: '8px' }}>
-                                    {currentTestState || "Waiting..."}
-                                </div>
-                                <div style={{ fontSize: '0.8rem', color: '#d1d5db', marginTop: '4px' }}>
-                                    {currentTestState ? "Logic matched" : "Play video to test"}
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: 0 }}>
-                                {/* Console Logs */}
-                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                        <h3 style={{ margin: 0, fontSize: '1rem' }}>Live Console</h3>
-                                        <button
-                                            onClick={() => setTestLogs([])}
-                                            style={{ background: 'transparent', border: '1px solid #4b5563', color: '#9ca3af', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', cursor: 'pointer' }}
-                                        >
-                                            Clear
-                                        </button>
-                                    </div>
-                                    <div style={{
-                                        flex: 1,
-                                        backgroundColor: '#000',
-                                        borderRadius: '8px',
-                                        padding: '12px',
-                                        overflowY: 'auto',
-                                        fontFamily: 'monospace',
-                                        fontSize: '0.85rem',
-                                        border: '1px solid #374151'
-                                    }}>
-                                        {testLogs.length === 0 && <span style={{ color: '#6b7280' }}>System ready. Press Play on video to start simulation.</span>}
-                                        {testLogs.map((log, i) => (
-                                            <div key={i} style={{
-                                                color: log.type === 'transition' ? '#10b981' : (log.type === 'Anomaly' ? '#ef4444' : '#d1d5db'),
-                                                backgroundColor: log.type === 'Anomaly' ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
-                                                padding: '4px 8px',
-                                                borderRadius: '4px',
-                                                borderLeft: log.type === 'Anomaly' ? '4px solid #ef4444' : 'none',
-                                                marginBottom: '4px'
-                                            }}>
-                                                <span style={{ color: '#6b7280' }}>[{log.timestamp}]</span> {log.message}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Cycle Statistics Panel */}
-                                <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <h3 style={{ margin: 0, fontSize: '1rem' }}>Cycle Analytics</h3>
-                                        <button
-                                            onClick={() => generatePDFReport(currentModel, cycleStats, 'cycle-chart-container')}
-                                            disabled={!cycleStats}
-                                            title="Export PDF Report"
-                                            style={{ background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer', opacity: cycleStats ? 1 : 0.5 }}
-                                        >
-                                            <FileJson size={18} />
-                                        </button>
-                                    </div>
-
-                                    <div id="cycle-chart-container">
-                                        <CycleTimeChart
-                                            timelineData={timelineData}
-                                            cycleStats={cycleStats}
-                                        />
-                                    </div>
-
-                                    <h4 style={{ margin: '16px 0 8px', fontSize: '0.9rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <Zap size={14} color="#eab308" /> PLC Signal Monitor
-                                    </h4>
-                                    <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151', minHeight: '60px' }}>
-                                        {Object.keys(plcSignals).length === 0 ? (
-                                            <span style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', textAlign: 'center' }}>No signals active</span>
-                                        ) : (
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                                {Object.entries(plcSignals).map(([id, val]) => (
-                                                    <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#374151', padding: '6px 10px', borderRadius: '4px' }}>
-                                                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{id}</span>
-                                                        <span style={{
-                                                            fontSize: '0.7rem',
-                                                            padding: '2px 6px',
-                                                            borderRadius: '4px',
-                                                            backgroundColor: val === 'HIGH' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                                            color: val === 'HIGH' ? '#10b981' : '#ef4444',
-                                                            fontWeight: 'bold', border: val === 'HIGH' ? '1px solid #059669' : '1px solid #b91c1c'
-                                                        }}>{val}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <h4 style={{ margin: '10px 0 0', fontSize: '0.9rem', color: '#9ca3af' }}>Detailed Metrics</h4>
-
-                                    {!cycleStats ? (
-                                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #374151', borderRadius: '8px', color: '#6b7280', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>
-                                            Complete one cycle to see analytics
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                                                <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
-                                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>TOTAL CYCLES</div>
-                                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{cycleStats.totalCycles}</div>
-                                                </div>
-                                                <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
-                                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>VA RATIO</div>
-                                                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>{cycleStats.vaRatio}%</div>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ backgroundColor: '#1f2937', padding: '16px', borderRadius: '8px', border: '1px solid #374151' }}>
-                                                <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '8px' }}>AVERAGE STATISTICS</div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                                    <span style={{ fontSize: '0.85rem' }}>Cycle Time (TC)</span>
-                                                    <span style={{ fontWeight: 'bold' }}>{cycleStats.avgCycleTime}s</span>
-                                                </div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                                    <span style={{ fontSize: '0.85rem' }}>VA Time</span>
-                                                    <span style={{ fontWeight: 'bold', color: '#10b981' }}>{cycleStats.avgVaTime}s</span>
-                                                </div>
-                                            </div>
-
-                                            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                                                <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '8px' }}>CYCLE HISTORY</div>
-                                                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }} className="custom-scrollbar">
-                                                    {cycleStats.history.slice().reverse().map((c, idx) => (
-                                                        <div key={idx} style={{ padding: '8px', backgroundColor: '#111827', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid #2d3748', display: 'flex', justifyContent: 'space-between' }}>
-                                                            <span style={{ color: '#9ca3af' }}>Cycle #{cycleStats.totalCycles - idx}</span>
-                                                            <span>{c.duration.toFixed(2)}s <span style={{ color: '#10b981', marginLeft: '4px' }}>({((c.vaDuration / c.duration) * 100).toFixed(0)}% VA)</span></span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'rules' && (
-                        <RuleEditor
-                            states={currentModel.states}
-                            transitions={currentModel.transitions}
-                            onAddTransition={handleAddTransition}
-                            onDeleteTransition={handleDeleteTransition}
-                            onUpdateTransition={handleUpdateTransition}
-                            activePose={activePose}
-                            onAiSuggest={handleAiSuggestRule}
-                            onAiValidateScript={handleAiValidateScript}
-                            tmModels={currentModel.tmModels}
-                            rfModels={currentModel.rfModels}
-                            selectedStateId={selectedStateId}
-                            onSelectState={setSelectedStateId}
-                            onCaptureSequence={handleCaptureSequence}
-                        />
-                    )}
-
-                    {activeTab === 'states' && (
-                        <div>
-                            <h3 style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                Defined States
-                                <div style={{ display: 'flex', gap: '8px', fontSize: '0.8rem' }}>
-                                    <button
-                                        onClick={() => setTestModeInput('camera')}
-                                        style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '4px',
-                                            background: testModeInput === 'camera' ? '#3b82f6' : '#374151',
-                                            color: 'white',
-                                            border: 'none',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        Camera
+                                        <Camera size={16} /> Live Camera
                                     </button>
                                     <button
                                         onClick={() => setTestModeInput('simulator')}
                                         style={{
-                                            padding: '4px 8px',
-                                            borderRadius: '4px',
-                                            background: testModeInput === 'simulator' ? '#3b82f6' : '#374151',
+                                            padding: '8px 16px',
+                                            borderRadius: '8px',
+                                            background: testModeInput === 'simulator' ? '#8b5cf6' : '#111827',
                                             color: 'white',
-                                            border: 'none',
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        Simulator
-                                    </button>
-                                    <button
-                                        onClick={handleAddState}
-                                        style={{
-                                            padding: '4px 12px',
-                                            borderRadius: '4px',
-                                            background: 'rgba(59, 130, 246, 0.1)',
-                                            color: '#60a5fa',
-                                            border: '1px dashed #3b82f6',
+                                            border: testModeInput === 'simulator' ? '1px solid #a78bfa' : '1px solid #374151',
                                             cursor: 'pointer',
-                                            fontSize: '0.8rem',
                                             display: 'flex',
                                             alignItems: 'center',
-                                            gap: '4px'
+                                            gap: '8px',
+                                            fontSize: '0.85rem',
+                                            flex: 1,
+                                            justifyContent: 'center',
+                                            transition: 'all 0.2s'
                                         }}
                                     >
-                                        <Plus size={14} /> Add State
+                                        <Activity size={16} /> Simulator
                                     </button>
                                 </div>
-                            </h3>
+                                <div style={{
+                                    padding: '20px',
+                                    backgroundColor: currentTestState ? '#064e3b' : '#374151',
+                                    borderRadius: '12px',
+                                    marginBottom: '20px',
+                                    textAlign: 'center',
+                                    border: currentTestState ? '2px solid #10b981' : '1px solid #4b5563',
+                                    transition: 'all 0.3s'
+                                }}>
+                                    <h4 style={{ margin: 0, color: '#9ca3af', fontSize: '0.9rem', uppercase: true }}>Current State</h4>
+                                    <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white', marginTop: '8px' }}>
+                                        {currentTestState || "Waiting..."}
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: '#d1d5db', marginTop: '4px' }}>
+                                        {currentTestState ? "Logic matched" : "Play video to test"}
+                                    </div>
+                                </div>
 
-                            <div style={{ marginBottom: '20px' }}>
-                                <StateDiagram
-                                    states={currentModel.states}
-                                    transitions={currentModel.transitions}
-                                    selectedStateId={selectedStateId}
-                                    onSelectState={setSelectedStateId}
-                                    activeState={activeTab === 'test' ? currentTestState : null}
-                                    onUpdateStatePosition={handleUpdateStatePosition}
-                                    onAddTransition={handleAddTransition}
-                                />
-                            </div>
-                            {selectedStateId ? (
-                                // Detailed View for Selected State
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    <button onClick={() => setSelectedStateId(null)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <ArrowLeft size={14} /> Back to List
-                                    </button>
-
-                                    {/* State Name */}
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '4px' }}>State Name</label>
-                                        <input
-                                            value={currentModel.states.find(s => s.id === selectedStateId)?.name || ''}
-                                            onChange={(e) => handleUpdateStateName(selectedStateId, e.target.value)}
-                                            style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #374151', color: 'white', borderRadius: '4px' }}
-                                        />
+                                <div style={{ display: 'flex', gap: '20px', flex: 1, minHeight: 0 }}>
+                                    {/* Console Logs */}
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1rem' }}>Live Console</h3>
+                                            <button
+                                                onClick={() => setTestLogs([])}
+                                                style={{ background: 'transparent', border: '1px solid #4b5563', color: '#9ca3af', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', cursor: 'pointer' }}
+                                            >
+                                                Clear
+                                            </button>
+                                        </div>
+                                        <div style={{
+                                            flex: 1,
+                                            backgroundColor: '#000',
+                                            borderRadius: '8px',
+                                            padding: '12px',
+                                            overflowY: 'auto',
+                                            fontFamily: 'monospace',
+                                            fontSize: '0.85rem',
+                                            border: '1px solid #374151'
+                                        }}>
+                                            {testLogs.length === 0 && <span style={{ color: '#6b7280' }}>System ready. Press Play on video to start simulation.</span>}
+                                            {testLogs.map((log, i) => (
+                                                <div key={i} style={{
+                                                    color: log.type === 'transition' ? '#10b981' : (log.type === 'Anomaly' ? '#ef4444' : '#d1d5db'),
+                                                    backgroundColor: log.type === 'Anomaly' ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                                                    padding: '4px 8px',
+                                                    borderRadius: '4px',
+                                                    borderLeft: log.type === 'Anomaly' ? '4px solid #ef4444' : 'none',
+                                                    marginBottom: '4px'
+                                                }}>
+                                                    <span style={{ color: '#6b7280' }}>[{log.timestamp}]</span> {log.message}
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
 
-                                    {/* Duration */}
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '4px' }}>Min Duration (s)</label>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            value={currentModel.states.find(s => s.id === selectedStateId)?.minDuration || 0}
-                                            onChange={(e) => handleUpdateState(selectedStateId, 'minDuration', parseFloat(e.target.value))}
-                                            style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #374151', color: 'white', borderRadius: '4px' }}
-                                        />
-                                    </div>
+                                    {/* Cycle Statistics Panel */}
+                                    <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <h3 style={{ margin: 0, fontSize: '1rem' }}>Cycle Analytics</h3>
+                                            <button
+                                                onClick={() => generatePDFReport(currentModel, cycleStats, 'cycle-chart-container')}
+                                                disabled={!cycleStats}
+                                                title="Export PDF Report"
+                                                style={{ background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer', opacity: cycleStats ? 1 : 0.5 }}
+                                            >
+                                                <FileJson size={18} />
+                                            </button>
+                                        </div>
 
-
-                                    {/* Value Added Toggle */}
-                                    <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={!!currentModel.states.find(s => s.id === selectedStateId)?.isVA}
-                                                onChange={(e) => handleUpdateState(selectedStateId, 'isVA', e.target.checked)}
-                                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                        <div id="cycle-chart-container">
+                                            <CycleTimeChart
+                                                timelineData={timelineData}
+                                                cycleStats={cycleStats}
                                             />
-                                            <div>
-                                                <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem' }}>Value Added (VA)</div>
-                                                <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Mark this state as essential to the process (Green in reports)</div>
-                                            </div>
-                                        </label>
-                                    </div>
+                                        </div>
 
-                                    {/* ACTION TRIGGERS */}
-                                    <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
-                                        <h4 style={{ margin: '0 0 12px', fontSize: '0.9rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <Zap size={16} color="#eab308" /> Action Triggers
+                                        <h4 style={{ margin: '16px 0 8px', fontSize: '0.9rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Zap size={14} color="#eab308" /> PLC Signal Monitor
                                         </h4>
+                                        <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151', minHeight: '60px' }}>
+                                            {Object.keys(plcSignals).length === 0 ? (
+                                                <span style={{ fontSize: '0.75rem', color: '#6b7280', display: 'block', textAlign: 'center' }}>No signals active</span>
+                                            ) : (
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                    {Object.entries(plcSignals).map(([id, val]) => (
+                                                        <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#374151', padding: '6px 10px', borderRadius: '4px' }}>
+                                                            <span style={{ fontSize: '0.75rem', fontWeight: 'bold' }}>{id}</span>
+                                                            <span style={{
+                                                                fontSize: '0.7rem',
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px',
+                                                                backgroundColor: val === 'HIGH' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                                                color: val === 'HIGH' ? '#10b981' : '#ef4444',
+                                                                fontWeight: 'bold', border: val === 'HIGH' ? '1px solid #059669' : '1px solid #b91c1c'
+                                                            }}>{val}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
 
-                                        {/* Helper to add action */}
-                                        {['onEnter', 'onExit'].map(triggerType => (
-                                            <div key={triggerType} style={{ marginBottom: '16px' }}>
-                                                <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '8px', textTransform: 'capitalize' }}>
-                                                    {triggerType === 'onEnter' ? '🟢 On Enter State' : '🔴 On Exit State'}
+                                        <h4 style={{ margin: '10px 0 0', fontSize: '0.9rem', color: '#9ca3af' }}>Detailed Metrics</h4>
+
+                                        {!cycleStats ? (
+                                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed #374151', borderRadius: '8px', color: '#6b7280', fontSize: '0.85rem', textAlign: 'center', padding: '20px' }}>
+                                                Complete one cycle to see analytics
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                                    <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>TOTAL CYCLES</div>
+                                                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{cycleStats.totalCycles}</div>
+                                                    </div>
+                                                    <div style={{ backgroundColor: '#1f2937', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                                        <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '4px' }}>VA RATIO</div>
+                                                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#10b981' }}>{cycleStats.vaRatio}%</div>
+                                                    </div>
                                                 </div>
 
-                                                {((currentModel.states.find(s => s.id === selectedStateId)?.actions?.[triggerType]) || []).map((action, idx) => (
-                                                    <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', background: '#1f2937', padding: '8px', borderRadius: '4px' }}>
-                                                        <div style={{ fontSize: '0.75rem', fontWeight: 'bold', minWidth: '60px' }}>{action.type}</div>
-                                                        <div style={{ flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                            {action.type === 'SOUND' ? action.payload : action.url}
+                                                <div style={{ backgroundColor: '#1f2937', padding: '16px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '8px' }}>AVERAGE STATISTICS</div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                        <span style={{ fontSize: '0.85rem' }}>Cycle Time (TC)</span>
+                                                        <span style={{ fontWeight: 'bold' }}>{cycleStats.avgCycleTime}s</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                        <span style={{ fontSize: '0.85rem' }}>VA Time</span>
+                                                        <span style={{ fontWeight: 'bold', color: '#10b981' }}>{cycleStats.avgVaTime}s</span>
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                                                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginBottom: '8px' }}>CYCLE HISTORY</div>
+                                                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }} className="custom-scrollbar">
+                                                        {cycleStats.history.slice().reverse().map((c, idx) => (
+                                                            <div key={idx} style={{ padding: '8px', backgroundColor: '#111827', borderRadius: '4px', fontSize: '0.8rem', border: '1px solid #2d3748', display: 'flex', justifyContent: 'space-between' }}>
+                                                                <span style={{ color: '#9ca3af' }}>Cycle #{cycleStats.totalCycles - idx}</span>
+                                                                <span>{c.duration.toFixed(2)}s <span style={{ color: '#10b981', marginLeft: '4px' }}>({((c.vaDuration / c.duration) * 100).toFixed(0)}% VA)</span></span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'rules' && (
+                            <RuleEditor
+                                states={currentModel.states}
+                                transitions={currentModel.transitions}
+                                onAddTransition={handleAddTransition}
+                                onDeleteTransition={handleDeleteTransition}
+                                onUpdateTransition={handleUpdateTransition}
+                                activePose={activePose}
+                                onAiSuggest={handleAiSuggestRule}
+                                onAiValidateScript={handleAiValidateScript}
+                                tmModels={currentModel.tmModels}
+                                rfModels={currentModel.rfModels}
+                                selectedStateId={selectedStateId}
+                                onSelectState={setSelectedStateId}
+                                onCaptureSequence={handleCaptureSequence}
+                                captureBufferStatus={captureBufferStatus}
+                            />
+                        )}
+
+                        {activeTab === 'states' && (
+                            <div>
+                                <h3 style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    Defined States
+                                    <div style={{ display: 'flex', gap: '8px', fontSize: '0.8rem' }}>
+                                        <button
+                                            onClick={() => setTestModeInput('camera')}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                background: testModeInput === 'camera' ? '#3b82f6' : '#374151',
+                                                color: 'white',
+                                                border: 'none',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Camera
+                                        </button>
+                                        <button
+                                            onClick={() => setTestModeInput('simulator')}
+                                            style={{
+                                                padding: '4px 8px',
+                                                borderRadius: '4px',
+                                                background: testModeInput === 'simulator' ? '#3b82f6' : '#374151',
+                                                color: 'white',
+                                                border: 'none',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Simulator
+                                        </button>
+                                        <button
+                                            onClick={handleAddState}
+                                            style={{
+                                                padding: '4px 12px',
+                                                borderRadius: '4px',
+                                                background: 'rgba(59, 130, 246, 0.1)',
+                                                color: '#60a5fa',
+                                                border: '1px dashed #3b82f6',
+                                                cursor: 'pointer',
+                                                fontSize: '0.8rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px'
+                                            }}
+                                        >
+                                            <Plus size={14} /> Add State
+                                        </button>
+                                    </div>
+                                </h3>
+
+                                <div style={{ marginBottom: '20px' }}>
+                                    <StateDiagram
+                                        states={currentModel.states}
+                                        transitions={currentModel.transitions}
+                                        selectedStateId={selectedStateId}
+                                        onSelectState={setSelectedStateId}
+                                        activeState={activeTab === 'test' ? currentTestState : null}
+                                        onUpdateStatePosition={handleUpdateStatePosition}
+                                        onAddTransition={handleAddTransition}
+                                    />
+                                </div>
+                                {selectedStateId ? (
+                                    // Detailed View for Selected State
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                        <button onClick={() => setSelectedStateId(null)} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <ArrowLeft size={14} /> Back to List
+                                        </button>
+
+                                        {/* State Name */}
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '4px' }}>State Name</label>
+                                            <input
+                                                value={currentModel.states.find(s => s.id === selectedStateId)?.name || ''}
+                                                onChange={(e) => handleUpdateStateName(selectedStateId, e.target.value)}
+                                                style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #374151', color: 'white', borderRadius: '4px' }}
+                                            />
+                                        </div>
+
+                                        {/* Duration */}
+                                        <div>
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: '#9ca3af', marginBottom: '4px' }}>Min Duration (s)</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={currentModel.states.find(s => s.id === selectedStateId)?.minDuration || 0}
+                                                onChange={(e) => handleUpdateState(selectedStateId, 'minDuration', parseFloat(e.target.value))}
+                                                style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #374151', color: 'white', borderRadius: '4px' }}
+                                            />
+                                        </div>
+
+
+                                        {/* Value Added Toggle */}
+                                        <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!currentModel.states.find(s => s.id === selectedStateId)?.isVA}
+                                                    onChange={(e) => handleUpdateState(selectedStateId, 'isVA', e.target.checked)}
+                                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                                />
+                                                <div>
+                                                    <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem' }}>Value Added (VA)</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Mark this state as essential to the process (Green in reports)</div>
+                                                </div>
+                                            </label>
+                                        </div>
+
+                                        {/* ACTION TRIGGERS */}
+                                        <div style={{ backgroundColor: '#111827', padding: '12px', borderRadius: '8px', border: '1px solid #374151' }}>
+                                            <h4 style={{ margin: '0 0 12px', fontSize: '0.9rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <Zap size={16} color="#eab308" /> Action Triggers
+                                            </h4>
+
+                                            {/* Helper to add action */}
+                                            {['onEnter', 'onExit'].map(triggerType => (
+                                                <div key={triggerType} style={{ marginBottom: '16px' }}>
+                                                    <div style={{ fontSize: '0.8rem', color: '#9ca3af', marginBottom: '8px', textTransform: 'capitalize' }}>
+                                                        {triggerType === 'onEnter' ? '🟢 On Enter State' : '🔴 On Exit State'}
+                                                    </div>
+
+                                                    {((currentModel.states.find(s => s.id === selectedStateId)?.actions?.[triggerType]) || []).map((action, idx) => (
+                                                        <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px', background: '#1f2937', padding: '8px', borderRadius: '4px' }}>
+                                                            <div style={{ fontSize: '0.75rem', fontWeight: 'bold', minWidth: '60px' }}>{action.type}</div>
+                                                            <div style={{ flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {action.type === 'SOUND' ? action.payload : action.url}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const updatedActions = { ...(state.actions || {}) };
+                                                                    updatedActions[triggerType] = updatedActions[triggerType].filter((_, i) => i !== idx);
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }}
+                                                                style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                                                                <Trash2 size={14} />
+                                                            </button>
                                                         </div>
+                                                    ))}
+
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
                                                         <button
                                                             onClick={() => {
-                                                                const state = currentModel.states.find(s => s.id === selectedStateId);
-                                                                const updatedActions = { ...(state.actions || {}) };
-                                                                updatedActions[triggerType] = updatedActions[triggerType].filter((_, i) => i !== idx);
-                                                                handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                const url = prompt("Enter Sound URL (mp3/wav):", "/sounds/beep.mp3");
+                                                                if (url) {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const actions = state.actions || { onEnter: [], onExit: [] };
+                                                                    const newAction = { type: 'SOUND', payload: url };
+                                                                    const updatedActions = {
+                                                                        ...actions,
+                                                                        [triggerType]: [...(actions[triggerType] || []), newAction]
+                                                                    };
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }
                                                             }}
-                                                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                                                            <Trash2 size={14} />
+                                                            style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        >
+                                                            + Sound
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const url = prompt("Enter Webhook URL:", "https://api.example.com/log");
+                                                                if (url) {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const actions = state.actions || { onEnter: [], onExit: [] };
+                                                                    const newAction = { type: 'WEBHOOK', url: url, method: 'POST', payload: JSON.stringify({ event: triggerType, state: state.name }) };
+                                                                    const updatedActions = {
+                                                                        ...actions,
+                                                                        [triggerType]: [...(actions[triggerType] || []), newAction]
+                                                                    };
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }
+                                                            }}
+                                                            style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        >
+                                                            + Webhook
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const signalId = prompt("Enter PLC Signal ID (e.g. DO_01):", "DO_01");
+                                                                const value = prompt("Enter Value (HIGH/LOW):", "HIGH");
+                                                                if (signalId && value) {
+                                                                    const state = currentModel.states.find(s => s.id === selectedStateId);
+                                                                    const actions = state.actions || { onEnter: [], onExit: [] };
+                                                                    const newAction = { type: 'PLC', payload: JSON.stringify({ signalId, value }) };
+                                                                    const updatedActions = {
+                                                                        ...actions,
+                                                                        [triggerType]: [...(actions[triggerType] || []), newAction]
+                                                                    };
+                                                                    handleUpdateState(selectedStateId, 'actions', updatedActions);
+                                                                }
+                                                            }}
+                                                            style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        >
+                                                            + PLC
                                                         </button>
                                                     </div>
-                                                ))}
+                                                </div>
+                                            ))}
+                                        </div>
 
+                                        {/* ROI Config */}
+                                        <div style={{ border: '1px solid #374151', padding: '12px', borderRadius: '8px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                                <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>ROI: {currentModel.states.find(s => s.id === selectedStateId)?.roi ? 'Defined' : 'None'}</span>
+                                                <button
+                                                    onClick={() => setIsDrawingROI(!isDrawingROI)}
+                                                    style={{
+                                                        background: isDrawingROI ? '#eab308' : '#374151',
+                                                        color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', gap: '5px', alignItems: 'center'
+                                                    }}
+                                                >
+                                                    <Box size={14} /> {isDrawingROI ? 'Drawing...' : 'Draw ROI'}
+                                                </button>
+                                            </div>
+                                            <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: 0 }}>
+                                                Draw a box on the video to define the valid area for this step.
+                                            </p>
+                                        </div>
+
+                                        {/* Reference Pose Config */}
+                                        <div style={{ border: '1px solid #374151', padding: '12px', borderRadius: '8px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                                <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>Pose Reference</span>
+                                                <button
+                                                    onClick={handleCaptureReference}
+                                                    style={{
+                                                        background: '#059669',
+                                                        color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', gap: '5px', alignItems: 'center'
+                                                    }}
+                                                >
+                                                    <Camera size={14} /> Capture Frame
+                                                </button>
+                                            </div>
+                                            {currentModel.states.find(s => s.id === selectedStateId)?.referencePose && (
+                                                <p style={{ color: '#10b981', fontSize: '0.8rem', margin: 0 }}>✓ Reference Pose Captured</p>
+                                            )}
+                                        </div>
+
+                                    </div>
+                                ) : (
+                                    // List View
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {currentModel.states.map((state, idx) => (
+                                            <div key={state.id}
+                                                onClick={() => setSelectedStateId(state.id)}
+                                                style={{
+                                                    padding: '12px',
+                                                    background: '#111827',
+                                                    borderRadius: '8px',
+                                                    border: selectedStateId === state.id ? '1px solid #3b82f6' : '1px solid #374151',
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.2s',
+                                                    boxShadow: selectedStateId === state.id ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none'
+                                                }}
+                                                onMouseOver={(e) => e.currentTarget.style.background = '#1f2937'}
+                                                onMouseOut={(e) => e.currentTarget.style.background = '#111827'}
+                                            >
+                                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                                    {/* THUMBNAIL */}
+                                                    <div style={{
+                                                        width: '48px',
+                                                        height: '48px',
+                                                        borderRadius: '6px',
+                                                        backgroundColor: '#1f2937',
+                                                        overflow: 'hidden',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        border: '1px solid #374151'
+                                                    }}>
+                                                        {state.thumbnail ? (
+                                                            <img src={state.thumbnail} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <Video size={20} color="#4b5563" />
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                            {state.name}
+                                                            {state.isVA && <span style={{ fontSize: '0.65rem', backgroundColor: '#064e3b', color: '#10b981', padding: '1px 6px', borderRadius: '4px', border: '1px solid #065f46' }}>VA</span>}
+                                                        </div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Step {idx + 1}</div>
+                                                    </div>
+                                                </div>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
+                                                    {state.referencePose && <Check size={16} color="#10b981" />}
                                                     <button
-                                                        onClick={() => {
-                                                            const url = prompt("Enter Sound URL (mp3/wav):", "/sounds/beep.mp3");
-                                                            if (url) {
-                                                                const state = currentModel.states.find(s => s.id === selectedStateId);
-                                                                const actions = state.actions || { onEnter: [], onExit: [] };
-                                                                const newAction = { type: 'SOUND', payload: url };
-                                                                const updatedActions = {
-                                                                    ...actions,
-                                                                    [triggerType]: [...(actions[triggerType] || []), newAction]
-                                                                };
-                                                                handleUpdateState(selectedStateId, 'actions', updatedActions);
-                                                            }
-                                                        }}
-                                                        style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        onClick={(e) => { e.stopPropagation(); handleDuplicateState(state.id); }}
+                                                        style={{ background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '4px' }}
+                                                        title="Duplicate State"
                                                     >
-                                                        + Sound
+                                                        <Copy size={16} />
                                                     </button>
                                                     <button
-                                                        onClick={() => {
-                                                            const url = prompt("Enter Webhook URL:", "https://api.example.com/log");
-                                                            if (url) {
-                                                                const state = currentModel.states.find(s => s.id === selectedStateId);
-                                                                const actions = state.actions || { onEnter: [], onExit: [] };
-                                                                const newAction = { type: 'WEBHOOK', url: url, method: 'POST', payload: JSON.stringify({ event: triggerType, state: state.name }) };
-                                                                const updatedActions = {
-                                                                    ...actions,
-                                                                    [triggerType]: [...(actions[triggerType] || []), newAction]
-                                                                };
-                                                                handleUpdateState(selectedStateId, 'actions', updatedActions);
-                                                            }
-                                                        }}
-                                                        style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteState(state.id); }}
+                                                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                                                        disabled={idx === 0}
                                                     >
-                                                        + Webhook
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            const signalId = prompt("Enter PLC Signal ID (e.g. DO_01):", "DO_01");
-                                                            const value = prompt("Enter Value (HIGH/LOW):", "HIGH");
-                                                            if (signalId && value) {
-                                                                const state = currentModel.states.find(s => s.id === selectedStateId);
-                                                                const actions = state.actions || { onEnter: [], onExit: [] };
-                                                                const newAction = { type: 'PLC', payload: JSON.stringify({ signalId, value }) };
-                                                                const updatedActions = {
-                                                                    ...actions,
-                                                                    [triggerType]: [...(actions[triggerType] || []), newAction]
-                                                                };
-                                                                handleUpdateState(selectedStateId, 'actions', updatedActions);
-                                                            }
-                                                        }}
-                                                        style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#374151', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', cursor: 'pointer' }}
-                                                    >
-                                                        + PLC
+                                                        <Trash2 size={16} />
                                                     </button>
                                                 </div>
                                             </div>
                                         ))}
-                                    </div>
-
-                                    {/* ROI Config */}
-                                    <div style={{ border: '1px solid #374151', padding: '12px', borderRadius: '8px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                            <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>ROI: {currentModel.states.find(s => s.id === selectedStateId)?.roi ? 'Defined' : 'None'}</span>
-                                            <button
-                                                onClick={() => setIsDrawingROI(!isDrawingROI)}
-                                                style={{
-                                                    background: isDrawingROI ? '#eab308' : '#374151',
-                                                    color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', gap: '5px', alignItems: 'center'
-                                                }}
-                                            >
-                                                <Box size={14} /> {isDrawingROI ? 'Drawing...' : 'Draw ROI'}
-                                            </button>
-                                        </div>
-                                        <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: 0 }}>
-                                            Draw a box on the video to define the valid area for this step.
-                                        </p>
-                                    </div>
-
-                                    {/* Reference Pose Config */}
-                                    <div style={{ border: '1px solid #374151', padding: '12px', borderRadius: '8px' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                            <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>Pose Reference</span>
-                                            <button
-                                                onClick={handleCaptureReference}
-                                                style={{
-                                                    background: '#059669',
-                                                    color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', gap: '5px', alignItems: 'center'
-                                                }}
-                                            >
-                                                <Camera size={14} /> Capture Frame
-                                            </button>
-                                        </div>
-                                        {currentModel.states.find(s => s.id === selectedStateId)?.referencePose && (
-                                            <p style={{ color: '#10b981', fontSize: '0.8rem', margin: 0 }}>✓ Reference Pose Captured</p>
-                                        )}
-                                    </div>
-
-                                </div>
-                            ) : (
-                                // List View
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {currentModel.states.map((state, idx) => (
-                                        <div key={state.id}
-                                            onClick={() => setSelectedStateId(state.id)}
+                                        <button
+                                            onClick={handleAddState}
                                             style={{
+                                                width: '100%',
                                                 padding: '12px',
-                                                background: '#111827',
+                                                marginTop: '16px',
+                                                background: 'rgba(37, 99, 235, 0.1)',
+                                                color: '#60a5fa',
+                                                border: '1px dashed #2563eb',
                                                 borderRadius: '8px',
-                                                border: selectedStateId === state.id ? '1px solid #3b82f6' : '1px solid #374151',
-                                                display: 'flex',
-                                                justifyContent: 'space-between',
-                                                alignItems: 'center',
                                                 cursor: 'pointer',
-                                                transition: 'background 0.2s',
-                                                boxShadow: selectedStateId === state.id ? '0 0 0 2px rgba(59, 130, 246, 0.2)' : 'none'
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '8px',
+                                                fontWeight: '500'
                                             }}
-                                            onMouseOver={(e) => e.currentTarget.style.background = '#1f2937'}
-                                            onMouseOut={(e) => e.currentTarget.style.background = '#111827'}
                                         >
-                                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                                {/* THUMBNAIL */}
-                                                <div style={{
-                                                    width: '48px',
-                                                    height: '48px',
-                                                    borderRadius: '6px',
-                                                    backgroundColor: '#1f2937',
-                                                    overflow: 'hidden',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    border: '1px solid #374151'
-                                                }}>
-                                                    {state.thumbnail ? (
-                                                        <img src={state.thumbnail} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                    ) : (
-                                                        <Video size={20} color="#4b5563" />
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <div style={{ fontWeight: '600', color: 'white', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                        {state.name}
-                                                        {state.isVA && <span style={{ fontSize: '0.65rem', backgroundColor: '#064e3b', color: '#10b981', padding: '1px 6px', borderRadius: '4px', border: '1px solid #065f46' }}>VA</span>}
+                                            <Plus size={16} /> Add Next Step
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'settings' && (
+                            <div>
+                                <h3 style={{ marginBottom: '16px' }}>Model Settings</h3>
+
+                                {/* VERSION HISTORY */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <RotateCw size={18} color="#60a5fa" /> Version History
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                const versionName = prompt('Enter version name (e.g. "V1 Initial Draft"):');
+                                                if (versionName) {
+                                                    const newVersion = {
+                                                        id: Date.now(),
+                                                        name: versionName,
+                                                        timestamp: new Date().toLocaleTimeString(),
+                                                        data: JSON.parse(JSON.stringify(currentModel))
+                                                    };
+                                                    const updatedVersions = [...(currentModel.versions || []), newVersion];
+                                                    setCurrentModel({ ...currentModel, versions: updatedVersions });
+                                                }
+                                            }}
+                                            style={{ padding: '6px 12px', background: 'rgba(37, 99, 235, 0.1)', border: '1px solid #2563eb', color: '#60a5fa', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                        >
+                                            <Save size={14} /> Save Snapshot
+                                        </button>
+                                    </h4>
+
+                                    {(currentModel.versions || []).length === 0 ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem', border: '1px dashed #374151', borderRadius: '6px' }}>
+                                            No saved versions yet.
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            {currentModel.versions.map((ver) => (
+                                                <div key={ver.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: '#1f2937', borderRadius: '6px', border: '1px solid #374151' }}>
+                                                    <div>
+                                                        <div style={{ color: 'white', fontWeight: '500', fontSize: '0.9rem' }}>{ver.name}</div>
+                                                        <div style={{ color: '#9ca3af', fontSize: '0.75rem' }}>{ver.timestamp} • {ver.data.states.length} states</div>
                                                     </div>
-                                                    <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>Step {idx + 1}</div>
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (window.confirm(`Restore version "${ver.name}"? Current unsaved changes will be lost.`)) {
+                                                                    setCurrentModel(ver.data);
+                                                                }
+                                                            }}
+                                                            style={{ padding: '4px 8px', background: 'transparent', border: '1px solid #4b5563', color: '#e5e7eb', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
+                                                        >
+                                                            Restore
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                if (window.confirm(`Delete version "${ver.name}"?`)) {
+                                                                    const updatedVersions = currentModel.versions.filter(v => v.id !== ver.id);
+                                                                    setCurrentModel({ ...currentModel, versions: updatedVersions });
+                                                                }
+                                                            }}
+                                                            style={{ padding: '4px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '8px' }}>
-                                                {state.referencePose && <Check size={16} color="#10b981" />}
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: 'white' }}>Coordinate System</label>
+                                    <div style={{ display: 'flex', gap: '16px' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                            <input
+                                                type="radio"
+                                                name="coordSystem"
+                                                value="screen"
+                                                checked={currentModel.coordinateSystem === 'screen'}
+                                                onChange={() => setCurrentModel(m => ({ ...m, coordinateSystem: 'screen' }))}
+                                            />
+                                            <span>Screen (Absolute 0-1)</span>
+                                        </label>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                                            <input
+                                                type="radio"
+                                                name="coordSystem"
+                                                value="body"
+                                                checked={currentModel.coordinateSystem !== 'screen'} // Default to body if undefined
+                                                onChange={() => setCurrentModel(m => ({ ...m, coordinateSystem: 'body' }))}
+                                            />
+                                            <span>Body-Centric (Relative to Hip)</span>
+                                        </label>
+                                    </div>
+                                    <p style={{ fontSize: '0.85rem', color: '#9ca3af', marginTop: '8px' }}>
+                                        <strong>Body-Centric</strong> is recommended for precision. It remains accurate even if the operator moves around or the camera shifts.
+                                        (0,0) is the center of the hips.
+                                    </p>
+                                </div>
+
+                                {/* TEACHABLE MACHINE CONFIGURATION */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Layers size={18} color="#10b981" /> Teachable Machine Models
+                                        </div>
+                                        <button
+                                            onClick={handleAddTmModel}
+                                            style={{ padding: '6px 12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                        >
+                                            <Plus size={14} /> Add Model
+                                        </button>
+                                    </h4>
+
+                                    {(currentModel.tmModels || []).map((m, idx) => (
+                                        <div key={m.id} style={{ marginBottom: idx === currentModel.tmModels.length - 1 ? 0 : '16px', padding: '12px', background: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                                <input
+                                                    type="text"
+                                                    value={m.name}
+                                                    onChange={(e) => handleUpdateTmModel(m.id, { name: e.target.value })}
+                                                    style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #4b5563', color: 'white', fontSize: '0.9rem', width: '200px', fontWeight: 'bold', outline: 'none' }}
+                                                />
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDuplicateState(state.id); }}
-                                                    style={{ background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer', padding: '4px' }}
-                                                    title="Duplicate State"
-                                                >
-                                                    <Copy size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDeleteState(state.id); }}
-                                                    style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                                                    disabled={idx === 0}
+                                                    onClick={() => handleRemoveTmModel(m.id)}
+                                                    style={{ padding: '4px', background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
                                             </div>
-                                        </div>
-                                    ))}
-                                    <button
-                                        onClick={handleAddState}
-                                        style={{
-                                            width: '100%',
-                                            padding: '12px',
-                                            marginTop: '16px',
-                                            background: 'rgba(37, 99, 235, 0.1)',
-                                            color: '#60a5fa',
-                                            border: '1px dashed #2563eb',
-                                            borderRadius: '8px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            gap: '8px',
-                                            fontWeight: '500'
-                                        }}
-                                    >
-                                        <Plus size={16} /> Add Next Step
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                    )}
 
-                    {activeTab === 'settings' && (
-                        <div>
-                            <h3 style={{ marginBottom: '16px' }}>Model Settings</h3>
-
-                            {/* VERSION HISTORY */}
-                            <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
-                                <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <RotateCw size={18} color="#60a5fa" /> Version History
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            const versionName = prompt('Enter version name (e.g. "V1 Initial Draft"):');
-                                            if (versionName) {
-                                                const newVersion = {
-                                                    id: Date.now(),
-                                                    name: versionName,
-                                                    timestamp: new Date().toLocaleTimeString(),
-                                                    data: JSON.parse(JSON.stringify(currentModel))
-                                                };
-                                                const updatedVersions = [...(currentModel.versions || []), newVersion];
-                                                setCurrentModel({ ...currentModel, versions: updatedVersions });
-                                            }
-                                        }}
-                                        style={{ padding: '6px 12px', background: 'rgba(37, 99, 235, 0.1)', border: '1px solid #2563eb', color: '#60a5fa', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                    >
-                                        <Save size={14} /> Save Snapshot
-                                    </button>
-                                </h4>
-
-                                {(currentModel.versions || []).length === 0 ? (
-                                    <div style={{ padding: '20px', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem', border: '1px dashed #374151', borderRadius: '6px' }}>
-                                        No saved versions yet.
-                                    </div>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        {currentModel.versions.map((ver) => (
-                                            <div key={ver.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: '#1f2937', borderRadius: '6px', border: '1px solid #374151' }}>
-                                                <div>
-                                                    <div style={{ color: 'white', fontWeight: '500', fontSize: '0.9rem' }}>{ver.name}</div>
-                                                    <div style={{ color: '#9ca3af', fontSize: '0.75rem' }}>{ver.timestamp} • {ver.data.states.length} states</div>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <button
-                                                        onClick={() => {
-                                                            if (window.confirm(`Restore version "${ver.name}"? Current unsaved changes will be lost.`)) {
-                                                                setCurrentModel(ver.data);
-                                                            }
-                                                        }}
-                                                        style={{ padding: '4px 8px', background: 'transparent', border: '1px solid #4b5563', color: '#e5e7eb', borderRadius: '4px', cursor: 'pointer', fontSize: '0.75rem' }}
-                                                    >
-                                                        Restore
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            if (window.confirm(`Delete version "${ver.name}"?`)) {
-                                                                const updatedVersions = currentModel.versions.filter(v => v.id !== ver.id);
-                                                                setCurrentModel({ ...currentModel, versions: updatedVersions });
-                                                            }
-                                                        }}
-                                                        style={{ padding: '4px', background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
-                                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '8px', color: 'white' }}>Coordinate System</label>
-                                <div style={{ display: 'flex', gap: '16px' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                        <input
-                                            type="radio"
-                                            name="coordSystem"
-                                            value="screen"
-                                            checked={currentModel.coordinateSystem === 'screen'}
-                                            onChange={() => setCurrentModel(m => ({ ...m, coordinateSystem: 'screen' }))}
-                                        />
-                                        <span>Screen (Absolute 0-1)</span>
-                                    </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                        <input
-                                            type="radio"
-                                            name="coordSystem"
-                                            value="body"
-                                            checked={currentModel.coordinateSystem !== 'screen'} // Default to body if undefined
-                                            onChange={() => setCurrentModel(m => ({ ...m, coordinateSystem: 'body' }))}
-                                        />
-                                        <span>Body-Centric (Relative to Hip)</span>
-                                    </label>
-                                </div>
-                                <p style={{ fontSize: '0.85rem', color: '#9ca3af', marginTop: '8px' }}>
-                                    <strong>Body-Centric</strong> is recommended for precision. It remains accurate even if the operator moves around or the camera shifts.
-                                    (0,0) is the center of the hips.
-                                </p>
-                            </div>
-
-                            {/* TEACHABLE MACHINE CONFIGURATION */}
-                            <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
-                                <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <Layers size={18} color="#10b981" /> Teachable Machine Models
-                                    </div>
-                                    <button
-                                        onClick={handleAddTmModel}
-                                        style={{ padding: '6px 12px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', color: '#10b981', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                    >
-                                        <Plus size={14} /> Add Model
-                                    </button>
-                                </h4>
-
-                                {(currentModel.tmModels || []).map((m, idx) => (
-                                    <div key={m.id} style={{ marginBottom: idx === currentModel.tmModels.length - 1 ? 0 : '16px', padding: '12px', background: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                            <input
-                                                type="text"
-                                                value={m.name}
-                                                onChange={(e) => handleUpdateTmModel(m.id, { name: e.target.value })}
-                                                style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #4b5563', color: 'white', fontSize: '0.9rem', width: '200px', fontWeight: 'bold', outline: 'none' }}
-                                            />
-                                            <button
-                                                onClick={() => handleRemoveTmModel(m.id)}
-                                                style={{ padding: '4px', background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-
-                                        <div style={{ marginBottom: '12px' }}>
-                                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Model URL</label>
-                                            <input
-                                                type="text"
-                                                placeholder="https://teachablemachine.../models/[MODEL_ID]/"
-                                                value={m.url || ''}
-                                                onChange={(e) => {
-                                                    let url = e.target.value;
-                                                    if (url && !url.endsWith('/')) url += '/';
-                                                    handleUpdateTmModel(m.id, { url });
-                                                }}
-                                                style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
-                                            />
-                                        </div>
-
-                                        <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
-                                                <input
-                                                    type="radio"
-                                                    name={`tmType_${m.id}`}
-                                                    value="image"
-                                                    checked={m.type !== 'pose'}
-                                                    onChange={() => handleUpdateTmModel(m.id, { type: 'image' })}
-                                                />
-                                                <span>Image</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
-                                                <input
-                                                    type="radio"
-                                                    name={`tmType_${m.id}`}
-                                                    value="pose"
-                                                    checked={m.type === 'pose'}
-                                                    onChange={() => handleUpdateTmModel(m.id, { type: 'pose' })}
-                                                />
-                                                <span>Pose</span>
-                                            </label>
-                                        </div>
-
-                                        {tmLoadingStates[m.id] && (
-                                            <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginBottom: '8px' }}>
-                                                <RotateCw size={12} className="animate-spin" /> Loading Model...
-                                            </div>
-                                        )}
-
-                                        <div style={{ padding: '10px', background: '#111827', borderRadius: '6px', border: '1px dashed #374151' }}>
-                                            <p style={{ margin: '0 0 8px', fontSize: '0.75rem', color: '#6b7280' }}>Offline Mode: Upload Files</p>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                                                <input type="file" accept=".json" onChange={(e) => handleTmFileUpload(e, m.id, 'model')} style={{ fontSize: '0.65rem' }} />
-                                                <input type="file" accept=".bin" onChange={(e) => handleTmFileUpload(e, m.id, 'weights')} style={{ fontSize: '0.65rem' }} />
-                                                <input type="file" accept=".json" onChange={(e) => handleTmFileUpload(e, m.id, 'metadata')} style={{ fontSize: '0.65rem' }} />
-                                            </div>
-                                            <button
-                                                onClick={() => handleLoadTmFromFiles(m.id)}
-                                                style={{ marginTop: '8px', width: '100%', padding: '4px', fontSize: '0.75rem', background: '#374151', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' }}
-                                            >
-                                                Load Files
-                                            </button>
-                                        </div>
-
-                                        {tmPredictions[m.id] && (
-                                            <div style={{ marginTop: '8px', padding: '8px', backgroundColor: 'rgba(16, 185, 129, 0.05)', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                                                    <span style={{ fontWeight: 'bold', color: '#10b981' }}>{tmPredictions[m.id].className}</span>
-                                                    <span style={{ color: '#9ca3af' }}>{(tmPredictions[m.id].probability * 100).toFixed(0)}%</span>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-
-                            </div>
-
-                            {/* ROBOFLOW CONFIGURATION */}
-                            <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
-                                <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <Database size={18} color="#a855f7" /> Roboflow Models
-                                    </div>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button
-                                            onClick={() => {
-                                                const demoModel = {
-                                                    id: `rf_demo_${Date.now()}`,
-                                                    name: 'PPE Demo (YOLO)',
-                                                    apiKey: 'DEMO',
-                                                    projectId: 'ppe-detection',
-                                                    version: 1
-                                                };
-                                                setCurrentModel(m => ({ ...m, rfModels: [...(m.rfModels || []), demoModel] }));
-                                            }}
-                                            style={{ padding: '6px 12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: '#60a5fa', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                        >
-                                            <Sparkles size={14} /> Try Demo
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                const newModel = { id: `rf_${Date.now()}`, name: 'Roboflow Model', apiKey: '', projectUrl: '', version: 1 };
-                                                setCurrentModel(m => ({ ...m, rfModels: [...(m.rfModels || []), newModel] }));
-                                            }}
-                                            style={{ padding: '6px 12px', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid #a855f7', color: '#a855f7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                        >
-                                            <Plus size={14} /> Add Model
-                                        </button>
-                                    </div>
-                                </h4>
-
-                                {(currentModel.rfModels || []).map((m, idx) => (
-                                    <div key={m.id} style={{ marginBottom: idx === currentModel.rfModels.length - 1 ? 0 : '16px', padding: '12px', background: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                            <input
-                                                type="text"
-                                                value={m.name}
-                                                onChange={(e) => {
-                                                    const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, name: e.target.value } : rm);
-                                                    setCurrentModel(ms => ({ ...ms, rfModels: updated }));
-                                                }}
-                                                style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #4b5563', color: 'white', fontSize: '0.9rem', width: '200px', fontWeight: 'bold', outline: 'none' }}
-                                            />
-                                            <button
-                                                onClick={() => {
-                                                    const updated = currentModel.rfModels.filter(rm => rm.id !== m.id);
-                                                    setCurrentModel(ms => ({ ...ms, rfModels: updated }));
-                                                }}
-                                                style={{ padding: '4px', background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.5fr', gap: '10px' }}>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>API Key</label>
-                                                <input
-                                                    type="password"
-                                                    value={m.apiKey || ''}
-                                                    onChange={(e) => {
-                                                        const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, apiKey: e.target.value } : rm);
-                                                        setCurrentModel(ms => ({ ...ms, rfModels: updated }));
-                                                    }}
-                                                    style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Project ID</label>
+                                            <div style={{ marginBottom: '12px' }}>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Model URL</label>
                                                 <input
                                                     type="text"
-                                                    placeholder="helm-safety-xhv2j"
-                                                    value={m.projectUrl || ''}
+                                                    placeholder="https://teachablemachine.../models/[MODEL_ID]/"
+                                                    value={m.url || ''}
                                                     onChange={(e) => {
-                                                        const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, projectUrl: e.target.value } : rm);
-                                                        setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                        let url = e.target.value;
+                                                        if (url && !url.endsWith('/')) url += '/';
+                                                        handleUpdateTmModel(m.id, { url });
                                                     }}
                                                     style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
                                                 />
                                             </div>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Ver.</label>
+
+                                            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                                    <input
+                                                        type="radio"
+                                                        name={`tmType_${m.id}`}
+                                                        value="image"
+                                                        checked={m.type !== 'pose'}
+                                                        onChange={() => handleUpdateTmModel(m.id, { type: 'image' })}
+                                                    />
+                                                    <span>Image</span>
+                                                </label>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                                                    <input
+                                                        type="radio"
+                                                        name={`tmType_${m.id}`}
+                                                        value="pose"
+                                                        checked={m.type === 'pose'}
+                                                        onChange={() => handleUpdateTmModel(m.id, { type: 'pose' })}
+                                                    />
+                                                    <span>Pose</span>
+                                                </label>
+                                            </div>
+
+                                            {tmLoadingStates[m.id] && (
+                                                <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginBottom: '8px' }}>
+                                                    <RotateCw size={12} className="animate-spin" /> Loading Model...
+                                                </div>
+                                            )}
+
+                                            <div style={{ padding: '10px', background: '#111827', borderRadius: '6px', border: '1px dashed #374151' }}>
+                                                <p style={{ margin: '0 0 8px', fontSize: '0.75rem', color: '#6b7280' }}>Offline Mode: Upload Files</p>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                                    <input type="file" accept=".json" onChange={(e) => handleTmFileUpload(e, m.id, 'model')} style={{ fontSize: '0.65rem' }} />
+                                                    <input type="file" accept=".bin" onChange={(e) => handleTmFileUpload(e, m.id, 'weights')} style={{ fontSize: '0.65rem' }} />
+                                                    <input type="file" accept=".json" onChange={(e) => handleTmFileUpload(e, m.id, 'metadata')} style={{ fontSize: '0.65rem' }} />
+                                                </div>
+                                                <button
+                                                    onClick={() => handleLoadTmFromFiles(m.id)}
+                                                    style={{ marginTop: '8px', width: '100%', padding: '4px', fontSize: '0.75rem', background: '#374151', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' }}
+                                                >
+                                                    Load Files
+                                                </button>
+                                            </div>
+
+                                            {tmPredictions[m.id] && (
+                                                <div style={{ marginTop: '8px', padding: '8px', backgroundColor: 'rgba(16, 185, 129, 0.05)', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                                        <span style={{ fontWeight: 'bold', color: '#10b981' }}>{tmPredictions[m.id].className}</span>
+                                                        <span style={{ color: '#9ca3af' }}>{(tmPredictions[m.id].probability * 100).toFixed(0)}%</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                </div>
+
+                                {/* ROBOFLOW CONFIGURATION */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Database size={18} color="#a855f7" /> Roboflow Models
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    const demoModel = {
+                                                        id: `rf_demo_${Date.now()}`,
+                                                        name: 'PPE Demo (YOLO)',
+                                                        apiKey: 'DEMO',
+                                                        projectId: 'ppe-detection',
+                                                        version: 1
+                                                    };
+                                                    setCurrentModel(m => ({ ...m, rfModels: [...(m.rfModels || []), demoModel] }));
+                                                }}
+                                                style={{ padding: '6px 12px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: '#60a5fa', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                <Sparkles size={14} /> Try Demo
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    const newModel = { id: `rf_${Date.now()}`, name: 'Roboflow Model', apiKey: '', projectUrl: '', version: 1 };
+                                                    setCurrentModel(m => ({ ...m, rfModels: [...(m.rfModels || []), newModel] }));
+                                                }}
+                                                style={{ padding: '6px 12px', background: 'rgba(168, 85, 247, 0.1)', border: '1px solid #a855f7', color: '#a855f7', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                <Plus size={14} /> Add Model
+                                            </button>
+                                        </div>
+                                    </h4>
+
+                                    {(currentModel.rfModels || []).map((m, idx) => (
+                                        <div key={m.id} style={{ marginBottom: idx === currentModel.rfModels.length - 1 ? 0 : '16px', padding: '12px', background: '#1f2937', borderRadius: '8px', border: '1px solid #374151' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
                                                 <input
-                                                    type="number"
-                                                    value={m.version || 1}
+                                                    type="text"
+                                                    value={m.name}
                                                     onChange={(e) => {
-                                                        const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, version: parseInt(e.target.value) || 1 } : rm);
+                                                        const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, name: e.target.value } : rm);
                                                         setCurrentModel(ms => ({ ...ms, rfModels: updated }));
                                                     }}
-                                                    style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                    style={{ background: 'transparent', border: 'none', borderBottom: '1px solid #4b5563', color: 'white', fontSize: '0.9rem', width: '200px', fontWeight: 'bold', outline: 'none' }}
                                                 />
+                                                <button
+                                                    onClick={() => {
+                                                        const updated = currentModel.rfModels.filter(rm => rm.id !== m.id);
+                                                        setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                    }}
+                                                    style={{ padding: '4px', background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 0.5fr', gap: '10px' }}>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>API Key</label>
+                                                    <input
+                                                        type="password"
+                                                        value={m.apiKey || ''}
+                                                        onChange={(e) => {
+                                                            const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, apiKey: e.target.value } : rm);
+                                                            setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                        }}
+                                                        style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Project ID</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="helm-safety-xhv2j"
+                                                        value={m.projectUrl || ''}
+                                                        onChange={(e) => {
+                                                            const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, projectUrl: e.target.value } : rm);
+                                                            setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                        }}
+                                                        style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label style={{ display: 'block', fontSize: '0.75rem', color: '#9ca3af', marginBottom: '4px' }}>Ver.</label>
+                                                    <input
+                                                        type="number"
+                                                        value={m.version || 1}
+                                                        onChange={(e) => {
+                                                            const updated = currentModel.rfModels.map(rm => rm.id === m.id ? { ...rm, version: parseInt(e.target.value) || 1 } : rm);
+                                                            setCurrentModel(ms => ({ ...ms, rfModels: updated }));
+                                                        }}
+                                                        style={{ width: '100%', padding: '8px', background: '#111827', border: '1px solid #4b5563', color: 'white', borderRadius: '4px', fontSize: '0.85rem' }}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    ))}
 
-                                {(!currentModel.rfModels || currentModel.rfModels.length === 0) && (
-                                    <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '0.85rem' }}>
-                                        No Roboflow models configured.
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* PORTABILITY SECTION */}
-                            <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
-                                <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Database size={18} color="#60a5fa" /> Portability & Templates
-                                </h4>
-
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                    {/* Export */}
-                                    <button
-                                        onClick={handleExportModel}
-                                        style={{
-                                            padding: '12px', background: '#374151', border: '1px solid #4b5563', borderRadius: '8px',
-                                            color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                                        }}
-                                    >
-                                        <Download size={16} /> Export JSON
-                                    </button>
-
-                                    {/* Import */}
-                                    <button
-                                        onClick={() => fileImportRef.current.click()}
-                                        style={{
-                                            padding: '12px', background: '#374151', border: '1px solid #4b5563', borderRadius: '8px',
-                                            color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                                        }}
-                                    >
-                                        <Upload size={16} /> Import JSON
-                                    </button>
-                                    <input
-                                        type="file"
-                                        ref={fileImportRef}
-                                        style={{ display: 'none' }}
-                                        accept="application/json"
-                                        onChange={handleImportModel}
-                                    />
-
-                                    {/* Load Template */}
-                                    <button
-                                        onClick={() => setShowTemplateModal(true)}
-                                        style={{
-                                            gridColumn: 'span 2',
-                                            padding: '12px', background: 'rgba(96, 165, 250, 0.1)', border: '1px dashed #60a5fa', borderRadius: '8px',
-                                            color: '#60a5fa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                                        }}
-                                    >
-                                        <FileJson size={16} /> Load from Template Library
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'extraction' && (
-                        <div>
-
-
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <h3 style={{ margin: 0 }}>Pose Extraction Data</h3>
-                                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                    <span style={{ fontSize: '0.8rem', color: '#9ca3af', border: '1px solid #374151', padding: '2px 6px', borderRadius: '4px' }}>
-                                        Mode: {currentModel.coordinateSystem === 'screen' ? 'Screen' : 'Body-Relative'}
-                                    </span>
-                                    <span style={{ fontSize: '0.8rem', color: activePose ? '#10b981' : '#6b7280' }}>
-                                        {activePose ? '● Tracking Live' : '○ No Data'}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: '30px 1fr 60px 60px 50px',
-                                gap: '8px',
-                                fontSize: '0.8rem',
-                                fontWeight: '600',
-                                color: '#9ca3af',
-                                padding: '0 8px 8px 8px',
-                                borderBottom: '1px solid #374151'
-                            }}>
-                                <span>#</span>
-                                <span>Keypoint</span>
-                                <span>X</span>
-                                <span>Y</span>
-                                <span>Conf</span>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '500px', overflowY: 'auto' }}>
-                                {KEYPOINT_NAMES.map((name, idx) => {
-                                    const rawPoint = activePose?.keypoints.find(k => k.name === name);
-                                    const isSelected = selectedKeypoints[name];
-
-                                    // Compute display value based on system
-                                    let displayPoint = rawPoint;
-                                    if (currentModel.coordinateSystem !== 'screen' && activePose) {
-                                        // We calculate normalized stats on the fly for visualization
-                                        // Optimization: In real app, calculate once per frame outside loop
-                                        const normalized = PoseNormalizer.normalize(activePose.keypoints);
-                                        displayPoint = normalized.find(k => k.name === name);
-                                    }
-
-                                    return (
-                                        <div key={name} style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '30px 1fr 60px 60px 50px',
-                                            gap: '8px',
-                                            padding: '8px',
-                                            backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-                                            borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
-                                            alignItems: 'center',
-                                            fontSize: '0.85rem'
-                                        }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={!!isSelected}
-                                                onChange={(e) => setSelectedKeypoints(prev => ({ ...prev, [name]: e.target.checked }))}
-                                                style={{ cursor: 'pointer' }}
-                                            />
-                                            <span style={{ color: isSelected ? 'white' : '#9ca3af' }}>{idx}. {name}</span>
-                                            <span style={{ fontFamily: 'monospace', color: displayPoint ? '#60a5fa' : '#4b5563' }}>
-                                                {displayPoint ? displayPoint.x.toFixed(2) : '-'}
-                                            </span>
-                                            <span style={{ fontFamily: 'monospace', color: displayPoint ? '#60a5fa' : '#4b5563' }}>
-                                                {displayPoint ? displayPoint.y.toFixed(2) : '-'}
-                                            </span>
-                                            <span style={{
-                                                fontFamily: 'monospace',
-                                                color: rawPoint && rawPoint.score > 0.5 ? '#10b981' : '#ef4444'
-                                            }}>
-                                                {rawPoint ? (rawPoint.score * 100).toFixed(0) + '%' : '-'}
-                                            </span>
+                                    {(!currentModel.rfModels || currentModel.rfModels.length === 0) && (
+                                        <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280', fontSize: '0.85rem' }}>
+                                            No Roboflow models configured.
                                         </div>
-                                    );
-                                })}
+                                    )}
+                                </div>
+
+                                {/* PORTABILITY SECTION */}
+                                <div style={{ marginBottom: '24px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
+                                    <h4 style={{ margin: '0 0 16px', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Database size={18} color="#60a5fa" /> Portability & Templates
+                                    </h4>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                        {/* Export */}
+                                        <button
+                                            onClick={handleExportModel}
+                                            style={{
+                                                padding: '12px', background: '#374151', border: '1px solid #4b5563', borderRadius: '8px',
+                                                color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <Download size={16} /> Export JSON
+                                        </button>
+
+                                        {/* Import */}
+                                        <button
+                                            onClick={() => fileImportRef.current.click()}
+                                            style={{
+                                                padding: '12px', background: '#374151', border: '1px solid #4b5563', borderRadius: '8px',
+                                                color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <Upload size={16} /> Import JSON
+                                        </button>
+                                        <input
+                                            type="file"
+                                            ref={fileImportRef}
+                                            style={{ display: 'none' }}
+                                            accept="application/json"
+                                            onChange={handleImportModel}
+                                        />
+
+                                        {/* Load Template */}
+                                        <button
+                                            onClick={() => setShowTemplateModal(true)}
+                                            style={{
+                                                gridColumn: 'span 2',
+                                                padding: '12px', background: 'rgba(96, 165, 250, 0.1)', border: '1px dashed #60a5fa', borderRadius: '8px',
+                                                color: '#60a5fa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                                            }}
+                                        >
+                                            <FileJson size={16} /> Load from Template Library
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'extraction' && (
+                            <div>
+
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <h3 style={{ margin: 0 }}>Pose Extraction Data</h3>
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.8rem', color: '#9ca3af', border: '1px solid #374151', padding: '2px 6px', borderRadius: '4px' }}>
+                                            Mode: {currentModel.coordinateSystem === 'screen' ? 'Screen' : 'Body-Relative'}
+                                        </span>
+                                        <span style={{ fontSize: '0.8rem', color: activePose ? '#10b981' : '#6b7280' }}>
+                                            {activePose ? '● Tracking Live' : '○ No Data'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '30px 1fr 60px 60px 50px',
+                                    gap: '8px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: '600',
+                                    color: '#9ca3af',
+                                    padding: '0 8px 8px 8px',
+                                    borderBottom: '1px solid #374151'
+                                }}>
+                                    <span>#</span>
+                                    <span>Keypoint</span>
+                                    <span>X</span>
+                                    <span>Y</span>
+                                    <span>Conf</span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '500px', overflowY: 'auto' }}>
+                                    {KEYPOINT_NAMES.map((name, idx) => {
+                                        const rawPoint = activePose?.keypoints.find(k => k.name === name);
+                                        const isSelected = selectedKeypoints[name];
+
+                                        // Compute display value based on system
+                                        let displayPoint = rawPoint;
+                                        if (currentModel.coordinateSystem !== 'screen' && activePose) {
+                                            // We calculate normalized stats on the fly for visualization
+                                            // Optimization: In real app, calculate once per frame outside loop
+                                            const normalized = PoseNormalizer.normalize(activePose.keypoints);
+                                            displayPoint = normalized.find(k => k.name === name);
+                                        }
+
+                                        return (
+                                            <div key={name} style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: '30px 1fr 60px 60px 50px',
+                                                gap: '8px',
+                                                padding: '8px',
+                                                backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                                                borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
+                                                alignItems: 'center',
+                                                fontSize: '0.85rem'
+                                            }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!isSelected}
+                                                    onChange={(e) => setSelectedKeypoints(prev => ({ ...prev, [name]: e.target.checked }))}
+                                                    style={{ cursor: 'pointer' }}
+                                                />
+                                                <span style={{ color: isSelected ? 'white' : '#9ca3af' }}>{idx}. {name}</span>
+                                                <span style={{ fontFamily: 'monospace', color: displayPoint ? '#60a5fa' : '#4b5563' }}>
+                                                    {displayPoint ? displayPoint.x.toFixed(2) : '-'}
+                                                </span>
+                                                <span style={{ fontFamily: 'monospace', color: displayPoint ? '#60a5fa' : '#4b5563' }}>
+                                                    {displayPoint ? displayPoint.y.toFixed(2) : '-'}
+                                                </span>
+                                                <span style={{
+                                                    fontFamily: 'monospace',
+                                                    color: rawPoint && rawPoint.score > 0.5 ? '#10b981' : '#ef4444'
+                                                }}>
+                                                    {rawPoint ? (rawPoint.score * 100).toFixed(0) + '%' : '-'}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Template Selection Modal */}
+                    {showTemplateModal && (
+                        <div style={{
+                            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                            backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 2000,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                            <div style={{
+                                backgroundColor: '#1f2937', padding: '24px', borderRadius: '12px',
+                                width: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+                                border: '1px solid #374151'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                    <h3 style={{ color: 'white', margin: 0 }}>Select Motion Template</h3>
+                                    <button onClick={() => setShowTemplateModal(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
+                                </div>
+
+                                <div style={{ overflowY: 'auto', display: 'grid', gap: '12px' }}>
+                                    {MODEL_TEMPLATES.map(tpl => (
+                                        <div
+                                            key={tpl.id}
+                                            onClick={() => handleLoadTemplate(tpl.id)}
+                                            style={{
+                                                padding: '16px',
+                                                backgroundColor: '#374151',
+                                                borderRadius: '8px',
+                                                cursor: 'pointer',
+                                                border: '1px solid transparent',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseOver={(e) => { e.currentTarget.style.borderColor = '#60a5fa'; e.currentTarget.style.backgroundColor = '#4b5563'; }}
+                                            onMouseOut={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.backgroundColor = '#374151'; }}
+                                        >
+                                            <div style={{ fontWeight: 'bold', color: 'white', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                                                {tpl.name}
+                                                <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#9ca3af', backgroundColor: '#1f2937', padding: '2px 8px', borderRadius: '4px' }}>
+                                                    {tpl.states.length} Steps
+                                                </span>
+                                            </div>
+                                            <div style={{ fontSize: '0.85rem', color: '#d1d5db' }}>{tpl.description}</div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     )}
                 </div>
-
-                {/* Template Selection Modal */}
-                {showTemplateModal && (
-                    <div style={{
-                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 2000,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}>
-                        <div style={{
-                            backgroundColor: '#1f2937', padding: '24px', borderRadius: '12px',
-                            width: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-                            border: '1px solid #374151'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-                                <h3 style={{ color: 'white', margin: 0 }}>Select Motion Template</h3>
-                                <button onClick={() => setShowTemplateModal(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer' }}>✕</button>
-                            </div>
-
-                            <div style={{ overflowY: 'auto', display: 'grid', gap: '12px' }}>
-                                {MODEL_TEMPLATES.map(tpl => (
-                                    <div
-                                        key={tpl.id}
-                                        onClick={() => handleLoadTemplate(tpl.id)}
-                                        style={{
-                                            padding: '16px',
-                                            backgroundColor: '#374151',
-                                            borderRadius: '8px',
-                                            cursor: 'pointer',
-                                            border: '1px solid transparent',
-                                            transition: 'all 0.2s'
-                                        }}
-                                        onMouseOver={(e) => { e.currentTarget.style.borderColor = '#60a5fa'; e.currentTarget.style.backgroundColor = '#4b5563'; }}
-                                        onMouseOut={(e) => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.backgroundColor = '#374151'; }}
-                                    >
-                                        <div style={{ fontWeight: 'bold', color: 'white', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-                                            {tpl.name}
-                                            <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: '#9ca3af', backgroundColor: '#1f2937', padding: '2px 8px', borderRadius: '4px' }}>
-                                                {tpl.states.length} Steps
-                                            </span>
-                                        </div>
-                                        <div style={{ fontSize: '0.85rem', color: '#d1d5db' }}>{tpl.description}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
-    </div>
     );
 };
 

@@ -1197,7 +1197,7 @@ function ManualCreation() {
                         ) : (
                             <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
                                 <div style={{ width: '250px', borderRight: '1px solid #333', overflowY: 'auto' }}>
-                                    <StepList steps={guide.steps} activeStepId={activeStepId} onStepSelect={handleStepSelect} onAddStep={handleAddStep} onDeleteStep={handleDeleteStep} />
+                                    <StepList steps={guide.steps} activeStepId={activeStepId} onSelectStep={handleStepSelect} onAddStep={handleAddStep} onDeleteStep={handleDeleteStep} />
                                 </div>
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', padding: '20px' }}>
                                     <GuideHeader headerInfo={guide} onChange={(info) => setGuide(prev => ({ ...prev, ...info }))} />
