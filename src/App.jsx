@@ -9,6 +9,7 @@ import OpenProjectDialog from './components/OpenProjectDialog';
 import Login from './components/Login';
 import CollaborationOverlay from './components/features/CollaborationOverlay';
 import BroadcastControls from './components/features/BroadcastControls';
+import LicenseGuard from './components/features/LicenseGuard';
 import { saveProject, getProjectByName, updateProject } from './utils/database';
 import { importProject } from './utils/projectExport';
 import StreamHandler from './utils/streamHandler';
@@ -612,7 +613,9 @@ function App() {
       <AuthProvider>
         <ErrorBoundary>
           <BrowserRouter>
-            <AppContent />
+            <LicenseGuard>
+              <AppContent />
+            </LicenseGuard>
           </BrowserRouter>
         </ErrorBoundary>
       </AuthProvider>
