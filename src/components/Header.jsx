@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import LanguageSelector from './LanguageSelector';
 import { useLanguage } from '../i18n/LanguageContext';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
@@ -52,6 +53,7 @@ const MENU_ITEMS = [
 
 function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme, onLogout, sidebarCollapsed }) {
     const { t } = useLanguage();
+    const { userRole } = useAuth();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     // Listen for global event to open AI settings
@@ -241,7 +243,28 @@ function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme,
             />
 
             {!sidebarCollapsed && (
-                <div style={{ marginTop: 'auto', marginBottom: '10px' }}>
+                <div style={{ marginTop: 'auto', marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <NavLink
+                        to="/admin"
+                        title="Admin Panel"
+                        className={({ isActive }) => `btn ${isActive ? 'active' : ''}`}
+                        style={({ isActive }) => ({
+                            padding: '8px',
+                            fontSize: '1.2rem',
+                            width: '40px',
+                            height: '40px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            backgroundColor: isActive ? 'var(--accent-blue)' : '#444',
+                            border: '1px solid #555',
+                            borderRadius: '8px',
+                            color: 'white',
+                            textDecoration: 'none'
+                        })}
+                    >
+                        🔐
+                    </NavLink>
                     <button
                         className="btn"
                         onClick={() => setIsSettingsOpen(true)}
@@ -255,7 +278,8 @@ function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme,
                             justifyContent: 'center',
                             alignItems: 'center',
                             backgroundColor: '#333',
-                            border: '1px solid #555'
+                            border: '1px solid #555',
+                            borderRadius: '8px'
                         }}
                     >
                         ⚙️

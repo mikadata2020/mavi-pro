@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const MENU_CATEGORIES = {
     CORE: {
@@ -257,19 +258,34 @@ const MENU_ITEMS = [
 function MainMenu() {
     const navigate = useNavigate();
     const { currentLanguage } = useLanguage();
+    const { userRole } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const isId = currentLanguage === 'id';
 
+    const menuItemsWithAdmin = useMemo(() => {
+        const baseItems = [...MENU_ITEMS];
+        baseItems.push({
+            path: '/admin',
+            icon: '🔐',
+            label: 'Admin Panel',
+            labelId: 'Panel Admin',
+            description: 'Manage users, permissions, and course content',
+            descriptionId: 'Kelola pengguna, izin, dan konten kursus',
+            category: 'CORE'
+        });
+        return baseItems;
+    }, []);
+
     const filteredItems = useMemo(() => {
-        if (!searchQuery.trim()) return MENU_ITEMS;
+        if (!searchQuery.trim()) return menuItemsWithAdmin;
         const query = searchQuery.toLowerCase();
-        return MENU_ITEMS.filter(item => {
+        return menuItemsWithAdmin.filter(item => {
             const label = isId ? item.labelId : item.label;
             const description = isId ? item.descriptionId : item.description;
             return label.toLowerCase().includes(query) ||
                 description.toLowerCase().includes(query);
         });
-    }, [searchQuery, isId]);
+    }, [searchQuery, isId, menuItemsWithAdmin]);
 
     const groupedItems = useMemo(() => {
         const groups = {};

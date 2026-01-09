@@ -47,6 +47,7 @@ const ActionRecognition = React.lazy(() => import('./components/ActionRecognitio
 const SpaghettiChart = React.lazy(() => import('./components/SpaghettiChart'));
 const WorkflowGuide = React.lazy(() => import('./components/WorkflowGuide'));
 const MaviClass = React.lazy(() => import('./components/MaviClass'));
+const MotionLaboratory = React.lazy(() => import('./components/studio/MotionLaboratory'));
 const FileExplorer = React.lazy(() => import('./components/FileExplorer'));
 const PublicManualViewer = React.lazy(() => import('./components/PublicManualViewer'));
 const SystemDiagnostics = React.lazy(() => import('./components/SystemDiagnostics'));
@@ -481,7 +482,8 @@ function AppContent() {
               <Route path="/object-tracking" element={<div style={{ overflow: 'hidden', height: '100%' }}><ObjectTracking videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
               <Route path="/predictive-maintenance" element={<div style={{ overflow: 'hidden', height: '100%' }}><PredictiveMaintenance measurements={measurements} /></div>} />
               <Route path="/comparison" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><VideoComparison /></div>} />
-              <Route path="/help" element={<div style={{ overflow: 'hidden', height: '100%' }}><Help /></div>} />
+              <Route path="/mavi-class" element={<div style={{ overflow: 'hidden', height: '100%' }}><MaviClass /></div>} />
+              <Route path="/motion-laboratory" element={<div style={{ overflow: 'hidden', height: '100%' }}><MotionLaboratory /></div>} />
               <Route path="/multi-camera" element={<div style={{ overflow: 'hidden', height: '100%' }}><MultiCameraFusion /></div>} />
               <Route path="/vr-training" element={<div style={{ overflow: 'hidden', height: '100%' }}><VRTrainingMode measurements={measurements} videoSrc={videoSrc} videoName={videoName} currentProject={currentProject} /></div>} />
               <Route path="/knowledge-base" element={<div style={{ overflow: 'hidden', height: '100%' }}><KnowledgeBase onLoadVideo={handleLoadVideoFromKB} /></div>} />
@@ -534,9 +536,6 @@ function AppContent() {
 
               {/* Workflow Guide */}
               <Route path="/workflow-guide" element={<div style={{ overflow: 'hidden', height: '100%' }}><WorkflowGuide /></div>} />
-
-              {/* MAVi Class */}
-              <Route path="/mavi-class" element={<div style={{ overflow: 'hidden', height: '100%' }}><MaviClass /></div>} />
 
               {/* File Explorer */}
               <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />

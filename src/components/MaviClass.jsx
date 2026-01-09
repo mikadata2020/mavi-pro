@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, Circle, PlayCircle, Clock, BookOpen, ChevronRight, ChevronDown, Award, Target, Zap, MessageCircle, Send, X, Bot, User, Loader, Settings, Youtube, Volume2, VolumeX, BookmarkCheck, BookmarkPlus, CheckCheck, RotateCcw, Search, FileText, Trophy, BarChart3, GraduationCap, HelpCircle, RefreshCw, ChevronLeft, Flame, Star, Medal, BookMarked, StickyNote, Download, ExternalLink, Info, BadgeCheck } from 'lucide-react';
+import { CheckCircle, Circle, PlayCircle, Clock, BookOpen, ChevronRight, ChevronDown, Award, Target, Zap, MessageCircle, Send, X, Bot, User, Loader, Settings, Youtube, Volume2, VolumeX, BookmarkCheck, BookmarkPlus, CheckCheck, RotateCcw, Search, FileText, Trophy, BarChart3, GraduationCap, HelpCircle, RefreshCw, ChevronLeft, Flame, Star, Medal, BookMarked, StickyNote, Download, ExternalLink, Info, BadgeCheck, Printer } from 'lucide-react';
+import CertificateModal from './features/CertificateModal';
 import { getStoredApiKey } from '../utils/aiGenerator';
 import { useLanguage } from '../i18n/LanguageContext';
+import { modules as staticModules } from '../data/maviClassData';
+import { getSupabase } from '../utils/supabaseClient';
 
 // ==================== HELPER FUNCTIONS ====================
 // Calculate current streak
@@ -23,6 +26,35 @@ const getStreakCount = (analyticsData) => {
         else break;
     }
     return streak;
+};
+
+// Calculate Total XP and Level
+const calculateXP = (completedLessons, quizScores, allModules) => {
+    let totalXP = 0;
+
+    allModules.forEach(module => {
+        // Lesson XP
+        module.lessons.forEach(lesson => {
+            if (completedLessons.includes(lesson.id)) {
+                totalXP += (lesson.xp || 0);
+            }
+        });
+
+        // Quiz XP
+        if (module.quiz && quizScores[module.id]?.passed) {
+            totalXP += (module.quiz.xp || 0);
+        }
+    });
+
+    return totalXP;
+};
+
+const getLevelInfo = (xp) => {
+    if (xp >= 1000) return { level: 5, title: 'Master', min: 1000, max: 2000, color: '#FFD700' };
+    if (xp >= 600) return { level: 4, title: 'Expert', min: 600, max: 1000, color: '#F44336' };
+    if (xp >= 300) return { level: 3, title: 'Practitioner', min: 300, max: 600, color: '#9C27B0' };
+    if (xp >= 100) return { level: 2, title: 'Apprentice', min: 100, max: 300, color: '#2196F3' };
+    return { level: 1, title: 'Beginner', min: 0, max: 100, color: '#4CAF50' };
 };
 
 // ==================== GLOSSARY DATA ====================
@@ -135,6 +167,15 @@ const MaviClass = () => {
     const [activeNoteLesson, setActiveNoteLesson] = useState(null);
     const [noteText, setNoteText] = useState('');
 
+    // Screen Board State
+    const [screenBoard, setScreenBoard] = useState(null); // { type: 'video' | 'doc', url: string, title?: string }
+
+    // Certificate State
+    const [certificateData, setCertificateData] = useState(null); // { recipientName, courseName, completedDate, instructorName }
+    const [isCertificateOpen, setIsCertificateOpen] = useState(false);
+
+
+
     // Analytics State
     const [analytics, setAnalytics] = useState(() => {
         const saved = localStorage.getItem('mavi-class-analytics');
@@ -172,6 +213,8 @@ const MaviClass = () => {
     useEffect(() => {
         localStorage.setItem('mavi-class-badges', JSON.stringify(earnedBadges));
     }, [earnedBadges]);
+
+
 
     // Track daily visit for streak
     useEffect(() => {
@@ -331,1197 +374,112 @@ const MaviClass = () => {
 
 
 
-    const modules = [
-        {
-            id: 'getting-started',
-            title: '🚀 Getting Started',
-            description: 'Kenalan dengan MAVi dan fitur-fitur dasarnya',
-            duration: '15 menit',
-            color: '#4CAF50',
-            // Learning Objectives
-            objectives: [
-                { text: 'Memahami konsep dan fungsi utama MAVi', level: 'understand' },
-                { text: 'Mampu menavigasi aplikasi dengan lancar', level: 'apply' },
-                { text: 'Dapat upload dan memutar video untuk analisis', level: 'apply' },
-                { text: 'Mampu membuat project baru', level: 'create' }
-            ],
-            prerequisite: null,
-            // Quiz
-            quiz: {
-                passingScore: 70,
-                questions: [
-                    {
-                        id: 'gs-q1',
-                        question: 'Apa kepanjangan dari MAVi?',
-                        options: [
-                            'Motion Analysis Video Intelligence',
-                            'Machine Automated Video Inspection',
-                            'Manufacturing Automation Visual Interface',
-                            'Manual Analysis Video Integration'
-                        ],
-                        correctAnswer: 0,
-                        explanation: 'MAVi = Motion Analysis Video Intelligence, sebuah aplikasi untuk analisis video dalam Industrial Engineering.'
-                    },
-                    {
-                        id: 'gs-q2',
-                        question: 'Di mana lokasi sidebar menu navigasi di MAVi?',
-                        options: ['Sebelah kiri', 'Sebelah kanan', 'Di atas', 'Di bawah'],
-                        correctAnswer: 1,
-                        explanation: 'Sidebar menu terletak di sebelah kanan layar untuk akses cepat ke berbagai fitur.'
-                    },
-                    {
-                        id: 'gs-q3',
-                        question: 'Format video apa saja yang didukung MAVi?',
-                        options: ['Hanya MP4', 'MP4 dan AVI', 'MP4, WebM, dan AVI', 'Semua format video'],
-                        correctAnswer: 2,
-                        explanation: 'MAVi mendukung format MP4, WebM, dan AVI untuk analisis video.'
-                    }
-                ]
-            },
-            lessons: [
-                {
-                    id: 'gs-1',
-                    title: 'Apa itu MAVi?',
-                    type: 'video',
-                    duration: '3 min',
-                    content: {
-                        description: 'MAVi (Motion Analysis Video Intelligence) adalah aplikasi analisis video untuk Industrial Engineering yang membantu menganalisis proses kerja, mengukur waktu, dan mengidentifikasi waste.',
-                        keyPoints: [
-                            'Analisis video berbasis AI untuk time & motion study',
-                            'Terintegrasi dengan metodologi TPS (Toyota Production System)',
-                            'Mendukung pembuatan SOP dan Work Instruction otomatis',
-                            'Kolaborasi real-time dan knowledge sharing'
-                        ],
-                        tryIt: null,
-                        videoUrl: 'https://www.youtube.com/watch?v=z6_A96_P3F0'
-                    }
-                },
-                {
-                    id: 'gs-2',
-                    title: 'Navigasi Aplikasi',
-                    type: 'interactive',
-                    duration: '5 min',
-                    content: {
-                        description: 'Pelajari cara menavigasi menu sidebar, shortcut keyboard, dan layout aplikasi.',
-                        keyPoints: [
-                            'Sidebar menu di sebelah kanan untuk akses cepat',
-                            'Klik icon untuk berpindah antar fitur',
-                            'Hover untuk melihat tooltip nama fitur',
-                            'Toggle sidebar dengan tombol panah'
-                        ],
-                        tryIt: '/workflow-guide',
-                        videoUrl: 'https://www.youtube.com/watch?v=P7p_e2G1p_8'
-                    }
-                },
-                {
-                    id: 'gs-3',
-                    title: 'Upload Video Pertama',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Langkah pertama adalah upload video proses kerja yang akan dianalisis.',
-                        keyPoints: [
-                            'Klik tombol Upload atau drag & drop video',
-                            'Format yang didukung: MP4, WebM, AVI',
-                            'Video akan tampil di Video Panel sebelah kiri',
-                            'Gunakan kontrol playback untuk navigasi video'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'gs-4',
-                    title: 'Membuat Project Baru',
-                    type: 'hands-on',
-                    duration: '2 min',
-                    content: {
-                        description: 'Organisasi kerja dengan membuat project untuk menyimpan analisis.',
-                        keyPoints: [
-                            'Klik "New Project" dari menu',
-                            'Beri nama project yang deskriptif',
-                            'Pilih video yang akan dianalisis',
-                            'Project tersimpan otomatis di database lokal'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
+
+    // ==================== DYNAMIC CONTENT FETCHING ====================
+    const [customContent, setCustomContent] = useState({});
+
+    useEffect(() => {
+        const fetchCustomContent = async () => {
+            try {
+                const supabase = getSupabase();
+                const { data, error } = await supabase
+                    .from('maviclass_content')
+                    .select('*');
+
+                if (error) {
+                    console.warn('Error fetching custom MaviClass content:', error);
+                    return;
                 }
-            ]
-        },
-        {
-            id: 'time-measurement',
-            title: '⏱️ Time & Motion Study',
-            description: 'Belajar mengukur waktu dan breakdown elemen kerja',
-            duration: '30 menit',
-            color: '#2196F3',
-            objectives: [
-                { text: 'Memahami konsep Time & Motion Study', level: 'understand' },
-                { text: 'Mampu mengoperasikan Element Editor', level: 'apply' },
-                { text: 'Dapat mengklasifikasikan Therblig', level: 'analyze' },
-                { text: 'Mampu menganalisis VA/NVA activities', level: 'analyze' }
-            ],
-            prerequisite: 'getting-started',
-            quiz: {
-                passingScore: 70,
-                questions: [
-                    {
-                        id: 'tm-q1',
-                        question: 'Apa fungsi utama Element Editor di MAVi?',
-                        options: [
-                            'Edit video',
-                            'Mengukur waktu dan breakdown elemen kerja',
-                            'Membuat animasi',
-                            'Export data'
-                        ],
-                        correctAnswer: 1,
-                        explanation: 'Element Editor digunakan untuk mengukur waktu dan memecah proses menjadi elemen-elemen kerja.'
-                    },
-                    {
-                        id: 'tm-q2',
-                        question: 'Berapa jumlah gerakan dasar Therblig?',
-                        options: ['10', '15', '18', '21'],
-                        correctAnswer: 2,
-                        explanation: 'Terdapat 18 gerakan dasar Therblig yang dikembangkan oleh Gilbreth.'
-                    },
-                    {
-                        id: 'tm-q3',
-                        question: 'Apa yang dimaksud dengan VA (Value Added)?',
-                        options: [
-                            'Aktivitas yang menambah biaya',
-                            'Aktivitas yang mengubah bentuk/fungsi produk',
-                            'Aktivitas menunggu',
-                            'Aktivitas transportasi'
-                        ],
-                        correctAnswer: 1,
-                        explanation: 'Value Added adalah aktivitas yang mengubah bentuk atau fungsi produk dari perspektif pelanggan.'
-                    }
-                ]
-            },
-            lessons: [
-                {
-                    id: 'tm-1',
-                    title: 'Element Editor Basics',
-                    type: 'video',
-                    duration: '5 min',
-                    content: {
-                        description: 'Element Editor adalah tools utama untuk mengukur waktu dan breakdown proses.',
-                        keyPoints: [
-                            'Klik Start Measurement untuk mulai pengukuran',
-                            'Klik End Measurement untuk selesai',
-                            'Berikan nama element yang spesifik',
-                            'Pilih tipe Therblig yang sesuai'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tm-2',
-                    title: 'Voice Commands',
-                    type: 'interactive',
-                    duration: '5 min',
-                    content: {
-                        description: 'Gunakan perintah suara untuk hands-free measurement.',
-                        keyPoints: [
-                            'Aktifkan Voice Commands dari panel',
-                            'Katakan "Start" untuk mulai measurement',
-                            'Katakan "Stop" atau "End" untuk selesai',
-                            'Katakan nama element untuk auto-labeling'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tm-3',
-                    title: 'Therblig Classification',
-                    type: 'video',
-                    duration: '8 min',
-                    content: {
-                        description: 'Pelajari 18 gerakan dasar Therblig dan cara mengklasifikasikannya.',
-                        keyPoints: [
-                            'Transport Empty (TE) - tangan kosong bergerak',
-                            'Grasp (G) - mengambil objek',
-                            'Transport Loaded (TL) - membawa objek',
-                            'Position (P) - memposisikan objek',
-                            'Release (RL) - melepas objek'
-                        ],
-                        tryIt: '/therblig',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tm-4',
-                    title: 'Value Added Analysis',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Identifikasi aktivitas yang memberikan nilai tambah.',
-                        keyPoints: [
-                            'VA (Value Added) - aktivitas yang mengubah bentuk/fungsi',
-                            'NVA (Non-Value Added) - waste yang harus dihilangkan',
-                            'NNVA (Necessary NVA) - perlu tapi tidak menambah nilai',
-                            'Tandai setiap element dengan klasifikasi yang tepat'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tm-5',
-                    title: 'Cycle Time Analysis',
-                    type: 'hands-on',
-                    duration: '7 min',
-                    content: {
-                        description: 'Analisis cycle time dan identifikasi bottleneck.',
-                        keyPoints: [
-                            'Ukur beberapa cycle untuk data yang valid',
-                            'Bandingkan cycle time antar operator',
-                            'Identifikasi variasi dan penyebabnya',
-                            'Gunakan Best/Worst Cycle untuk perbandingan'
-                        ],
-                        tryIt: '/best-worst',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
+
+                const contentMap = {};
+                data.forEach(item => {
+                    contentMap[item.identifier] = item;
+                });
+                setCustomContent(contentMap);
+            } catch (error) {
+                console.error('Failed to fetch custom content:', error);
+            }
+        };
+
+        fetchCustomContent();
+
+        // Subscribe to real-time changes
+        const supabase = getSupabase();
+        const channel = supabase
+            .channel('maviclass_content_changes')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'maviclass_content'
+            }, () => {
+                fetchCustomContent();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    // Merge static data with custom content from Supabase
+    const modules = useMemo(() => {
+        return staticModules.map(module => {
+            const customModule = customContent[module.id];
+            const updatedModule = { ...module };
+
+            // Add document download if exists
+            if (customModule?.doc_url) {
+                updatedModule.docUrl = customModule.doc_url;
+            }
+
+            // Update lessons
+            updatedModule.lessons = module.lessons.map(lesson => {
+                const customLesson = customContent[lesson.id];
+                const updatedLesson = { ...lesson };
+                if (customLesson?.video_url) {
+                    updatedLesson.content = {
+                        ...lesson.content,
+                        videoUrl: customLesson.video_url
+                    };
                 }
-            ]
-        },
-        {
-            id: 'ai-features',
-            title: '🧠 AI Features',
-            description: 'Manfaatkan kekuatan AI untuk analisis otomatis',
-            duration: '25 menit',
-            color: '#FF9800',
-            lessons: [
-                {
-                    id: 'ai-1',
-                    title: 'AI Process Studio',
-                    type: 'video',
-                    duration: '5 min',
-                    content: {
-                        description: 'Pusat kendali AI untuk semua fitur analisis cerdas.',
-                        keyPoints: [
-                            'Auto Cycle Detection - deteksi siklus otomatis',
-                            'Video Intelligence - tanya jawab dengan AI',
-                            'Motion Analysis - analisis gerakan dan ergonomi',
-                            'Anomaly Detection - deteksi ketidaknormalan'
-                        ],
-                        tryIt: '/ai-process',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ai-2',
-                    title: 'Action Recognition',
-                    type: 'interactive',
-                    duration: '7 min',
-                    content: {
-                        description: 'AI mengenali aksi dan gerakan secara otomatis.',
-                        keyPoints: [
-                            'Upload video dan jalankan AI recognition',
-                            'AI akan mendeteksi jenis aksi yang dilakukan',
-                            'Review dan koreksi hasil deteksi',
-                            'Export hasil untuk analisis lanjutan'
-                        ],
-                        tryIt: '/action-recognition',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ai-3',
-                    title: 'Real-time Compliance',
-                    type: 'hands-on',
-                    duration: '8 min',
-                    content: {
-                        description: 'Monitor kepatuhan SOP secara real-time dengan AI.',
-                        keyPoints: [
-                            'Hubungkan kamera live atau IP camera',
-                            'AI akan membandingkan dengan standar',
-                            'Alert otomatis jika ada penyimpangan',
-                            'Log semua anomali untuk review'
-                        ],
-                        tryIt: '/realtime-compliance',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ai-4',
-                    title: 'Video Intelligence',
-                    type: 'interactive',
-                    duration: '5 min',
-                    content: {
-                        description: 'Tanya jawab dengan AI tentang isi video.',
-                        keyPoints: [
-                            'Upload video ke Gemini AI',
-                            'Ajukan pertanyaan dalam bahasa natural',
-                            'AI akan menganalisis dan menjawab',
-                            'Gunakan untuk insight mendalam'
-                        ],
-                        tryIt: '/ai-process',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'tps-tools',
-            title: '📊 TPS Tools',
-            description: 'Alat-alat Toyota Production System untuk improvement',
-            duration: '40 menit',
-            color: '#9C27B0',
-            lessons: [
-                {
-                    id: 'tps-1',
-                    title: 'Value Stream Mapping',
-                    type: 'video',
-                    duration: '10 min',
-                    content: {
-                        description: 'Pemetaan alur nilai dari bahan mentah sampai produk jadi.',
-                        keyPoints: [
-                            'Buat Current State Map terlebih dahulu',
-                            'Identifikasi waste di setiap proses',
-                            'Hitung lead time dan cycle time',
-                            'Design Future State Map yang lebih efisien'
-                        ],
-                        tryIt: '/value-stream-map',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tps-2',
-                    title: 'Yamazumi Chart',
-                    type: 'hands-on',
-                    duration: '8 min',
-                    content: {
-                        description: 'Visualisasi beban kerja untuk line balancing.',
-                        keyPoints: [
-                            'Import data dari measurement',
-                            'Lihat stack bar per operator/station',
-                            'Bandingkan dengan takt time',
-                            'Identifikasi bottleneck dan idle time'
-                        ],
-                        tryIt: '/yamazumi',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tps-3',
-                    title: 'Standard Work Combination Sheet',
-                    type: 'hands-on',
-                    duration: '10 min',
-                    content: {
-                        description: 'Dokumentasi standar kombinasi kerja manusia dan mesin.',
-                        keyPoints: [
-                            'Buat timeline kerja manual dan mesin',
-                            'Visualisasikan walking time',
-                            'Set takt time sebagai referensi',
-                            'Export untuk dokumentasi SOP'
-                        ],
-                        tryIt: '/swcs',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tps-4',
-                    title: 'Waste Elimination',
-                    type: 'interactive',
-                    duration: '7 min',
-                    content: {
-                        description: 'Identifikasi dan hilangkan 7 waste (Muda).',
-                        keyPoints: [
-                            'Transport - perpindahan yang tidak perlu',
-                            'Inventory - stok berlebih',
-                            'Motion - gerakan yang tidak efisien',
-                            'Waiting - menunggu proses lain',
-                            'Over-processing - proses berlebihan',
-                            'Over-production - produksi berlebih',
-                            'Defects - produk cacat'
-                        ],
-                        tryIt: '/waste-elimination',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'tps-5',
-                    title: 'Statistical Analysis',
-                    type: 'video',
-                    duration: '5 min',
-                    content: {
-                        description: 'Analisis statistik untuk validasi data dan keputusan.',
-                        keyPoints: [
-                            'Hitung rata-rata, standar deviasi, range',
-                            'Control chart untuk monitoring proses',
-                            'Analisis capability process',
-                            'Identifikasi outlier dan penyebabnya'
-                        ],
-                        tryIt: '/statistical-analysis',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'documentation',
-            title: '📘 Documentation',
-            description: 'Buat SOP dan Work Instruction profesional',
-            duration: '20 menit',
-            color: '#00BCD4',
-            lessons: [
-                {
-                    id: 'doc-1',
-                    title: 'Manual Creation',
-                    type: 'video',
-                    duration: '8 min',
-                    content: {
-                        description: 'Buat work instruction visual dengan mudah.',
-                        keyPoints: [
-                            'Capture frame dari video sebagai langkah',
-                            'Tambahkan deskripsi dan anotasi',
-                            'Gunakan AI untuk generate instruksi',
-                            'Export ke PDF, Word, atau PowerPoint'
-                        ],
-                        tryIt: '/manual-creation',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'doc-2',
-                    title: 'AI-Generated Instructions',
-                    type: 'interactive',
-                    duration: '5 min',
-                    content: {
-                        description: 'Biarkan AI membantu menulis instruksi.',
-                        keyPoints: [
-                            'Pilih frame yang akan dijelaskan',
-                            'AI akan menganalisis gambar',
-                            'Generate deskripsi langkah kerja',
-                            'Edit dan sesuaikan sesuai kebutuhan'
-                        ],
-                        tryIt: '/manual-creation',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'doc-3',
-                    title: 'Knowledge Base',
-                    type: 'hands-on',
-                    duration: '7 min',
-                    content: {
-                        description: 'Simpan dan bagikan best practices.',
-                        keyPoints: [
-                            'Upload manual ke Knowledge Base',
-                            'Tambahkan tags untuk pencarian',
-                            'Rate dan review dari pengguna lain',
-                            'Download template untuk project baru'
-                        ],
-                        tryIt: '/knowledge-base',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'advanced',
-            title: '⚡ Advanced Features',
-            description: 'Fitur lanjutan untuk power users',
-            duration: '30 menit',
-            color: '#F44336',
-            lessons: [
-                {
-                    id: 'adv-1',
-                    title: 'Multi-Camera Analysis',
-                    type: 'video',
-                    duration: '8 min',
-                    content: {
-                        description: 'Analisis 3D dengan multiple camera angles.',
-                        keyPoints: [
-                            'Sinkronisasi multiple video',
-                            'Rekonstruksi gerakan 3D',
-                            'Analisis dari berbagai sudut pandang',
-                            'Lebih akurat untuk gerakan kompleks'
-                        ],
-                        tryIt: '/multi-camera',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'adv-2',
-                    title: 'VR Training Mode',
-                    type: 'interactive',
-                    duration: '7 min',
-                    content: {
-                        description: 'Simulasi training dengan VR/AR.',
-                        keyPoints: [
-                            'Interactive 3D training environment',
-                            'Practice mode untuk latihan',
-                            'Assessment mode untuk evaluasi',
-                            'Tracking progress trainee'
-                        ],
-                        tryIt: '/vr-training',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'adv-3',
-                    title: 'Broadcast & Collaboration',
-                    type: 'hands-on',
-                    duration: '8 min',
-                    content: {
-                        description: 'Share dan kolaborasi real-time.',
-                        keyPoints: [
-                            'Broadcast video ke multiple viewer',
-                            'Real-time cursor sharing',
-                            'Chat dan voice communication',
-                            'Remote training dan review'
-                        ],
-                        tryIt: '/broadcast',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'adv-4',
-                    title: 'Cycle Segmentation',
-                    type: 'hands-on',
-                    duration: '7 min',
-                    content: {
-                        description: 'Segmentasi video menjadi cycle-cycle.',
-                        keyPoints: [
-                            'AI mendeteksi batas cycle',
-                            'Manual adjustment jika diperlukan',
-                            'Export cycle sebagai clip terpisah',
-                            'Analisis per-cycle yang detail'
-                        ],
-                        tryIt: '/cycle-segmentation',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'study-cases',
-            title: '📂 Study Cases',
-            description: 'Implementasi nyata MAVi di berbagai industri',
-            duration: '45 menit',
-            color: '#FFD700',
-            lessons: [
-                {
-                    id: 'sc-1',
-                    title: 'Automotive: Line Balancing',
-                    type: 'video',
-                    duration: '12 min',
-                    content: {
-                        description: 'Studi kasus optimasi lini perakitan mesin di pabrik otomotif ternama.',
-                        keyPoints: [
-                            'Identifikasi bottleneck menggunakan Yamazumi Chart',
-                            'Redistribusi elemen kerja antar operator',
-                            'Peningkatan throughput sebesar 15%',
-                            'Eliminasi waiting time pada station kritis'
-                        ],
-                        tryIt: '/yamazumi',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sc-2',
-                    title: 'Textile: Waste Elimination',
-                    type: 'interactive',
-                    duration: '10 min',
-                    content: {
-                        description: 'Mengurangi pemborosan gerakan (Motion Waste) pada proses penjahitan.',
-                        keyPoints: [
-                            'Analisis Therblig untuk gerakan tangan operator',
-                            'Rearrangement tata letak material (Layout)',
-                            'Pengurangan cycle time sebesar 20%',
-                            'Peningkatan ergonomi dan kenyamanan kerja'
-                        ],
-                        tryIt: '/waste-elimination',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sc-3',
-                    title: 'Logistics: VSM Optimization',
-                    type: 'hands-on',
-                    duration: '15 min',
-                    content: {
-                        description: 'Optimasi alur dokumen dan barang di pusat distribusi regional.',
-                        keyPoints: [
-                            'Pemetaan Current State Map (VSM)',
-                            'Identifikasi Information Flow yang terputus',
-                            'Lead time reduction dari 2 hari menjadi 4 jam',
-                            'Implementasi Kan-ban untuk replenishment'
-                        ],
-                        tryIt: '/value-stream-map',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sc-4',
-                    title: 'Electronics: AI Compliance',
-                    type: 'interactive',
-                    duration: '8 min',
-                    content: {
-                        description: 'Monitoring kepatuhan pemasangan komponen presisi tinggi.',
-                        keyPoints: [
-                            'Setting standar gerakan dengan Video Intelligence',
-                            'Deteksi anomali pemasangan secara real-time',
-                            'Penurunan tingkat defect (rework) hingga 90%',
-                            'Audit otomatis tanpa mengganggu produksi'
-                        ],
-                        tryIt: '/realtime-compliance',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'studio-model',
-            title: '🎬 Studio Model & Compliance',
-            description: 'Buat model AI kustom dan monitor compliance real-time',
-            duration: '35 menit',
-            color: '#667eea',
-            lessons: [
-                {
-                    id: 'sm-1',
-                    title: 'Pengenalan Studio Model',
-                    type: 'video',
-                    duration: '5 min',
-                    content: {
-                        description: 'Studio Model memungkinkan Anda membuat model AI kustom untuk mendeteksi gerakan dan state spesifik tanpa coding.',
-                        keyPoints: [
-                            'Buat model berdasarkan video referensi Anda sendiri',
-                            'Definisikan states (kondisi) yang ingin dideteksi',
-                            'Atur rules (aturan) untuk transisi antar state',
-                            'Gunakan untuk compliance monitoring real-time'
-                        ],
-                        tryIt: '/studio-model',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sm-2',
-                    title: 'Membuat Model Baru',
-                    type: 'hands-on',
-                    duration: '8 min',
-                    content: {
-                        description: 'Step-by-step membuat Studio Model pertama Anda.',
-                        keyPoints: [
-                            'Klik "Create New Model" di Studio Model page',
-                            'Beri nama model yang deskriptif (contoh: "Assembly Process")',
-                            'Pilih coordinate system: Body-Centric atau Screen-Based',
-                            'Tambahkan deskripsi untuk dokumentasi'
-                        ],
-                        tryIt: '/studio-model',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sm-3',
-                    title: 'Definisi States',
-                    type: 'hands-on',
-                    duration: '7 min',
-                    content: {
-                        description: 'Buat states untuk setiap kondisi yang ingin dideteksi.',
-                        keyPoints: [
-                            'State = kondisi/posisi tertentu (contoh: "Idle", "Reaching", "Holding")',
-                            'Capture reference pose dari video untuk setiap state',
-                            'Definisikan ROI (Region of Interest) jika diperlukan',
-                            'Set minimum duration untuk stabilitas deteksi'
-                        ],
-                        tryIt: '/studio-model',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sm-4',
-                    title: 'Rule Configuration',
-                    type: 'interactive',
-                    duration: '10 min',
-                    content: {
-                        description: 'Atur aturan transisi antar state menggunakan Rule Builder.',
-                        keyPoints: [
-                            'Joint Angle: Sudut sendi tubuh (Contoh: Siku &lt; 90°)',
-                            'Pose Relation: Posisi relatif terhadap titik lain (Contoh: Tangan di atas Hidung)',
-                            'Pose Velocity: Kecepatan gerakan (Contoh: Mendeteksi gerak tiba-tiba)',
-                            'Object Proximity: Jarak ke objek AI (Contoh: Tangan menyentuh alat)',
-                            'Golden Pose: Kecocokan dengan pose referensi ideal yang direkam',
-                            'Logic Operator: Gunakan AND/OR untuk menggabungkan banyak aturan'
-                        ],
-                        tryIt: '/studio-model',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sm-5',
-                    title: 'Teachable Machine Studio',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Pelajari cara menggunakan TM Studio untuk membuat dataset video dan menguji model custom Anda.',
-                        keyPoints: [
-                            'Gunakan Video Slicer untuk memotong video panjang menjadi klip latihan',
-                            'Download klip dan upload ke Google Teachable Machine',
-                            'Paste URL model yang sudah di-deploy ke TM Studio',
-                            'Gunakan model tersebut di Studio Model untuk rules yang lebih kompleks'
-                        ],
-                        tryIt: '/teachable-machine',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sm-6',
-                    title: 'Test Mode & Validation',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Test model Anda dengan video sebelum deployment.',
-                        keyPoints: [
-                            'Upload test video di Test Mode',
-                            'Lihat timeline events untuk validasi',
-                            'Check apakah state transitions sudah benar',
-                            'Adjust rules jika ada false positive/negative'
-                        ],
-                        tryIt: '/studio-runtime',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sm-6',
-                    title: 'Real-time Compliance Setup',
-                    type: 'hands-on',
-                    duration: '8 min',
-                    content: {
-                        description: 'Deploy model untuk monitoring compliance real-time.',
-                        keyPoints: [
-                            'Buka Real-time Compliance dashboard',
-                            'Klik "Add Camera" untuk setup station baru',
-                            'Pilih Studio Model dari dropdown',
-                            'Pilih webcam atau masukkan IP camera URL',
-                            'Klik "Start Monitoring" untuk mulai'
-                        ],
-                        tryIt: '/realtime-compliance',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'sm-7',
-                    title: 'Timeline Events Analysis',
-                    type: 'interactive',
-                    duration: '5 min',
-                    content: {
-                        description: 'Analisis timeline events untuk performance monitoring.',
-                        keyPoints: [
-                            'Timeline Events panel menampilkan riwayat state transitions',
-                            'Lihat timestamp dan duration setiap state',
-                            'Warna hijau = cepat (<5s), merah = lambat (>5s)',
-                            'Identifikasi bottleneck dari state yang lama',
-                            'Export data untuk analisis lebih lanjut'
-                        ],
-                        tryIt: '/realtime-compliance',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'ai-settings',
-            title: '⚙️ AI Settings & Configuration',
-            description: 'Panduan lengkap setup dan konfigurasi AI untuk hasil optimal',
-            duration: '25 menit',
-            color: '#E91E63',
-            lessons: [
-                {
-                    id: 'ais-1',
-                    title: 'Mendapatkan Gemini API Key',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Langkah-langkah mendapatkan API Key dari Google AI Studio untuk mengaktifkan fitur AI.',
-                        keyPoints: [
-                            'Kunjungi https://aistudio.google.com/',
-                            'Login dengan akun Google Anda',
-                            'Klik "Get API Key" → "Create API Key"',
-                            'Copy API Key dan paste di MAVi Settings',
-                            'Gratis untuk penggunaan standar (60 request/menit)'
-                        ],
-                        tryIt: null,
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ais-2',
-                    title: 'Konfigurasi API Key di MAVi',
-                    type: 'hands-on',
-                    duration: '3 min',
-                    content: {
-                        description: 'Cara memasukkan dan menyimpan API Key di aplikasi MAVi.',
-                        keyPoints: [
-                            'Buka Settings → AI Configuration',
-                            'Paste API Key di field yang tersedia',
-                            'Klik "Test Connection" untuk verifikasi',
-                            'Status hijau = koneksi berhasil',
-                            'API Key tersimpan di browser (localStorage)'
-                        ],
-                        tryIt: null,
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ais-3',
-                    title: 'Pose Detection Settings',
-                    type: 'interactive',
-                    duration: '7 min',
-                    content: {
-                        description: 'Konfigurasi MediaPipe Pose Detection untuk akurasi optimal.',
-                        keyPoints: [
-                            'Model Complexity: Lite (cepat) vs Full (akurat)',
-                            'Detection Confidence: threshold deteksi pose (0.5-0.9)',
-                            'Tracking Confidence: smoothness tracking (0.5-0.9)',
-                            'Semakin tinggi confidence = lebih akurat tapi lebih berat',
-                            'Rekomendasi: 0.7 untuk keseimbangan speed & accuracy'
-                        ],
-                        tryIt: null,
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ais-4',
-                    title: 'Setup Teachable Machine Model',
-                    type: 'hands-on',
-                    duration: '7 min',
-                    content: {
-                        description: 'Tutorial lengkap menggunakan Google Teachable Machine untuk custom model.',
-                        keyPoints: [
-                            'Buka teachablemachine.withgoogle.com',
-                            'Pilih "Pose Project" untuk deteksi gerakan',
-                            'Record sample poses untuk setiap class',
-                            'Train model dan Export ke TensorFlow.js',
-                            'Copy URL model ke MAVi Teachable Machine Studio'
-                        ],
-                        tryIt: '/teachable-machine',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ais-5',
-                    title: 'Troubleshooting AI Errors',
-                    type: 'interactive',
-                    duration: '5 min',
-                    content: {
-                        description: 'Cara mengatasi error umum pada fitur AI.',
-                        keyPoints: [
-                            'Error 401: API Key tidak valid → regenerate key',
-                            'Error 429: Rate limit → tunggu 1 menit atau upgrade plan',
-                            'Pose tidak terdeteksi: pastikan pencahayaan cukup',
-                            'Model lambat: turunkan model complexity',
-                            'Check System Diagnostics untuk status lengkap'
-                        ],
-                        tryIt: null,
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'ui-tutorial',
-            title: '🖥️ User Interface Deep Dive',
-            description: 'Panduan lengkap antarmuka dan customization',
-            duration: '20 menit',
-            color: '#3F51B5',
-            lessons: [
-                {
-                    id: 'ui-1',
-                    title: 'Layout Overview',
-                    type: 'video',
-                    duration: '5 min',
-                    content: {
-                        description: 'Memahami tata letak aplikasi MAVi secara keseluruhan.',
-                        keyPoints: [
-                            'Video Panel (kiri): area playback dan analisis video',
-                            'Element Panel (kanan): daftar element dan pengukuran',
-                            'Timeline (bawah): navigasi video dan markers',
-                            'Sidebar (paling kanan): menu navigasi antar fitur',
-                            'Semua panel dapat di-resize dengan drag divider'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ui-2',
-                    title: 'Keyboard Shortcuts',
-                    type: 'interactive',
-                    duration: '5 min',
-                    content: {
-                        description: 'Shortcut keyboard untuk produktivitas maksimal.',
-                        keyPoints: [
-                            'Space: Play/Pause video',
-                            'Arrow Left/Right: Frame by frame navigation',
-                            'S: Start measurement',
-                            'E: End measurement',
-                            'Ctrl+S: Save project',
-                            'F: Toggle fullscreen video'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ui-3',
-                    title: 'Theme & Display Settings',
-                    type: 'hands-on',
-                    duration: '3 min',
-                    content: {
-                        description: 'Customize tampilan aplikasi sesuai preferensi.',
-                        keyPoints: [
-                            'Dark Mode: default, nyaman untuk penggunaan lama',
-                            'Language: Indonesia, English, 日本語',
-                            'Font Size: sesuaikan untuk kenyamanan membaca',
-                            'Skeleton Overlay: toggle tampilan pose skeleton',
-                            'Settings tersimpan otomatis'
-                        ],
-                        tryIt: null,
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ui-4',
-                    title: 'Panel Customization',
-                    type: 'hands-on',
-                    duration: '4 min',
-                    content: {
-                        description: 'Sesuaikan tata letak panel untuk workflow Anda.',
-                        keyPoints: [
-                            'Drag divider untuk resize panel',
-                            'Collapse sidebar dengan tombol panah',
-                            'Element Panel bisa di-expand/collapse',
-                            'Timeline height bisa disesuaikan',
-                            'Layout tersimpan untuk session berikutnya'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'ui-5',
-                    title: 'Video Controls Mastery',
-                    type: 'interactive',
-                    duration: '3 min',
-                    content: {
-                        description: 'Kuasai kontrol video untuk analisis presisi.',
-                        keyPoints: [
-                            'Speed Control: 0.25x sampai 2x playback',
-                            'Frame Counter: lihat posisi frame saat ini',
-                            'Zoom Controls: perbesar area tertentu',
-                            'Loop Region: putar secara berulang area tertentu',
-                            'Seek Bar: klik langsung ke posisi video'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'export-integration',
-            title: '📤 Data Export & Integration',
-            description: 'Export hasil analisis dan integrasi dengan sistem lain',
-            duration: '25 menit',
-            color: '#009688',
-            lessons: [
-                {
-                    id: 'exp-1',
-                    title: 'Export ke Excel',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Export data pengukuran ke format Excel untuk analisis lanjutan.',
-                        keyPoints: [
-                            'Klik tombol Export di Element Panel',
-                            'Pilih format: Excel (.xlsx) atau CSV',
-                            'Data termasuk: nama element, durasi, tipe, timestamp',
-                            'Kolom tambahan: therblig classification, VA/NVA',
-                            'File otomatis terdownload ke folder Downloads'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'exp-2',
-                    title: 'Export Work Instruction',
-                    type: 'hands-on',
-                    duration: '7 min',
-                    content: {
-                        description: 'Export manual dan SOP ke berbagai format.',
-                        keyPoints: [
-                            'PDF: format standar untuk distribusi',
-                            'Word (.docx): untuk editing lanjutan',
-                            'PowerPoint: untuk training presentation',
-                            'Include images, langkah kerja, dan catatan',
-                            'Custom header dengan logo perusahaan'
-                        ],
-                        tryIt: '/manual-creation',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'exp-3',
-                    title: 'Video Clip Export',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Export potongan video untuk dokumentasi atau training.',
-                        keyPoints: [
-                            'Pilih cycle atau segment yang ingin diexport',
-                            'Format output: WebM atau MP4',
-                            'Opsional: include pose skeleton overlay',
-                            'Compress untuk file size lebih kecil',
-                            'Gunakan untuk training material'
-                        ],
-                        tryIt: '/cycle-segmentation',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'exp-4',
-                    title: 'Project Backup & Restore',
-                    type: 'interactive',
-                    duration: '4 min',
-                    content: {
-                        description: 'Backup dan restore project untuk keamanan data.',
-                        keyPoints: [
-                            'Export Project: simpan sebagai file JSON',
-                            'Include semua elements, measurements, settings',
-                            'Import Project: restore dari backup',
-                            'Simpan backup secara berkala',
-                            'Cloud sync coming soon'
-                        ],
-                        tryIt: '/files',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'exp-5',
-                    title: 'Share & Collaboration',
-                    type: 'interactive',
-                    duration: '4 min',
-                    content: {
-                        description: 'Berbagi project dan kolaborasi dengan tim.',
-                        keyPoints: [
-                            'Upload ke Knowledge Base untuk sharing',
-                            'Generate shareable link',
-                            'Real-time collaboration dengan Broadcast',
-                            'Comment dan review dari rekan kerja',
-                            'Version control untuk tracking perubahan'
-                        ],
-                        tryIt: '/knowledge-base',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
-        },
-        {
-            id: 'pose-ergonomics',
-            title: '🔍 Pose Detection & Ergonomics',
-            description: 'Analisis pose tubuh dan penilaian ergonomi',
-            duration: '35 menit',
-            color: '#795548',
-            lessons: [
-                {
-                    id: 'pe-1',
-                    title: 'Cara Kerja Pose Detection',
-                    type: 'video',
-                    duration: '7 min',
-                    content: {
-                        description: 'Memahami teknologi MediaPipe Pose Detection di balik MAVi.',
-                        keyPoints: [
-                            'MediaPipe mendeteksi 33 landmark tubuh',
-                            'Landmark meliputi: wajah, bahu, siku, tangan, pinggul, lutut, kaki',
-                            'Setiap landmark memiliki koordinat x, y, z',
-                            'Visibility score menunjukkan kepercayaan deteksi',
-                            'Proses berjalan real-time di browser (WebGL)'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'pe-2',
-                    title: 'Joint Angle Analysis',
-                    type: 'interactive',
-                    duration: '7 min',
-                    content: {
-                        description: 'Mengukur sudut sendi untuk analisis postur.',
-                        keyPoints: [
-                            'Sudut siku: mengukur fleksi lengan',
-                            'Sudut lutut: analisis postur jongkok/berdiri',
-                            'Sudut bahu: deteksi angkat tangan',
-                            'Sudut punggung: evaluasi postur membungkuk',
-                            'Data sudut digunakan untuk rules di Studio Model'
-                        ],
-                        tryIt: '/studio-model',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'pe-3',
-                    title: 'REBA Assessment',
-                    type: 'hands-on',
-                    duration: '10 min',
-                    content: {
-                        description: 'Rapid Entire Body Assessment untuk evaluasi risiko ergonomi.',
-                        keyPoints: [
-                            'REBA menganalisis postur seluruh tubuh',
-                            'Score 1-3: Low risk (Acceptable)',
-                            'Score 4-7: Medium risk (Investigate)',
-                            'Score 8-10: High risk (Investigate soon)',
-                            'Score 11+: Very high risk (Implement change)'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'pe-4',
-                    title: 'Fatigue Analysis',
-                    type: 'interactive',
-                    duration: '6 min',
-                    content: {
-                        description: 'Deteksi dan prediksi kelelahan pekerja dari pola gerakan.',
-                        keyPoints: [
-                            'Analisis variasi cycle time sebagai indikator fatigue',
-                            'Deteksi perlambatan gerakan dari waktu ke waktu',
-                            'Alert ketika pola menunjukkan kelelahan',
-                            'Rekomendasi waktu istirahat optimal',
-                            'Integrasi dengan compliance monitoring'
-                        ],
-                        tryIt: '/',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                },
-                {
-                    id: 'pe-5',
-                    title: 'Ergonomic Improvement',
-                    type: 'hands-on',
-                    duration: '5 min',
-                    content: {
-                        description: 'Menggunakan data untuk improvement ergonomi.',
-                        keyPoints: [
-                            'Identifikasi postur berisiko tinggi',
-                            'Bandingkan sebelum vs sesudah improvement',
-                            'Dokumentasikan perubahan workstation',
-                            'Track improvement score dari waktu ke waktu',
-                            'Generate laporan untuk manajemen'
-                        ],
-                        tryIt: '/statistical-analysis',
-                        videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-                    }
-                }
-            ]
+                return updatedLesson;
+            });
+
+            return updatedModule;
+        });
+    }, [customContent]);
+
+    // Derived XP State - moved here to ensure 'modules' is defined
+    const [xp, setXP] = useState(0);
+    const [levelInfo, setLevelInfo] = useState({ level: 1, title: 'Beginner', min: 0, max: 100, color: '#4CAF50' });
+
+    useEffect(() => {
+        const calculatedXP = calculateXP(completedLessons, quizScores, modules);
+        setXP(calculatedXP);
+        const newLevelInfo = getLevelInfo(calculatedXP);
+        if (newLevelInfo.level > levelInfo.level) {
+            speak(`Congratulations! You've leveled up to ${newLevelInfo.title}!`);
         }
-    ];
+        setLevelInfo(newLevelInfo);
+    }, [completedLessons, quizScores, modules]);
+
+    const handleViewCertificate = (module) => {
+        // Check if eligible
+        const isLessonComplete = module.lessons.every(l => completedLessons.includes(l.id));
+        const isQuizPassed = !module.quiz || quizScores[module.id]?.passed;
+
+        if (isLessonComplete && isQuizPassed) {
+            setCertificateData({
+                recipientName: 'Engineer', // Could value from user settings if available
+                courseName: module.title,
+                completedDate: new Date().toLocaleDateString(),
+                instructorName: 'MAVi AI Sensei'
+            });
+            setIsCertificateOpen(true);
+        } else {
+            alert('Please complete all lessons and pass the quiz to earn the certificate.');
+        }
+    };
 
     // Check and award badges
     const checkBadges = () => {
@@ -1557,7 +515,7 @@ const MaviClass = () => {
                 lesson.content.keyPoints.some(kp => kp.toLowerCase().includes(query))
             )
         );
-    }, [searchQuery]);
+    }, [searchQuery, modules]);
 
     // Quiz functions
     const handleQuizAnswer = (questionId, answerIndex) => {
@@ -1909,848 +867,1193 @@ JAWABAN:`;
                         </div>
                     </div>
 
-                    {/* Progress Overview */}
-                    <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(4, 1fr)',
-                        gap: '20px',
-                        marginTop: '32px'
-                    }}>
-                        {[
-                            { icon: Target, value: `${getProgressPercentage()}%`, label: t('maviClass.progress'), color: '#667eea' },
-                            { icon: BookOpen, value: `${getCompletedCount()}/${getTotalLessons()}`, label: t('maviClass.lessons'), color: '#4CAF50' },
-                            { icon: Clock, value: '~2.5h', label: t('maviClass.totalDuration'), color: '#FF9800' },
-                            { icon: Award, value: modules.length, label: t('maviClass.modules'), color: '#9C27B0' }
-                        ].map((item, idx) => (
-                            <div key={idx} style={{
-                                padding: '24px',
-                                background: 'rgba(255, 255, 255, 0.03)',
-                                backdropFilter: 'blur(10px)',
-                                borderRadius: '16px',
-                                border: '1px solid rgba(255, 255, 255, 0.05)',
-                                textAlign: 'center',
-                                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-                                cursor: 'default'
-                            }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(-5px)';
-                                    e.currentTarget.style.boxShadow = `0 10px 30px -10px ${item.color}40`;
-                                    e.currentTarget.style.border = `1px solid ${item.color}40`;
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                    e.currentTarget.style.boxShadow = 'none';
-                                    e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.05)';
-                                }}
-                            >
-                                <item.icon size={28} style={{ color: item.color, marginBottom: '12px', filter: `drop-shadow(0 0 10px ${item.color}60)` }} />
-                                <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#fff', marginBottom: '4px' }}>{item.value}</div>
-                                <div style={{ fontSize: '0.85rem', color: '#888', fontWeight: '500' }}>{item.label}</div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Overall Progress Bar */}
-                    <div style={{ marginTop: '24px' }}>
+                    {/* Level Badge */}
+                    <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
                         <div style={{
-                            height: '8px',
-                            backgroundColor: '#1a1a1a',
-                            borderRadius: '4px',
-                            overflow: 'hidden'
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '8px 16px',
+                            background: `linear-gradient(135deg, ${levelInfo.color}20 0%, ${levelInfo.color}10 100%)`,
+                            border: `1px solid ${levelInfo.color}`,
+                            borderRadius: '20px',
+                            color: levelInfo.color,
+                            fontWeight: 'bold',
+                            boxShadow: `0 0 15px ${levelInfo.color}20`
                         }}>
-                            <div style={{
-                                height: '100%',
-                                width: `${getProgressPercentage()}%`,
-                                background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
-                                transition: 'width 0.5s ease',
-                                boxShadow: getProgressPercentage() > 0 ? '0 0 10px #667eea' : 'none'
-                            }} />
+                            <Award size={20} />
+                            Level {levelInfo.level}: {levelInfo.title}
                         </div>
-                    </div>
-
-                    {/* Tab Navigation & Search */}
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginTop: '32px',
-                        gap: '20px',
-                        flexWrap: 'wrap'
-                    }}>
-                        {/* Tabs */}
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            {[
-                                { id: 'modules', icon: BookOpen, label: 'Modules' },
-                                { id: 'glossary', icon: BookMarked, label: 'Glossary' },
-                                { id: 'badges', icon: Trophy, label: 'Badges' },
-                                { id: 'analytics', icon: BarChart3, label: 'Analytics' },
-                                { id: 'syllabus', icon: GraduationCap, label: 'Syllabus' }
-                            ].map(tab => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        padding: '10px 18px',
-                                        backgroundColor: activeTab === tab.id ? 'rgba(102, 126, 234, 0.15)' : 'rgba(255,255,255,0.03)',
-                                        border: `1px solid ${activeTab === tab.id ? '#667eea' : 'rgba(255,255,255,0.1)'}`,
-                                        borderRadius: '10px',
-                                        color: activeTab === tab.id ? '#667eea' : '#888',
-                                        cursor: 'pointer',
-                                        fontWeight: activeTab === tab.id ? '600' : '500',
-                                        fontSize: '0.9rem',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                >
-                                    <tab.icon size={18} />
-                                    {tab.label}
-                                </button>
-                            ))}
+                        <div style={{ fontSize: '0.85rem', color: '#888', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                            <div style={{ width: '100px', height: '4px', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.min(100, (xp / levelInfo.max) * 100)}%`, backgroundColor: levelInfo.color }} />
+                            </div>
+                            {xp} / {levelInfo.max} XP
                         </div>
-
-                        {/* Search Bar */}
-                        {activeTab === 'modules' && (
-                            <div style={{
-                                position: 'relative',
-                                minWidth: '250px'
-                            }}>
-                                <Search size={18} style={{
-                                    position: 'absolute',
-                                    left: '14px',
-                                    top: '50%',
-                                    transform: 'translateY(-50%)',
-                                    color: '#666'
-                                }} />
-                                <input
-                                    type="text"
-                                    placeholder="Cari modul, lesson, atau topik..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '12px 16px 12px 44px',
-                                        backgroundColor: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid rgba(255,255,255,0.1)',
-                                        borderRadius: '10px',
-                                        color: '#e0e0e0',
-                                        fontSize: '0.9rem',
-                                        outline: 'none',
-                                        transition: 'border-color 0.2s ease'
-                                    }}
-                                    onFocus={(e) => e.target.style.borderColor = '#667eea'}
-                                    onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-                                />
-                                {searchQuery && (
-                                    <button
-                                        onClick={() => setSearchQuery('')}
-                                        style={{
-                                            position: 'absolute',
-                                            right: '10px',
-                                            top: '50%',
-                                            transform: 'translateY(-50%)',
-                                            background: 'none',
-                                            border: 'none',
-                                            color: '#666',
-                                            cursor: 'pointer',
-                                            padding: '4px'
-                                        }}
-                                    >
-                                        <X size={16} />
-                                    </button>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Streak Badge */}
-                        {getStreakCount(analytics) > 0 && (
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '8px 16px',
-                                backgroundColor: 'rgba(255, 87, 34, 0.1)',
-                                border: '1px solid #FF5722',
-                                borderRadius: '20px',
-                                color: '#FF5722',
-                                fontWeight: '600',
-                                fontSize: '0.9rem'
-                            }}>
-                                <Flame size={18} />
-                                {getStreakCount(analytics)} day streak!
-                            </div>
-                        )}
                     </div>
                 </div>
 
-                {/* ==================== TAB CONTENT ==================== */}
+                {/* Progress Overview */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: '20px',
+                    marginTop: '32px'
+                }}>
+                    {[
+                        { icon: Target, value: `${getProgressPercentage()}%`, label: t('maviClass.progress'), color: '#667eea' },
+                        { icon: BookOpen, value: `${getCompletedCount()}/${getTotalLessons()}`, label: t('maviClass.lessons'), color: '#4CAF50' },
+                        { icon: Clock, value: '~2.5h', label: t('maviClass.totalDuration'), color: '#FF9800' },
+                        { icon: Award, value: modules.length, label: t('maviClass.modules'), color: '#9C27B0' }
+                    ].map((item, idx) => (
+                        <div key={idx} style={{
+                            padding: '24px',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            backdropFilter: 'blur(10px)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255, 255, 255, 0.05)',
+                            textAlign: 'center',
+                            transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                            cursor: 'default'
+                        }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-5px)';
+                                e.currentTarget.style.boxShadow = `0 10px 30px -10px ${item.color}40`;
+                                e.currentTarget.style.border = `1px solid ${item.color}40`;
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = 'none';
+                                e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+                            }}
+                        >
+                            <item.icon size={28} style={{ color: item.color, marginBottom: '12px', filter: `drop-shadow(0 0 10px ${item.color}60)` }} />
+                            <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#fff', marginBottom: '4px' }}>{item.value}</div>
+                            <div style={{ fontSize: '0.85rem', color: '#888', fontWeight: '500' }}>{item.label}</div>
+                        </div>
+                    ))}
+                </div>
 
-                {/* MODULES TAB */}
-                {activeTab === 'modules' && (
-                    <>
-                        {searchQuery && filteredModules.length === 0 && (
-                            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
-                                <Search size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                                <p style={{ fontSize: '1.1rem', margin: 0 }}>Tidak ditemukan hasil untuk "{searchQuery}"</p>
-                            </div>
-                        )}
+                {/* Overall Progress Bar */}
+                <div style={{ marginTop: '24px' }}>
+                    <div style={{
+                        height: '8px',
+                        backgroundColor: '#1a1a1a',
+                        borderRadius: '4px',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{
+                            height: '100%',
+                            width: `${getProgressPercentage()}%`,
+                            background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+                            transition: 'width 0.5s ease',
+                            boxShadow: getProgressPercentage() > 0 ? '0 0 10px #667eea' : 'none'
+                        }} />
+                    </div>
+                </div>
 
-                        {/* Modules */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                            {filteredModules.map((module, moduleIdx) => (
-                                <div
-                                    key={module.id}
+                {/* Tab Navigation & Search */}
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '32px',
+                    gap: '20px',
+                    flexWrap: 'wrap'
+                }}>
+                    {/* Tabs */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {[
+                            { id: 'modules', icon: BookOpen, label: 'Modules' },
+                            { id: 'glossary', icon: BookMarked, label: 'Glossary' },
+                            { id: 'badges', icon: Trophy, label: 'Badges' },
+                            { id: 'analytics', icon: BarChart3, label: 'Analytics' },
+                            { id: 'syllabus', icon: GraduationCap, label: 'Syllabus' }
+                        ].map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    padding: '10px 18px',
+                                    backgroundColor: activeTab === tab.id ? 'rgba(102, 126, 234, 0.15)' : 'rgba(255,255,255,0.03)',
+                                    border: `1px solid ${activeTab === tab.id ? '#667eea' : 'rgba(255,255,255,0.1)'}`,
+                                    borderRadius: '10px',
+                                    color: activeTab === tab.id ? '#667eea' : '#888',
+                                    cursor: 'pointer',
+                                    fontWeight: activeTab === tab.id ? '600' : '500',
+                                    fontSize: '0.9rem',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >
+                                <tab.icon size={18} />
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Search Bar */}
+                    {activeTab === 'modules' && (
+                        <div style={{
+                            position: 'relative',
+                            minWidth: '250px'
+                        }}>
+                            <Search size={18} style={{
+                                position: 'absolute',
+                                left: '14px',
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                color: '#666'
+                            }} />
+                            <input
+                                type="text"
+                                placeholder="Cari modul, lesson, atau topik..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '12px 16px 12px 44px',
+                                    backgroundColor: 'rgba(255,255,255,0.03)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    borderRadius: '10px',
+                                    color: '#e0e0e0',
+                                    fontSize: '0.9rem',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s ease'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = '#667eea'}
+                                onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
                                     style={{
-                                        background: 'rgba(255, 255, 255, 0.03)',
-                                        backdropFilter: 'blur(10px)',
-                                        borderRadius: '20px',
-                                        border: `1px solid ${expandedModule === module.id ? module.color : 'rgba(255, 255, 255, 0.05)'}`,
-                                        overflow: 'hidden',
-                                        transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                                        transform: expandedModule === module.id ? 'scale(1.01)' : 'scale(1)',
-                                        boxShadow: expandedModule === module.id ? `0 20px 40px -10px ${module.color}20` : 'none'
+                                        position: 'absolute',
+                                        right: '10px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#666',
+                                        cursor: 'pointer',
+                                        padding: '4px'
                                     }}
                                 >
-                                    {/* Module Header */}
-                                    <div
-                                        onClick={() => setExpandedModule(expandedModule === module.id ? null : module.id)}
-                                        style={{
-                                            padding: '24px 32px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '24px',
-                                            background: expandedModule === module.id ? `linear-gradient(90deg, ${module.color}10 0%, transparent 100%)` : 'transparent',
-                                            borderBottom: expandedModule === module.id ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                                            transition: 'background 0.3s ease'
-                                        }}
-                                    >
-                                        <div style={{
-                                            width: '64px',
-                                            height: '64px',
-                                            borderRadius: '16px',
-                                            backgroundColor: `${module.color}15`,
-                                            border: `1px solid ${module.color}40`,
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            fontSize: '2rem',
-                                            boxShadow: `0 8px 16px -4px ${module.color}30`
-                                        }}>
-                                            {module.title.split(' ')[0]}
-                                        </div>
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                                    <X size={16} />
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Streak Badge */}
+                    {getStreakCount(analytics) > 0 && (
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '8px 16px',
+                            backgroundColor: 'rgba(255, 87, 34, 0.1)',
+                            border: '1px solid #FF5722',
+                            borderRadius: '20px',
+                            color: '#FF5722',
+                            fontWeight: '600',
+                            fontSize: '0.9rem'
+                        }}>
+                            <Flame size={18} />
+                            {getStreakCount(analytics)} day streak!
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* ==================== TAB CONTENT ==================== */}
+
+            {/* MODULES TAB */}
+            {activeTab === 'modules' && (
+                <>
+                    {searchQuery && filteredModules.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
+                            <Search size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                            <p style={{ fontSize: '1.1rem', margin: 0 }}>Tidak ditemukan hasil untuk "{searchQuery}"</p>
+                        </div>
+                    )}
+
+                    {/* Modules */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                        {filteredModules.map((module, moduleIdx) => (
+                            <div
+                                key={module.id}
+                                style={{
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    backdropFilter: 'blur(10px)',
+                                    borderRadius: '20px',
+                                    border: `1px solid ${expandedModule === module.id ? module.color : 'rgba(255, 255, 255, 0.05)'}`,
+                                    overflow: 'hidden',
+                                    transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                                    transform: expandedModule === module.id ? 'scale(1.01)' : 'scale(1)',
+                                    boxShadow: expandedModule === module.id ? `0 20px 40px -10px ${module.color}20` : 'none'
+                                }}
+                            >
+                                {/* Module Header */}
+                                <div
+                                    onClick={() => setExpandedModule(expandedModule === module.id ? null : module.id)}
+                                    style={{
+                                        padding: '24px 32px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '24px',
+                                        background: expandedModule === module.id ? `linear-gradient(90deg, ${module.color}10 0%, transparent 100%)` : 'transparent',
+                                        borderBottom: expandedModule === module.id ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                                        transition: 'background 0.3s ease'
+                                    }}
+                                >
+                                    <div style={{
+                                        width: '64px',
+                                        height: '64px',
+                                        borderRadius: '16px',
+                                        backgroundColor: `${module.color}15`,
+                                        border: `1px solid ${module.color}40`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: '2rem',
+                                        boxShadow: `0 8px 16px -4px ${module.color}30`
+                                    }}>
+                                        {module.title.split(' ')[0]}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                                            <span style={{
+                                                padding: '4px 10px',
+                                                backgroundColor: `${module.color}15`,
+                                                border: `1px solid ${module.color}30`,
+                                                borderRadius: '6px',
+                                                fontSize: '0.7rem',
+                                                fontWeight: '600',
+                                                letterSpacing: '0.5px',
+                                                color: module.color,
+                                                textTransform: 'uppercase'
+                                            }}>
+                                                Module {moduleIdx + 1}
+                                            </span>
+                                            {getModuleProgress(module.id) === 100 && (
                                                 <span style={{
                                                     padding: '4px 10px',
-                                                    backgroundColor: `${module.color}15`,
-                                                    border: `1px solid ${module.color}30`,
+                                                    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+                                                    border: '1px solid #4CAF50',
                                                     borderRadius: '6px',
                                                     fontSize: '0.7rem',
                                                     fontWeight: '600',
                                                     letterSpacing: '0.5px',
-                                                    color: module.color,
-                                                    textTransform: 'uppercase'
+                                                    color: '#4CAF50',
+                                                    textTransform: 'uppercase',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    animation: 'pulse 2s infinite'
                                                 }}>
-                                                    Module {moduleIdx + 1}
+                                                    <CheckCircle size={12} /> Selesai
                                                 </span>
-                                                {getModuleProgress(module.id) === 100 && (
-                                                    <span style={{
-                                                        padding: '4px 10px',
-                                                        backgroundColor: 'rgba(76, 175, 80, 0.15)',
-                                                        border: '1px solid #4CAF50',
-                                                        borderRadius: '6px',
-                                                        fontSize: '0.7rem',
-                                                        fontWeight: '600',
-                                                        letterSpacing: '0.5px',
-                                                        color: '#4CAF50',
-                                                        textTransform: 'uppercase',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '4px',
-                                                        animation: 'pulse 2s infinite'
-                                                    }}>
-                                                        <CheckCircle size={12} /> Selesai
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <h3 style={{ margin: '0 0 6px 0', fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
-                                                {module.title}
-                                            </h3>
-                                            <p style={{ margin: 0, fontSize: '0.95rem', color: '#aaa', lineHeight: '1.5' }}>
-                                                {module.description}
-                                            </p>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '16px' }}>
-                                                <span style={{ fontSize: '0.85rem', color: '#888', display: 'flex', alignItems: 'center' }}>
-                                                    <Clock size={14} style={{ marginRight: '6px' }} />
-                                                    {module.duration}
-                                                </span>
-                                                <span style={{ fontSize: '0.85rem', color: '#888', display: 'flex', alignItems: 'center' }}>
-                                                    <BookOpen size={14} style={{ marginRight: '6px' }} />
-                                                    {module.lessons.filter(l => completedLessons.includes(l.id)).length}/{module.lessons.length} lessons
-                                                </span>
+                                            )}
+                                        </div>
+                                        <h3 style={{ margin: '0 0 6px 0', fontSize: '1.25rem', fontWeight: 'bold', color: '#fff' }}>
+                                            {module.title}
+                                        </h3>
+                                        <p style={{ margin: 0, fontSize: '0.95rem', color: '#aaa', lineHeight: '1.5' }}>
+                                            {module.description}
+                                        </p>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '16px' }}>
+                                            <span style={{ fontSize: '0.85rem', color: '#888', display: 'flex', alignItems: 'center' }}>
+                                                <Clock size={14} style={{ marginRight: '6px' }} />
+                                                {module.duration}
+                                            </span>
+                                            <span style={{ fontSize: '0.85rem', color: '#888', display: 'flex', alignItems: 'center' }}>
+                                                <BookOpen size={14} style={{ marginRight: '6px' }} />
+                                                {module.lessons.filter(l => completedLessons.includes(l.id)).length}/{module.lessons.length} lessons
+                                            </span>
+                                            <div style={{
+                                                flex: 1,
+                                                maxWidth: '240px',
+                                                height: '6px',
+                                                backgroundColor: 'rgba(255,255,255,0.1)',
+                                                borderRadius: '3px',
+                                                overflow: 'hidden'
+                                            }}>
                                                 <div style={{
-                                                    flex: 1,
-                                                    maxWidth: '240px',
-                                                    height: '6px',
-                                                    backgroundColor: 'rgba(255,255,255,0.1)',
+                                                    height: '100%',
+                                                    width: `${getModuleProgress(module.id)}%`,
+                                                    backgroundColor: module.color,
                                                     borderRadius: '3px',
-                                                    overflow: 'hidden'
-                                                }}>
-                                                    <div style={{
-                                                        height: '100%',
-                                                        width: `${getModuleProgress(module.id)}%`,
-                                                        backgroundColor: module.color,
-                                                        borderRadius: '3px',
-                                                        boxShadow: `0 0 10px ${module.color}`,
-                                                        transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
-                                                    }} />
-                                                </div>
-                                                <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: module.color }}>{getModuleProgress(module.id)}%</span>
-                                                {/* Mark All Complete Button */}
+                                                    boxShadow: `0 0 10px ${module.color}`,
+                                                    transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)'
+                                                }} />
+                                            </div>
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: module.color }}>{getModuleProgress(module.id)}%</span>
+
+                                            {/* Certificate Button */}
+                                            {module.hasCertificate && getModuleProgress(module.id) === 100 && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        const allLessonIds = module.lessons.map(l => l.id);
-                                                        const allCompleted = allLessonIds.every(id => completedLessons.includes(id));
-                                                        if (allCompleted) {
-                                                            // Unmark all
-                                                            setCompletedLessons(prev => prev.filter(id => !allLessonIds.includes(id)));
-                                                        } else {
-                                                            // Mark all
-                                                            setCompletedLessons(prev => [...new Set([...prev, ...allLessonIds])]);
-                                                        }
+                                                        handleViewCertificate(module);
                                                     }}
                                                     style={{
                                                         padding: '6px 12px',
-                                                        backgroundColor: getModuleProgress(module.id) === 100 ? `${module.color}20` : 'rgba(255,255,255,0.05)',
-                                                        border: `1px solid ${getModuleProgress(module.id) === 100 ? module.color : 'rgba(255,255,255,0.1)'}`,
+                                                        backgroundColor: 'rgba(218, 165, 32, 0.15)',
+                                                        border: '1px solid #daa520',
                                                         borderRadius: '6px',
-                                                        color: getModuleProgress(module.id) === 100 ? module.color : '#888',
+                                                        color: '#daa520',
                                                         cursor: 'pointer',
                                                         fontSize: '0.75rem',
                                                         fontWeight: '600',
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         gap: '6px',
-                                                        transition: 'all 0.2s ease',
-                                                        whiteSpace: 'nowrap'
+                                                        marginLeft: '8px',
+                                                        transition: 'all 0.2s ease'
                                                     }}
                                                     onMouseEnter={(e) => {
-                                                        e.currentTarget.style.backgroundColor = `${module.color}30`;
-                                                        e.currentTarget.style.borderColor = module.color;
-                                                        e.currentTarget.style.color = module.color;
+                                                        e.currentTarget.style.backgroundColor = 'rgba(218, 165, 32, 0.25)';
+                                                        e.currentTarget.style.boxShadow = '0 0 10px rgba(218, 165, 32, 0.2)';
                                                     }}
                                                     onMouseLeave={(e) => {
-                                                        e.currentTarget.style.backgroundColor = getModuleProgress(module.id) === 100 ? `${module.color}20` : 'rgba(255,255,255,0.05)';
-                                                        e.currentTarget.style.borderColor = getModuleProgress(module.id) === 100 ? module.color : 'rgba(255,255,255,0.1)';
-                                                        e.currentTarget.style.color = getModuleProgress(module.id) === 100 ? module.color : '#888';
+                                                        e.currentTarget.style.backgroundColor = 'rgba(218, 165, 32, 0.15)';
+                                                        e.currentTarget.style.boxShadow = 'none';
                                                     }}
-                                                    title={getModuleProgress(module.id) === 100 ? 'Unmark all lessons' : 'Mark all lessons as complete'}
                                                 >
-                                                    {getModuleProgress(module.id) === 100 ? (
-                                                        <><RotateCcw size={12} /> Reset</>
-                                                    ) : (
-                                                        <><CheckCheck size={12} /> Complete All</>
-                                                    )}
+                                                    <Award size={14} /> Certificate
                                                 </button>
-                                            </div>
-                                        </div>
-                                        <div style={{
-                                            width: '40px',
-                                            height: '40px',
-                                            borderRadius: '50%',
-                                            backgroundColor: 'rgba(255,255,255,0.05)',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            transition: 'all 0.3s ease',
-                                            transform: expandedModule === module.id ? 'rotate(180deg)' : 'rotate(0deg)'
-                                        }}>
-                                            <ChevronDown size={20} style={{ color: expandedModule === module.id ? module.color : '#666' }} />
+                                            )}
+                                            {module.docUrl && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setScreenBoard({
+                                                            type: 'doc',
+                                                            url: module.docUrl,
+                                                            id: module.id,
+                                                            title: `Document: ${module.title}`
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        padding: '6px 12px',
+                                                        backgroundColor: 'rgba(102, 126, 234, 0.15)',
+                                                        border: '1px solid #667eea',
+                                                        borderRadius: '6px',
+                                                        color: '#667eea',
+                                                        cursor: 'pointer',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: '600',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        transition: 'all 0.2s ease'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(102, 126, 234, 0.25)'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(102, 126, 234, 0.15)'}
+                                                >
+                                                    <FileText size={14} /> Ref Doc
+                                                </button>
+                                            )}
+                                            {/* Mark All Complete Button */}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const allLessonIds = module.lessons.map(l => l.id);
+                                                    const allCompleted = allLessonIds.every(id => completedLessons.includes(id));
+                                                    if (allCompleted) {
+                                                        // Unmark all
+                                                        setCompletedLessons(prev => prev.filter(id => !allLessonIds.includes(id)));
+                                                    } else {
+                                                        // Mark all
+                                                        setCompletedLessons(prev => [...new Set([...prev, ...allLessonIds])]);
+                                                    }
+                                                }}
+                                                style={{
+                                                    padding: '6px 12px',
+                                                    backgroundColor: getModuleProgress(module.id) === 100 ? `${module.color}20` : 'rgba(255,255,255,0.05)',
+                                                    border: `1px solid ${getModuleProgress(module.id) === 100 ? module.color : 'rgba(255,255,255,0.1)'}`,
+                                                    borderRadius: '6px',
+                                                    color: getModuleProgress(module.id) === 100 ? module.color : '#888',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.75rem',
+                                                    fontWeight: '600',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    transition: 'all 0.2s ease',
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.backgroundColor = `${module.color}30`;
+                                                    e.currentTarget.style.borderColor = module.color;
+                                                    e.currentTarget.style.color = module.color;
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.style.backgroundColor = getModuleProgress(module.id) === 100 ? `${module.color}20` : 'rgba(255,255,255,0.05)';
+                                                    e.currentTarget.style.borderColor = getModuleProgress(module.id) === 100 ? module.color : 'rgba(255,255,255,0.1)';
+                                                    e.currentTarget.style.color = getModuleProgress(module.id) === 100 ? module.color : '#888';
+                                                }}
+                                                title={getModuleProgress(module.id) === 100 ? 'Unmark all lessons' : 'Mark all lessons as complete'}
+                                            >
+                                                {getModuleProgress(module.id) === 100 ? (
+                                                    <><RotateCcw size={12} /> Reset</>
+                                                ) : (
+                                                    <><CheckCheck size={12} /> Complete All</>
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
+                                    <div style={{
+                                        width: '40px',
+                                        height: '40px',
+                                        borderRadius: '50%',
+                                        backgroundColor: 'rgba(255,255,255,0.05)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.3s ease',
+                                        transform: expandedModule === module.id ? 'rotate(180deg)' : 'rotate(0deg)'
+                                    }}>
+                                        <ChevronDown size={20} style={{ color: expandedModule === module.id ? module.color : '#666' }} />
+                                    </div>
+                                </div>
 
-                                    {/* Lessons List */}
-                                    {expandedModule === module.id && (
-                                        <div style={{
-                                            padding: '0 32px 32px 32px',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            gap: '12px',
-                                            borderTop: '1px solid rgba(255,255,255,0.05)'
-                                        }}>
-                                            <div style={{ height: '20px' }}></div>
-                                            {module.lessons.map((lesson, lessonIdx) => {
-                                                const isCompleted = completedLessons.includes(lesson.id);
-                                                const isActive = activeLesson === lesson.id;
+                                {/* Lessons List */}
+                                {expandedModule === module.id && (
+                                    <div style={{
+                                        padding: '0 32px 32px 32px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '12px',
+                                        borderTop: '1px solid rgba(255,255,255,0.05)'
+                                    }}>
+                                        <div style={{ height: '20px' }}></div>
+                                        {module.lessons.map((lesson, lessonIdx) => {
+                                            const isCompleted = completedLessons.includes(lesson.id);
+                                            const isActive = activeLesson === lesson.id;
 
-                                                return (
-                                                    <div key={lesson.id} style={{ animation: `slideIn 0.3s ease forwards ${lessonIdx * 0.05}s`, opacity: 0, transform: 'translateY(10px)' }}>
+                                            return (
+                                                <div key={lesson.id} style={{ animation: `slideIn 0.3s ease forwards ${lessonIdx * 0.05}s`, opacity: 0, transform: 'translateY(10px)' }}>
+                                                    <div
+                                                        onClick={() => setActiveLesson(isActive ? null : lesson.id)}
+                                                        style={{
+                                                            padding: '20px',
+                                                            backgroundColor: isActive ? 'rgba(255,255,255,0.03)' : 'transparent',
+                                                            borderRadius: '12px',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '20px',
+                                                            border: isActive ? `1px solid ${module.color}40` : '1px solid transparent',
+                                                            transition: 'all 0.2s ease'
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (!isActive) {
+                                                                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)';
+                                                                e.currentTarget.style.transform = 'translateX(5px)';
+                                                            }
+                                                        }}
+                                                        onMouseLeave={(e) => {
+                                                            if (!isActive) {
+                                                                e.currentTarget.style.backgroundColor = 'transparent';
+                                                                e.currentTarget.style.transform = 'translateX(0)';
+                                                            }
+                                                        }}
+                                                    >
                                                         <div
-                                                            onClick={() => setActiveLesson(isActive ? null : lesson.id)}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleCompletion(lesson.id);
+                                                            }}
                                                             style={{
-                                                                padding: '20px',
-                                                                backgroundColor: isActive ? 'rgba(255,255,255,0.03)' : 'transparent',
-                                                                borderRadius: '12px',
                                                                 cursor: 'pointer',
+                                                                color: isCompleted ? '#4CAF50' : 'rgba(255,255,255,0.2)',
+                                                                transition: 'transform 0.2s ease',
                                                                 display: 'flex',
                                                                 alignItems: 'center',
-                                                                gap: '20px',
-                                                                border: isActive ? `1px solid ${module.color}40` : '1px solid transparent',
-                                                                transition: 'all 0.2s ease'
+                                                                justifyContent: 'center'
                                                             }}
-                                                            onMouseEnter={(e) => {
-                                                                if (!isActive) {
-                                                                    e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)';
-                                                                    e.currentTarget.style.transform = 'translateX(5px)';
-                                                                }
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                if (!isActive) {
-                                                                    e.currentTarget.style.backgroundColor = 'transparent';
-                                                                    e.currentTarget.style.transform = 'translateX(0)';
-                                                                }
-                                                            }}
+                                                            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+                                                            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                                                         >
-                                                            <div
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    toggleCompletion(lesson.id);
-                                                                }}
-                                                                style={{
-                                                                    cursor: 'pointer',
-                                                                    color: isCompleted ? '#4CAF50' : 'rgba(255,255,255,0.2)',
-                                                                    transition: 'transform 0.2s ease',
-                                                                    display: 'flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'center'
-                                                                }}
-                                                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
-                                                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                                                            >
-                                                                {isCompleted ? <CheckCircle size={24} weight="fill" /> : <Circle size={24} />}
-                                                            </div>
-
-                                                            <div style={{
-                                                                width: '40px',
-                                                                height: '40px',
-                                                                borderRadius: '10px',
-                                                                backgroundColor: 'rgba(255,255,255,0.05)',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                fontSize: '1.2rem'
-                                                            }}>
-                                                                {getLessonIcon(lesson.type)}
-                                                            </div>
-
-                                                            <div style={{ flex: 1 }}>
-                                                                <div style={{
-                                                                    color: isCompleted ? '#888' : '#e0e0e0',
-                                                                    textDecoration: isCompleted ? 'line-through' : 'none',
-                                                                    fontSize: '1rem',
-                                                                    fontWeight: '500',
-                                                                    marginBottom: '4px'
-                                                                }}>
-                                                                    {lesson.title}
-                                                                </div>
-                                                                <div style={{ fontSize: '0.8rem', color: '#666', display: 'flex', gap: '10px' }}>
-                                                                    <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)' }}>{lesson.type}</span>
-                                                                    <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)' }}>{lesson.duration}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div style={{
-                                                                width: '32px',
-                                                                height: '32px',
-                                                                borderRadius: '50%',
-                                                                backgroundColor: isActive ? module.color : 'rgba(255,255,255,0.05)',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                transition: 'all 0.3s ease'
-                                                            }}>
-                                                                {isActive ? <ChevronDown size={18} color="#fff" /> : <PlayCircle size={18} style={{ color: isActive ? '#fff' : '#666' }} />}
-                                                            </div>
+                                                            {isCompleted ? <CheckCircle size={24} weight="fill" /> : <Circle size={24} />}
                                                         </div>
 
-                                                        {/* Lesson Content Area */}
-                                                        {isActive && (
+                                                        <div style={{
+                                                            width: '40px',
+                                                            height: '40px',
+                                                            borderRadius: '10px',
+                                                            backgroundColor: 'rgba(255,255,255,0.05)',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            fontSize: '1.2rem'
+                                                        }}>
+                                                            {getLessonIcon(lesson.type)}
+                                                        </div>
+
+                                                        <div style={{ flex: 1 }}>
                                                             <div style={{
-                                                                marginTop: '12px',
-                                                                marginLeft: '60px', // Align with text
-                                                                padding: '24px',
-                                                                background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
-                                                                borderRadius: '16px',
-                                                                border: `1px solid ${module.color}20`,
-                                                                animation: 'slideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                                                color: isCompleted ? '#888' : '#e0e0e0',
+                                                                textDecoration: isCompleted ? 'line-through' : 'none',
+                                                                fontSize: '1rem',
+                                                                fontWeight: '500',
+                                                                marginBottom: '4px'
                                                             }}>
-                                                                <p style={{ margin: '0 0 20px 0', color: '#d0d0d0', lineHeight: '1.8', fontSize: '1rem' }}>
-                                                                    {lesson.content.description}
-                                                                </p>
+                                                                {lesson.title}
+                                                            </div>
+                                                            <div style={{ fontSize: '0.8rem', color: '#666', display: 'flex', gap: '10px' }}>
+                                                                <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)' }}>{lesson.type}</span>
+                                                                <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.05)' }}>{lesson.duration}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{
+                                                            width: '32px',
+                                                            height: '32px',
+                                                            borderRadius: '50%',
+                                                            backgroundColor: isActive ? module.color : 'rgba(255,255,255,0.05)',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            transition: 'all 0.3s ease'
+                                                        }}>
+                                                            {isActive ? <ChevronDown size={18} color="#fff" /> : <PlayCircle size={18} style={{ color: isActive ? '#fff' : '#666' }} />}
+                                                        </div>
+                                                    </div>
 
-                                                                <div style={{ marginBottom: '20px' }}>
-                                                                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
-                                                                        {t('maviClass.keyPoints')}
-                                                                    </div>
-                                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                                                                        {lesson.content.keyPoints.map((point, i) => (
-                                                                            <div key={i} style={{
-                                                                                padding: '12px',
-                                                                                backgroundColor: 'rgba(0,0,0,0.2)',
-                                                                                borderRadius: '8px',
-                                                                                borderLeft: `3px solid ${module.color}`,
-                                                                                color: '#bbb',
-                                                                                fontSize: '0.9rem',
-                                                                                lineHeight: '1.5'
-                                                                            }}>
-                                                                                {point}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
+                                                    {/* Lesson Content Area */}
+                                                    {isActive && (
+                                                        <div style={{
+                                                            marginTop: '12px',
+                                                            marginLeft: '60px', // Align with text
+                                                            padding: '24px',
+                                                            background: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+                                                            borderRadius: '16px',
+                                                            border: `1px solid ${module.color}20`,
+                                                            animation: 'slideIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                                        }}>
+                                                            <p style={{ margin: '0 0 20px 0', color: '#d0d0d0', lineHeight: '1.8', fontSize: '1rem' }}>
+                                                                {lesson.content.description}
+                                                            </p>
+
+                                                            <div style={{ marginBottom: '20px' }}>
+                                                                <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+                                                                    {t('maviClass.keyPoints')}
                                                                 </div>
+                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                                                                    {lesson.content.keyPoints.map((point, i) => (
+                                                                        <div key={i} style={{
+                                                                            padding: '12px',
+                                                                            backgroundColor: 'rgba(0,0,0,0.2)',
+                                                                            borderRadius: '8px',
+                                                                            borderLeft: `3px solid ${module.color}`,
+                                                                            color: '#bbb',
+                                                                            fontSize: '0.9rem',
+                                                                            lineHeight: '1.5'
+                                                                        }}>
+                                                                            {point}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
 
-                                                                <div style={{ display: 'flex', gap: '16px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                                                                    {lesson.content.tryIt && (
-                                                                        <button
-                                                                            onClick={() => navigate(lesson.content.tryIt)}
-                                                                            style={{
-                                                                                padding: '12px 24px',
-                                                                                background: `linear-gradient(135deg, ${module.color} 0%, ${module.color}dd 100%)`,
-                                                                                border: 'none',
-                                                                                borderRadius: '8px',
-                                                                                color: '#fff',
-                                                                                cursor: 'pointer',
-                                                                                fontWeight: '600',
-                                                                                fontSize: '0.95rem',
-                                                                                display: 'flex',
-                                                                                alignItems: 'center',
-                                                                                gap: '10px',
-                                                                                boxShadow: `0 4px 15px -4px ${module.color}60`,
-                                                                                transition: 'all 0.2s ease'
-                                                                            }}
-                                                                            onMouseEnter={(e) => {
-                                                                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                                                                e.currentTarget.style.boxShadow = `0 8px 20px -4px ${module.color}80`;
-                                                                            }}
-                                                                            onMouseLeave={(e) => {
-                                                                                e.currentTarget.style.transform = 'translateY(0)';
-                                                                                e.currentTarget.style.boxShadow = `0 4px 15px -4px ${module.color}60`;
-                                                                            }}
-                                                                        >
-                                                                            <Zap size={18} fill="currentColor" />
-                                                                            Coba Fitur Ini
-                                                                        </button>
-                                                                    )}
-                                                                    {lesson.content.videoUrl && (
-                                                                        <button
-                                                                            onClick={() => window.open(lesson.content.videoUrl, '_blank')}
-                                                                            style={{
-                                                                                padding: '12px 24px',
-                                                                                backgroundColor: 'rgba(255,0,0,0.1)',
-                                                                                border: '1px solid rgba(255,0,0,0.3)',
-                                                                                borderRadius: '8px',
-                                                                                color: '#ff4444',
-                                                                                cursor: 'pointer',
-                                                                                fontWeight: '600',
-                                                                                fontSize: '0.95rem',
-                                                                                display: 'flex',
-                                                                                alignItems: 'center',
-                                                                                gap: '10px',
-                                                                                transition: 'all 0.2s ease'
-                                                                            }}
-                                                                            onMouseEnter={(e) => {
-                                                                                e.currentTarget.style.backgroundColor = 'rgba(255,0,0,0.2)';
-                                                                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                                                            }}
-                                                                            onMouseLeave={(e) => {
-                                                                                e.currentTarget.style.backgroundColor = 'rgba(255,0,0,0.1)';
-                                                                                e.currentTarget.style.transform = 'translateY(0)';
-                                                                            }}
-                                                                        >
-                                                                            <Youtube size={20} />
-                                                                            Tonton Video Tutorial
-                                                                        </button>
-                                                                    )}
-                                                                    {/* Bookmark / Mark Complete Button */}
+                                                            <div style={{ display: 'flex', gap: '16px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                                                {lesson.content.tryIt && (
                                                                     <button
-                                                                        onClick={() => toggleCompletion(lesson.id)}
+                                                                        onClick={() => navigate(lesson.content.tryIt)}
                                                                         style={{
                                                                             padding: '12px 24px',
-                                                                            backgroundColor: isCompleted ? 'rgba(76, 175, 80, 0.15)' : 'rgba(255,255,255,0.05)',
-                                                                            border: `1px solid ${isCompleted ? '#4CAF50' : 'rgba(255,255,255,0.2)'}`,
+                                                                            background: `linear-gradient(135deg, ${module.color} 0%, ${module.color}dd 100%)`,
+                                                                            border: 'none',
                                                                             borderRadius: '8px',
-                                                                            color: isCompleted ? '#4CAF50' : '#aaa',
+                                                                            color: '#fff',
                                                                             cursor: 'pointer',
                                                                             fontWeight: '600',
                                                                             fontSize: '0.95rem',
                                                                             display: 'flex',
                                                                             alignItems: 'center',
                                                                             gap: '10px',
-                                                                            transition: 'all 0.2s ease',
-                                                                            marginLeft: 'auto'
+                                                                            boxShadow: `0 4px 15px -4px ${module.color}60`,
+                                                                            transition: 'all 0.2s ease'
                                                                         }}
                                                                         onMouseEnter={(e) => {
-                                                                            if (!isCompleted) {
-                                                                                e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.1)';
-                                                                                e.currentTarget.style.borderColor = '#4CAF50';
-                                                                                e.currentTarget.style.color = '#4CAF50';
-                                                                            }
+                                                                            e.currentTarget.style.transform = 'translateY(-2px)';
+                                                                            e.currentTarget.style.boxShadow = `0 8px 20px -4px ${module.color}80`;
+                                                                        }}
+                                                                        onMouseLeave={(e) => {
+                                                                            e.currentTarget.style.transform = 'translateY(0)';
+                                                                            e.currentTarget.style.boxShadow = `0 4px 15px -4px ${module.color}60`;
+                                                                        }}
+                                                                    >
+                                                                        <Zap size={18} fill="currentColor" />
+                                                                        Coba Fitur Ini
+                                                                    </button>
+                                                                )}
+                                                                {lesson.content.videoUrl && (
+                                                                    <button
+                                                                        onClick={() => setScreenBoard({
+                                                                            type: 'video',
+                                                                            url: lesson.content.videoUrl,
+                                                                            id: lesson.id,
+                                                                            title: `Tutorial: ${lesson.title}`
+                                                                        })}
+                                                                        style={{
+                                                                            padding: '12px 24px',
+                                                                            backgroundColor: 'rgba(255,0,0,0.1)',
+                                                                            border: '1px solid rgba(255,0,0,0.3)',
+                                                                            borderRadius: '8px',
+                                                                            color: '#ff4444',
+                                                                            cursor: 'pointer',
+                                                                            fontWeight: '600',
+                                                                            fontSize: '0.95rem',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '10px',
+                                                                            transition: 'all 0.2s ease'
+                                                                        }}
+                                                                        onMouseEnter={(e) => {
+                                                                            e.currentTarget.style.backgroundColor = 'rgba(255,0,0,0.2)';
                                                                             e.currentTarget.style.transform = 'translateY(-2px)';
                                                                         }}
                                                                         onMouseLeave={(e) => {
-                                                                            if (!isCompleted) {
-                                                                                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
-                                                                                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-                                                                                e.currentTarget.style.color = '#aaa';
-                                                                            }
+                                                                            e.currentTarget.style.backgroundColor = 'rgba(255,0,0,0.1)';
                                                                             e.currentTarget.style.transform = 'translateY(0)';
                                                                         }}
                                                                     >
-                                                                        {isCompleted ? (
-                                                                            <><BookmarkCheck size={18} /> Sudah Dipelajari</>
-                                                                        ) : (
-                                                                            <><BookmarkPlus size={18} /> Tandai Selesai</>
-                                                                        )}
+                                                                        <Youtube size={20} />
+                                                                        Tonton Video Tutorial
                                                                     </button>
-                                                                </div>
+                                                                )}
+                                                                {/* Bookmark / Mark Complete Button */}
+                                                                <button
+                                                                    onClick={() => toggleCompletion(lesson.id)}
+                                                                    style={{
+                                                                        padding: '12px 24px',
+                                                                        backgroundColor: isCompleted ? 'rgba(76, 175, 80, 0.15)' : 'rgba(255,255,255,0.05)',
+                                                                        border: `1px solid ${isCompleted ? '#4CAF50' : 'rgba(255,255,255,0.2)'}`,
+                                                                        borderRadius: '8px',
+                                                                        color: isCompleted ? '#4CAF50' : '#aaa',
+                                                                        cursor: 'pointer',
+                                                                        fontWeight: '600',
+                                                                        fontSize: '0.95rem',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '10px',
+                                                                        transition: 'all 0.2s ease',
+                                                                        marginLeft: 'auto'
+                                                                    }}
+                                                                    onMouseEnter={(e) => {
+                                                                        if (!isCompleted) {
+                                                                            e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.1)';
+                                                                            e.currentTarget.style.borderColor = '#4CAF50';
+                                                                            e.currentTarget.style.color = '#4CAF50';
+                                                                        }
+                                                                        e.currentTarget.style.transform = 'translateY(-2px)';
+                                                                    }}
+                                                                    onMouseLeave={(e) => {
+                                                                        if (!isCompleted) {
+                                                                            e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                                                                            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                                                                            e.currentTarget.style.color = '#aaa';
+                                                                        }
+                                                                        e.currentTarget.style.transform = 'translateY(0)';
+                                                                    }}
+                                                                >
+                                                                    {isCompleted ? (
+                                                                        <><BookmarkCheck size={18} /> Sudah Dipelajari</>
+                                                                    ) : (
+                                                                        <><BookmarkPlus size={18} /> Tandai Selesai</>
+                                                                    )}
+                                                                </button>
                                                             </div>
-                                                        )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Practice Challenge Section */}
+                                        {module.practice && (
+                                            <div style={{
+                                                marginTop: '32px',
+                                                padding: '30px',
+                                                background: `linear-gradient(135deg, ${module.color}15 0%, rgba(255,255,255,0.02) 100%)`,
+                                                borderRadius: '24px',
+                                                border: `1px solid ${module.color}30`,
+                                                position: 'relative',
+                                                overflow: 'hidden',
+                                                animation: 'slideIn 0.5s ease-out'
+                                            }}>
+                                                {/* Background Decoration */}
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: '-20px',
+                                                    right: '-20px',
+                                                    fontSize: '8rem',
+                                                    opacity: 0.05,
+                                                    transform: 'rotate(-15deg)',
+                                                    pointerEvents: 'none'
+                                                }}>
+                                                    🎯
+                                                </div>
+
+                                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '24px' }}>
+                                                    <div style={{
+                                                        width: '60px',
+                                                        height: '60px',
+                                                        borderRadius: '18px',
+                                                        backgroundColor: module.color,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        boxShadow: `0 10px 20px -5px ${module.color}60`
+                                                    }}>
+                                                        <Target size={32} color="#fff" />
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <h3 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: '800', color: '#fff' }}>
+                                                            {module.practice.title}
+                                                        </h3>
+                                                        <p style={{ margin: '0 0 20px 0', color: '#aaa', fontSize: '1.05rem', lineHeight: '1.6' }}>
+                                                            {module.practice.description}
+                                                        </p>
 
-                        {/* Completion Badge */}
-                        {getProgressPercentage() === 100 && (
-                            <div style={{
-                                marginTop: '60px',
-                                padding: '40px',
-                                background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 215, 0, 0.05) 100%)',
-                                backdropFilter: 'blur(20px)',
-                                borderRadius: '24px',
-                                border: '1px solid rgba(255, 215, 0, 0.3)',
-                                textAlign: 'center',
-                                boxShadow: '0 20px 50px -20px rgba(255, 215, 0, 0.3)'
-                            }}>
-                                <div style={{ fontSize: '5rem', marginBottom: '24px', animation: 'bounce 2s infinite' }}>🏆</div>
-                                <h2 style={{
-                                    color: '#FFD700',
-                                    fontSize: '2.5rem',
-                                    margin: '0 0 16px 0',
-                                    textShadow: '0 0 20px rgba(255, 215, 0, 0.5)'
-                                }}>
-                                    Congratulations!
-                                </h2>
-                                <p style={{ color: '#e0e0e0', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto' }}>
-                                    Anda telah menyelesaikan semua materi MAVi Class. Selamat menjadi MAVi Expert!
-                                </p>
-                            </div>
-                        )}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                                                            {module.practice.tasks.map((task, i) => (
+                                                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#ddd' }}>
+                                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: module.color }}></div>
+                                                                    {task}
+                                                                </div>
+                                                            ))}
+                                                        </div>
 
-                        {/* Reset Progress Button */}
-                        <div style={{ marginTop: '60px', textAlign: 'center', marginBottom: '40px' }}>
-                            <button
-                                onClick={() => {
-                                    if (confirm('Reset semua progress? Tindakan ini tidak bisa dibatalkan.')) {
-                                        setCompletedLessons([]);
-                                    }
-                                }}
-                                style={{
-                                    padding: '12px 24px',
-                                    backgroundColor: 'transparent',
-                                    border: '1px solid rgba(255,255,255,0.1)',
-                                    borderRadius: '50px',
-                                    color: '#666',
-                                    cursor: 'pointer',
-                                    fontSize: '0.9rem',
-                                    fontWeight: '500',
-                                    transition: 'all 0.3s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                    e.currentTarget.style.borderColor = '#ff4444';
-                                    e.currentTarget.style.color = '#ff4444';
-                                    e.currentTarget.style.transform = 'translateY(-2px)';
-                                }}
-                                onMouseLeave={(e) => {
-                                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
-                                    e.currentTarget.style.color = '#666';
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                }}
-                            >
-                                Reset Progress
-                            </button>
-                        </div>
-                    </>
-                )}
-
-                {/* GLOSSARY TAB */}
-                {activeTab === 'glossary' && (
-                    <div style={{ animation: 'slideIn 0.4s ease-out' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-                            {glossaryTerms.map((item, idx) => (
-                                <div key={idx} style={{ padding: '24px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <div style={{ fontSize: '0.7rem', color: '#667eea', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px' }}>{item.category}</div>
-                                    <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff', marginBottom: '8px' }}>{item.term}</div>
-                                    <p style={{ margin: 0, color: '#aaa', fontSize: '0.9rem', lineHeight: '1.6' }}>{item.definition}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* BADGES TAB */}
-                {activeTab === 'badges' && (
-                    <div style={{ animation: 'slideIn 0.4s ease-out' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                            {badgesDefinitions.map((badge, idx) => {
-                                const isEarned = earnedBadges.includes(badge.id);
-                                return (
-                                    <div key={idx} style={{
-                                        padding: '30px',
-                                        background: isEarned ? `${badge.color}10` : 'rgba(255,255,255,0.02)',
-                                        borderRadius: '24px',
-                                        border: `1px solid ${isEarned ? `${badge.color}40` : 'rgba(255,255,255,0.05)'}`,
-                                        textAlign: 'center',
-                                        position: 'relative',
-                                        opacity: isEarned ? 1 : 0.6,
-                                        transition: 'all 0.3s ease'
-                                    }}>
-                                        <div style={{ fontSize: '3rem', marginBottom: '16px', filter: isEarned ? 'none' : 'grayscale(100%)' }}>{badge.icon}</div>
-                                        <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: isEarned ? badge.color : '#888', marginBottom: '8px' }}>{badge.name}</div>
-                                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#666' }}>{badge.description}</p>
-                                        {isEarned && (
-                                            <div style={{ position: 'absolute', top: '15px', right: '15px' }}>
-                                                <BadgeCheck size={20} color={badge.color} />
+                                                        <button
+                                                            onClick={() => navigate(module.practice.actionLink)}
+                                                            style={{
+                                                                padding: '14px 28px',
+                                                                backgroundColor: '#fff',
+                                                                border: 'none',
+                                                                borderRadius: '12px',
+                                                                color: '#000',
+                                                                cursor: 'pointer',
+                                                                fontWeight: '700',
+                                                                fontSize: '1rem',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '12px',
+                                                                transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                                                                boxShadow: '0 10px 25px -5px rgba(255,255,255,0.2)'
+                                                            }}
+                                                            onMouseEnter={(e) => {
+                                                                e.currentTarget.style.transform = 'scale(1.05) translateY(-2px)';
+                                                                e.currentTarget.style.boxShadow = '0 15px 30px -5px rgba(255,255,255,0.3)';
+                                                            }}
+                                                            onMouseLeave={(e) => {
+                                                                e.currentTarget.style.transform = 'scale(1) translateY(0)';
+                                                                e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(255,255,255,0.2)';
+                                                            }}
+                                                        >
+                                                            {module.practice.actionLabel}
+                                                            <ChevronRight size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* ANALYTICS TAB */}
-                {activeTab === 'analytics' && (
-                    <div style={{ animation: 'slideIn 0.4s ease-out' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
-                            {/* Overall Progress */}
-                            <div style={{ padding: '30px', background: 'rgba(255,255,255,0.03)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <Target size={20} color="#667eea" /> Progress Summary
-                                </h3>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '30px', flexWrap: 'wrap' }}>
-                                    <div style={{ position: 'relative', width: '120px', height: '120px' }}>
-                                        <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
-                                            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#667eea" strokeWidth="3" strokeDasharray={`${getProgressPercentage()}, 100`} strokeLinecap="round" />
-                                        </svg>
-                                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                                            <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fff' }}>{getProgressPercentage()}%</div>
-                                            <div style={{ fontSize: '0.6rem', color: '#666', textTransform: 'uppercase' }}>Done</div>
-                                        </div>
-                                    </div>
-                                    <div style={{ flex: 1, minWidth: '200px' }}>
-                                        <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: '#888', fontSize: '0.9rem' }}>Lessons Completed</span>
-                                            <span style={{ color: '#fff', fontWeight: 'bold' }}>{getCompletedCount()} / {getTotalLessons()}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span style={{ color: '#888', fontSize: '0.9rem' }}>Modules Mastered</span>
-                                            <span style={{ color: '#fff', fontWeight: 'bold' }}>{modules.filter(m => getModuleProgress(m.id) === 100).length} / {modules.length}</span>
-                                        </div>
-                                    </div>
-                                </div>
+                                )}
                             </div>
+                        ))}
+                    </div>
 
-                            {/* Quiz Performance */}
-                            <div style={{ padding: '30px', background: 'rgba(255,255,255,0.03)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <FileText size={20} color="#FF9800" /> Quiz Scores
-                                </h3>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '10px' }} className="custom-scrollbar">
-                                    {Object.entries(quizScores).map(([id, data]) => (
-                                        <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                            <span style={{ color: '#e0e0e0', fontSize: '0.9rem', fontWeight: '500' }}>{modules.find(m => m.id === id)?.title.split(' ').slice(1).join(' ') || id}</span>
-                                            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                                <span style={{ color: data.passed ? '#4CAF50' : '#f44336', fontWeight: 'bold', padding: '2px 8px', backgroundColor: data.passed ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)', borderRadius: '6px' }}>{data.score}%</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {Object.keys(quizScores).length === 0 && (
-                                        <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '30px' }}>
-                                            Belum ada quiz yang diselesaikan
+                    {/* Completion Badge */}
+                    {getProgressPercentage() === 100 && (
+                        <div style={{
+                            marginTop: '60px',
+                            padding: '40px',
+                            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 215, 0, 0.05) 100%)',
+                            backdropFilter: 'blur(20px)',
+                            borderRadius: '24px',
+                            border: '1px solid rgba(255, 215, 0, 0.3)',
+                            textAlign: 'center',
+                            boxShadow: '0 20px 50px -20px rgba(255, 215, 0, 0.3)'
+                        }}>
+                            <div style={{ fontSize: '5rem', marginBottom: '24px', animation: 'bounce 2s infinite' }}>🏆</div>
+                            <h2 style={{
+                                color: '#FFD700',
+                                fontSize: '2.5rem',
+                                margin: '0 0 16px 0',
+                                textShadow: '0 0 20px rgba(255, 215, 0, 0.5)'
+                            }}>
+                                Congratulations!
+                            </h2>
+                            <p style={{ color: '#e0e0e0', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto' }}>
+                                Anda telah menyelesaikan semua materi MAVi Class. Selamat menjadi MAVi Expert!
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Reset Progress Button */}
+                    <div style={{ marginTop: '60px', textAlign: 'center', marginBottom: '40px' }}>
+                        <button
+                            onClick={() => {
+                                if (confirm('Reset semua progress? Tindakan ini tidak bisa dibatalkan.')) {
+                                    setCompletedLessons([]);
+                                }
+                            }}
+                            style={{
+                                padding: '12px 24px',
+                                backgroundColor: 'transparent',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '50px',
+                                color: '#666',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem',
+                                fontWeight: '500',
+                                transition: 'all 0.3s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = '#ff4444';
+                                e.currentTarget.style.color = '#ff4444';
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)';
+                                e.currentTarget.style.color = '#666';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                            }}
+                        >
+                            Reset Progress
+                        </button>
+                    </div>
+                </>
+            )}
+
+            {/* GLOSSARY TAB */}
+            {activeTab === 'glossary' && (
+                <div style={{ animation: 'slideIn 0.4s ease-out' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                        {glossaryTerms.map((item, idx) => (
+                            <div key={idx} style={{ padding: '24px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ fontSize: '0.7rem', color: '#667eea', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px' }}>{item.category}</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fff', marginBottom: '8px' }}>{item.term}</div>
+                                <p style={{ margin: 0, color: '#aaa', fontSize: '0.9rem', lineHeight: '1.6' }}>{item.definition}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* BADGES TAB */}
+            {activeTab === 'badges' && (
+                <div style={{ animation: 'slideIn 0.4s ease-out' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                        {badgesDefinitions.map((badge, idx) => {
+                            const isEarned = earnedBadges.includes(badge.id);
+                            return (
+                                <div key={idx} style={{
+                                    padding: '30px',
+                                    background: isEarned ? `${badge.color}10` : 'rgba(255,255,255,0.02)',
+                                    borderRadius: '24px',
+                                    border: `1px solid ${isEarned ? `${badge.color}40` : 'rgba(255,255,255,0.05)'}`,
+                                    textAlign: 'center',
+                                    position: 'relative',
+                                    opacity: isEarned ? 1 : 0.6,
+                                    transition: 'all 0.3s ease'
+                                }}>
+                                    <div style={{ fontSize: '3rem', marginBottom: '16px', filter: isEarned ? 'none' : 'grayscale(100%)' }}>{badge.icon}</div>
+                                    <div style={{ fontWeight: 'bold', fontSize: '1.1rem', color: isEarned ? badge.color : '#888', marginBottom: '8px' }}>{badge.name}</div>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#666' }}>{badge.description}</p>
+                                    {isEarned && (
+                                        <div style={{ position: 'absolute', top: '15px', right: '15px' }}>
+                                            <BadgeCheck size={20} color={badge.color} />
                                         </div>
                                     )}
                                 </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* ANALYTICS TAB */}
+            {activeTab === 'analytics' && (
+                <div style={{ animation: 'slideIn 0.4s ease-out' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
+                        {/* Overall Progress */}
+                        <div style={{ padding: '30px', background: 'rgba(255,255,255,0.03)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Target size={20} color="#667eea" /> Progress Summary
+                            </h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '30px', flexWrap: 'wrap' }}>
+                                <div style={{ position: 'relative', width: '120px', height: '120px' }}>
+                                    <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3" />
+                                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#667eea" strokeWidth="3" strokeDasharray={`${getProgressPercentage()}, 100`} strokeLinecap="round" />
+                                    </svg>
+                                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#fff' }}>{getProgressPercentage()}%</div>
+                                        <div style={{ fontSize: '0.6rem', color: '#666', textTransform: 'uppercase' }}>Done</div>
+                                    </div>
+                                </div>
+                                <div style={{ flex: 1, minWidth: '200px' }}>
+                                    <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#888', fontSize: '0.9rem' }}>Lessons Completed</span>
+                                        <span style={{ color: '#fff', fontWeight: 'bold' }}>{getCompletedCount()} / {getTotalLessons()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#888', fontSize: '0.9rem' }}>Modules Mastered</span>
+                                        <span style={{ color: '#fff', fontWeight: 'bold' }}>{modules.filter(m => getModuleProgress(m.id) === 100).length} / {modules.length}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
 
-                {/* SYLLABUS TAB */}
-                {activeTab === 'syllabus' && (
-                    <div style={{ animation: 'slideIn 0.4s ease-out' }}>
-                        <div style={{ padding: '40px', background: 'rgba(255,255,255,0.03)', borderRadius: '32px', border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '30px', marginBottom: '40px' }}>
-                                <div style={{ flex: 1, minWidth: '300px' }}>
-                                    <h2 style={{ fontSize: '2.2rem', margin: '0 0 16px 0', color: '#fff', fontWeight: '800' }}>{syllabusData.title}</h2>
-                                    <p style={{ color: '#aaa', lineHeight: '1.8', margin: 0, fontSize: '1.1rem' }}>{syllabusData.description}</p>
-                                </div>
-                                <div style={{ padding: '24px', background: 'rgba(102, 126, 234, 0.1)', borderRadius: '20px', border: '1px solid rgba(102, 126, 234, 0.2)', minWidth: '250px' }}>
-                                    <div style={{ fontSize: '0.75rem', color: '#667eea', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px' }}>Main Instructor</div>
-                                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                                        <div style={{ width: '50px', height: '50px', borderRadius: '15px', backgroundColor: '#667eea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem' }}>🤖</div>
-                                        <div>
-                                            <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem' }}>{syllabusData.instructor.name}</div>
-                                            <div style={{ color: '#888', fontSize: '0.85rem' }}>{syllabusData.instructor.role}</div>
+                        {/* Quiz Performance */}
+                        <div style={{ padding: '30px', background: 'rgba(255,255,255,0.03)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <h3 style={{ margin: '0 0 20px 0', fontSize: '1.2rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <FileText size={20} color="#FF9800" /> Quiz Scores
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '10px' }} className="custom-scrollbar">
+                                {Object.entries(quizScores).map(([id, data]) => (
+                                    <div key={id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <span style={{ color: '#e0e0e0', fontSize: '0.9rem', fontWeight: '500' }}>{modules.find(m => m.id === id)?.title.split(' ').slice(1).join(' ') || id}</span>
+                                        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                            <span style={{ color: data.passed ? '#4CAF50' : '#f44336', fontWeight: 'bold', padding: '2px 8px', backgroundColor: data.passed ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)', borderRadius: '6px' }}>{data.score}%</span>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '40px' }}>
-                                <div>
-                                    <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <CheckCircle size={20} color="#4CAF50" /> Learning Outcomes
-                                    </h4>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {syllabusData.outcomes.map((item, i) => (
-                                            <div key={i} style={{ display: 'flex', gap: '12px', color: '#aaa', fontSize: '0.95rem' }}>
-                                                <div style={{ color: '#4CAF50', fontWeight: 'bold' }}>•</div>
-                                                {item}
-                                            </div>
-                                        ))}
+                                ))}
+                                {Object.keys(quizScores).length === 0 && (
+                                    <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '30px' }}>
+                                        Belum ada quiz yang diselesaikan
                                     </div>
-                                </div>
-                                <div>
-                                    <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                        <Info size={20} color="#FF9800" /> Learning Resources
-                                    </h4>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {syllabusData.resources.map((res, i) => (
-                                            <a key={i} href={res.url} target="_blank" rel="noopener noreferrer" style={{ padding: '15px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', color: '#fff', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.2s ease' }}>
-                                                {res.type === 'PDF' ? <FileText size={20} color="#f44336" /> : <ExternalLink size={20} color="#667eea" />}
-                                                <div>
-                                                    <div style={{ fontWeight: '600' }}>{res.title}</div>
-                                                    <div style={{ fontSize: '0.75rem', color: '#666' }}>{res.type} Resource</div>
-                                                </div>
-                                            </a>
-                                        ))}
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SYLLABUS TAB */}
+            {activeTab === 'syllabus' && (
+                <div style={{ animation: 'slideIn 0.4s ease-out' }}>
+                    <div style={{ padding: '40px', background: 'rgba(255,255,255,0.03)', borderRadius: '32px', border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '30px', marginBottom: '40px' }}>
+                            <div style={{ flex: 1, minWidth: '300px' }}>
+                                <h2 style={{ fontSize: '2.2rem', margin: '0 0 16px 0', color: '#fff', fontWeight: '800' }}>{syllabusData.title}</h2>
+                                <p style={{ color: '#aaa', lineHeight: '1.8', margin: 0, fontSize: '1.1rem' }}>{syllabusData.description}</p>
+                            </div>
+                            <div style={{ padding: '24px', background: 'rgba(102, 126, 234, 0.1)', borderRadius: '20px', border: '1px solid rgba(102, 126, 234, 0.2)', minWidth: '250px' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#667eea', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px' }}>Main Instructor</div>
+                                <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                                    <div style={{ width: '50px', height: '50px', borderRadius: '15px', backgroundColor: '#667eea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem' }}>🤖</div>
+                                    <div>
+                                        <div style={{ color: '#fff', fontWeight: 'bold', fontSize: '1.1rem' }}>{syllabusData.instructor.name}</div>
+                                        <div style={{ color: '#888', fontSize: '0.85rem' }}>{syllabusData.instructor.role}</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                )}
 
-                <style>{`
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '40px' }}>
+                            <div>
+                                <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <CheckCircle size={20} color="#4CAF50" /> Learning Outcomes
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {syllabusData.outcomes.map((item, i) => (
+                                        <div key={i} style={{ display: 'flex', gap: '12px', color: '#aaa', fontSize: '0.95rem' }}>
+                                            <div style={{ color: '#4CAF50', fontWeight: 'bold' }}>•</div>
+                                            {item}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style={{ color: '#fff', fontSize: '1.1rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <Info size={20} color="#FF9800" /> Learning Resources
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {syllabusData.resources.map((res, i) => (
+                                        <a key={i} href={res.url} target="_blank" rel="noopener noreferrer" style={{ padding: '15px 20px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', color: '#fff', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.2s ease' }}>
+                                            {res.type === 'PDF' ? <FileText size={20} color="#f44336" /> : <ExternalLink size={20} color="#667eea" />}
+                                            <div>
+                                                <div style={{ fontWeight: '600' }}>{res.title}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#666' }}>{res.type} Resource</div>
+                                            </div>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ==================== SCREEN BOARD MODAL (TV / WHITEBOARD STYLE) ==================== */}
+            {screenBoard && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    backgroundColor: 'rgba(0,0,0,0.92)',
+                    backdropFilter: 'blur(15px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 2000,
+                    padding: 0,
+                    animation: 'slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+                }}>
+                    <div style={{
+                        width: '100vw',
+                        height: '100vh',
+                        backgroundColor: '#000',
+                        borderRadius: 0,
+                        // TV Bezel Style - flush to edges
+                        border: '8px solid #1a1a1a',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflow: 'hidden',
+                        boxShadow: 'inset 0 0 100px rgba(0,0,0,0.5)',
+                        position: 'relative'
+                    }}>
+                        {/* Modal Header (Built-in Display Bar) */}
+                        <div style={{
+                            padding: '12px 24px',
+                            borderBottom: '1px solid #222',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            background: 'linear-gradient(to bottom, #1a1a1a, #111)',
+                            minHeight: '60px'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                {/* LED Status Light */}
+                                <div style={{
+                                    width: '8px',
+                                    height: '8px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#4CAF50',
+                                    boxShadow: '0 0 8px #4CAF50',
+                                    marginRight: '5px'
+                                }} />
+
+                                <div style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '6px',
+                                    backgroundColor: 'rgba(255,255,255,0.05)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}>
+                                    {screenBoard.type === 'video' ? <Youtube size={16} color="#ff0000" /> : <FileText size={16} color="#0078d4" />}
+                                </div>
+                                <div>
+                                    <h2 style={{ fontSize: '1rem', margin: 0, color: '#fff', fontWeight: '600', letterSpacing: '0.5px' }}>
+                                        {screenBoard.title || 'MAVi Vision Pro'}
+                                    </h2>
+                                    <div style={{ fontSize: '0.65rem', color: '#555', marginTop: '2px', fontFamily: 'monospace', display: 'flex', gap: '10px' }}>
+                                        <span>ID: {screenBoard.id || 'N/A'}</span>
+                                        <span style={{ opacity: 0.6 }}>TYPE: {screenBoard.type.toUpperCase()}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                {/* Subtle URL Breadcrumb */}
+                                <div style={{
+                                    fontSize: '0.7rem',
+                                    color: '#333',
+                                    backgroundColor: '#050505',
+                                    padding: '4px 12px',
+                                    borderRadius: '20px',
+                                    border: '1px solid #151515',
+                                    maxWidth: '400px',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis'
+                                }}>
+                                    {screenBoard.url}
+                                </div>
+
+                                <button
+                                    onClick={() => setScreenBoard(null)}
+                                    style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '8px',
+                                        border: '1px solid #333',
+                                        backgroundColor: '#111',
+                                        color: '#888',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.backgroundColor = '#cc0000';
+                                        e.currentTarget.style.color = '#fff';
+                                        e.currentTarget.style.borderColor = '#ff0000';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = '#111';
+                                        e.currentTarget.style.color = '#888';
+                                        e.currentTarget.style.borderColor = '#333';
+                                    }}
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Content (Digital Display Area) */}
+                        <div style={{ flex: 1, backgroundColor: '#000', position: 'relative' }}>
+                            {screenBoard.type === 'video' ? (
+                                <iframe
+                                    width="100%"
+                                    height="100%"
+                                    src={(() => {
+                                        const url = screenBoard.url || '';
+                                        if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                                            const videoId = url.includes('v=')
+                                                ? url.split('v=')[1]?.split('&')[0]
+                                                : url.includes('youtu.be/')
+                                                    ? url.split('/').pop()?.split('?')[0]
+                                                    : url.split('/embed/')[1]?.split('?')[0];
+                                            return `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0`;
+                                        }
+                                        return url;
+                                    })()}
+                                    title="MAVi Video Player"
+                                    frameBorder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    allowFullScreen
+                                    style={{ border: 'none' }}
+                                ></iframe>
+                            ) : (
+                                <iframe
+                                    src={screenBoard.url}
+                                    width="100%"
+                                    height="100%"
+                                    style={{ border: 'none', filter: 'invert(0)' }}
+                                    title="MAVi Document Viewer"
+                                ></iframe>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <style>{`
                 @keyframes slideIn {
                     from { opacity: 0; transform: translateY(-10px); }
                     to { opacity: 1; transform: translateY(0); }
@@ -2769,252 +2072,257 @@ JAWABAN:`;
                 }
             `}</style>
 
-                {/* AI Sensei Floating Button */}
-                <div
-                    onClick={() => setIsChatOpen(!isChatOpen)}
-                    style={{
-                        position: 'fixed',
-                        bottom: '30px',
-                        right: '90px',
-                        width: '74px',
-                        height: '74px',
-                        borderRadius: '50%',
-                        background: 'rgba(255, 255, 255, 0.05)',
+            {/* AI Sensei Floating Button */}
+            <div
+                onClick={() => setIsChatOpen(!isChatOpen)}
+                style={{
+                    position: 'fixed',
+                    bottom: '30px',
+                    right: '90px',
+                    width: '74px',
+                    height: '74px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 0 15px rgba(102, 126, 234, 0.3)',
+                    zIndex: 1000,
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    animation: isChatOpen ? 'none' : 'bounce 3s ease-in-out infinite'
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.1) translateY(-5px)';
+                    e.currentTarget.style.boxShadow = '0 12px 40px rgba(102, 126, 234, 0.5)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1) translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
+                }}
+                title="MAVi Sensei 2.0 - AI Assistant"
+            >
+                {isChatOpen ? (
+                    <X size={28} color="#fff" />
+                ) : (
+                    <div style={{ position: 'relative' }}>
+                        <SenseiAvatar size={50} animated={!isChatOpen} />
+                        {!isChatOpen && (
+                            <span style={{
+                                position: 'absolute',
+                                top: '0',
+                                right: '0',
+                                width: '14px',
+                                height: '14px',
+                                borderRadius: '50%',
+                                backgroundColor: '#4CAF50',
+                                border: '2px solid #0a0a0a',
+                                boxShadow: '0 0 10px #4CAF50'
+                            }} />
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* AI Sensei Chat Panel */}
+            {isChatOpen && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '120px',
+                    right: '90px',
+                    width: '420px',
+                    height: '700px',
+                    maxHeight: '80vh',
+                    background: 'rgba(20, 20, 30, 0.95)',
+                    backdropFilter: 'blur(20px)',
+                    borderRadius: '24px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    zIndex: 999,
+                    animation: 'slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+                    overflow: 'hidden'
+                }}>
+                    {/* Chat Header */}
+                    <div style={{
+                        padding: '20px 24px',
+                        background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%)',
                         backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 0 15px rgba(102, 126, 234, 0.3)',
-                        zIndex: 1000,
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        animation: isChatOpen ? 'none' : 'bounce 3s ease-in-out infinite'
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.1) translateY(-5px)';
-                        e.currentTarget.style.boxShadow = '0 12px 40px rgba(102, 126, 234, 0.5)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1) translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
-                    }}
-                    title="MAVi Sensei 2.0 - AI Assistant"
-                >
-                    {isChatOpen ? (
-                        <X size={28} color="#fff" />
-                    ) : (
-                        <div style={{ position: 'relative' }}>
-                            <SenseiAvatar size={50} animated={!isChatOpen} />
-                            {!isChatOpen && (
-                                <span style={{
-                                    position: 'absolute',
-                                    top: '0',
-                                    right: '0',
-                                    width: '14px',
-                                    height: '14px',
-                                    borderRadius: '50%',
-                                    backgroundColor: '#4CAF50',
-                                    border: '2px solid #0a0a0a',
-                                    boxShadow: '0 0 10px #4CAF50'
-                                }} />
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {/* AI Sensei Chat Panel */}
-                {isChatOpen && (
-                    <div style={{
-                        position: 'fixed',
-                        bottom: '120px',
-                        right: '90px',
-                        width: '420px',
-                        height: '700px',
-                        maxHeight: '80vh',
-                        background: 'rgba(20, 20, 30, 0.95)',
-                        backdropFilter: 'blur(20px)',
-                        borderRadius: '24px',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        zIndex: 999,
-                        animation: 'slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-                        overflow: 'hidden'
+                        justifyContent: 'space-between',
+                        borderBottom: '1px solid rgba(255,255,255,0.1)'
                     }}>
-                        {/* Chat Header */}
-                        <div style={{
-                            padding: '20px 24px',
-                            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%)',
-                            backdropFilter: 'blur(10px)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            borderBottom: '1px solid rgba(255,255,255,0.1)'
-                        }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <SenseiAvatar size={40} />
-                                <div>
-                                    <div style={{ fontWeight: 'bold', color: '#fff', fontSize: '1rem' }}>MAVi Sensei 2.0</div>
-                                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#4CAF50' }} />
-                                        {t('sensei.onlineStatus')}
-                                    </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <SenseiAvatar size={40} />
+                            <div>
+                                <div style={{ fontWeight: 'bold', color: '#fff', fontSize: '1rem' }}>MAVi Sensei 2.0</div>
+                                <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#4CAF50' }} />
+                                    {t('sensei.onlineStatus')}
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setIsMuted(prev => !prev);
-                                }}
-                                style={{
-                                    background: 'rgba(255,255,255,0.1)',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    padding: '8px',
-                                    color: '#fff',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    transition: 'all 0.2s ease',
-                                    outline: 'none'
-                                }}
-                                title={isMuted ? t('sensei.unmute') : t('sensei.mute')}
-                            >
-                                {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                            </button>
                         </div>
-
-                        {/* Chat Messages */}
-                        <div
-                            className="custom-scrollbar"
-                            style={{
-                                flex: 1,
-                                minHeight: 0,
-                                padding: '16px',
-                                overflowY: 'auto',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '12px'
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsMuted(prev => !prev);
                             }}
+                            style={{
+                                background: 'rgba(255,255,255,0.1)',
+                                border: 'none',
+                                borderRadius: '8px',
+                                padding: '8px',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s ease',
+                                outline: 'none'
+                            }}
+                            title={isMuted ? t('sensei.unmute') : t('sensei.mute')}
                         >
-                            {chatMessages.map((msg, idx) => (
-                                <div
-                                    key={idx}
-                                    style={{
-                                        display: 'flex',
-                                        gap: '8px',
-                                        flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
-                                        alignItems: 'flex-start'
-                                    }}
-                                >
-                                    {msg.role === 'assistant' ? (
-                                        <SenseiAvatar size={28} />
-                                    ) : (
-                                        <div style={{
-                                            width: '28px',
-                                            height: '28px',
-                                            borderRadius: '50%',
-                                            backgroundColor: '#2196F3',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            flexShrink: 0
-                                        }}>
-                                            <User size={14} color="#fff" />
-                                        </div>
-                                    )}
-                                    <div style={{
-                                        maxWidth: '75%',
-                                        padding: '10px 14px',
-                                        backgroundColor: msg.role === 'user' ? '#2196F3' : '#1a1a1a',
-                                        borderRadius: msg.role === 'user' ? '12px 12px 0 12px' : '12px 12px 12px 0',
-                                        color: '#fff',
-                                        fontSize: '0.9rem',
-                                        lineHeight: '1.5',
-                                        whiteSpace: 'pre-wrap',
-                                        border: msg.role === 'user' ? 'none' : '1px solid #333'
-                                    }}>
-                                        {typeof msg.content === 'string' ? (
-                                            msg.content.split('**').map((part, i) =>
-                                                i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-                                            )
-                                        ) : (
-                                            msg.content
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                            {isLoading && (
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                        </button>
+                    </div>
+
+                    {/* Chat Messages */}
+                    <div
+                        className="custom-scrollbar"
+                        style={{
+                            flex: 1,
+                            minHeight: 0,
+                            padding: '16px',
+                            overflowY: 'auto',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px'
+                        }}
+                    >
+                        {chatMessages.map((msg, idx) => (
+                            <div
+                                key={idx}
+                                style={{
+                                    display: 'flex',
+                                    gap: '8px',
+                                    flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                                    alignItems: 'flex-start'
+                                }}
+                            >
+                                {msg.role === 'assistant' ? (
                                     <SenseiAvatar size={28} />
+                                ) : (
                                     <div style={{
-                                        padding: '10px 14px',
-                                        backgroundColor: '#1a1a1a',
-                                        borderRadius: '12px',
-                                        border: '1px solid #333',
+                                        width: '28px',
+                                        height: '28px',
+                                        borderRadius: '50%',
+                                        backgroundColor: '#2196F3',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '8px'
+                                        justifyContent: 'center',
+                                        flexShrink: 0
                                     }}>
-                                        <Loader size={16} color="#667eea" style={{ animation: 'spin 1s linear infinite' }} />
-                                        <span style={{ color: '#888', fontSize: '0.85rem' }}>{t('sensei.thinking')}</span>
+                                        <User size={14} color="#fff" />
                                     </div>
-                                </div>
-                            )}
-                            <div style={{ height: '20px', flexShrink: 0 }} />
-                            <div ref={chatEndRef} />
-                        </div>
-
-                        {/* Chat Input */}
-                        <div style={{
-                            padding: '12px 16px',
-                            borderTop: '1px solid #333',
-                            display: 'flex',
-                            gap: '8px'
-                        }}>
-                            <input
-                                type="text"
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && sendMessageToSensei()}
-                                placeholder={t('sensei.placeholder')}
-                                style={{
-                                    flex: 1,
+                                )}
+                                <div style={{
+                                    maxWidth: '75%',
                                     padding: '10px 14px',
-                                    backgroundColor: '#1a1a1a',
-                                    border: '1px solid #333',
-                                    borderRadius: '8px',
+                                    backgroundColor: msg.role === 'user' ? '#2196F3' : '#1a1a1a',
+                                    borderRadius: msg.role === 'user' ? '12px 12px 0 12px' : '12px 12px 12px 0',
                                     color: '#fff',
                                     fontSize: '0.9rem',
-                                    outline: 'none'
-                                }}
-                            />
-                            <button
-                                onClick={sendMessageToSensei}
-                                disabled={isLoading || !chatInput.trim()}
-                                style={{
+                                    lineHeight: '1.5',
+                                    whiteSpace: 'pre-wrap',
+                                    border: msg.role === 'user' ? 'none' : '1px solid #333'
+                                }}>
+                                    {typeof msg.content === 'string' ? (
+                                        msg.content.split('**').map((part, i) =>
+                                            i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+                                        )
+                                    ) : (
+                                        msg.content
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {isLoading && (
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <SenseiAvatar size={28} />
+                                <div style={{
                                     padding: '10px 14px',
-                                    backgroundColor: chatInput.trim() && !isLoading ? '#667eea' : '#333',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    cursor: chatInput.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                                    backgroundColor: '#1a1a1a',
+                                    borderRadius: '12px',
+                                    border: '1px solid #333',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'center',
-                                    transition: 'background-color 0.2s ease'
-                                }}
-                            >
-                                <Send size={18} color="#fff" />
-                            </button>
-                        </div>
+                                    gap: '8px'
+                                }}>
+                                    <Loader size={16} color="#667eea" style={{ animation: 'spin 1s linear infinite' }} />
+                                    <span style={{ color: '#888', fontSize: '0.85rem' }}>{t('sensei.thinking')}</span>
+                                </div>
+                            </div>
+                        )}
+                        <div style={{ height: '20px', flexShrink: 0 }} />
+                        <div ref={chatEndRef} />
                     </div>
-                )
-                }
-            </div>
+
+                    {/* Chat Input */}
+                    <div style={{
+                        padding: '12px 16px',
+                        borderTop: '1px solid #333',
+                        display: 'flex',
+                        gap: '8px'
+                    }}>
+                        <input
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && sendMessageToSensei()}
+                            placeholder={t('sensei.placeholder')}
+                            style={{
+                                flex: 1,
+                                padding: '10px 14px',
+                                backgroundColor: '#1a1a1a',
+                                border: '1px solid #333',
+                                borderRadius: '8px',
+                                color: '#fff',
+                                fontSize: '0.9rem',
+                                outline: 'none'
+                            }}
+                        />
+                        <button
+                            onClick={sendMessageToSensei}
+                            disabled={isLoading || !chatInput.trim()}
+                            style={{
+                                padding: '10px 14px',
+                                backgroundColor: chatInput.trim() && !isLoading ? '#667eea' : '#333',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: chatInput.trim() && !isLoading ? 'pointer' : 'not-allowed',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'background-color 0.2s ease'
+                            }}
+                        >
+                            <Send size={18} color="#fff" />
+                        </button>
+                    </div>
+                </div>
+            )
+            }
+            {/* Certificate Modal */}
+            <CertificateModal
+                isOpen={isCertificateOpen}
+                onClose={() => setIsCertificateOpen(false)}
+                {...certificateData}
+            />
         </div>
     );
 };

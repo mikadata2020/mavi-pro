@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler, Undo, Redo, Copy, RotateCw, Upload, Download, FileJson, Zap, ExternalLink, Sparkles } from 'lucide-react';
+import { ArrowLeft, Save, Play, Pause, Square, Layers, Settings, Eye, Plus, Trash2, Camera, Box, Video, Activity, Database, PlayCircle, Info, Check, Ruler, Undo, Redo, Copy, RotateCw, Upload, Download, FileJson, Zap, ExternalLink, Sparkles, FlaskConical, CheckCircle, Trophy } from 'lucide-react';
 import ObjectTracking from '../ObjectTracking'; // Reuse existing component for video + detection
 import RuleEditor from './RuleEditor';
 import StateDiagram from './StateDiagram';
@@ -19,7 +19,7 @@ import { MODEL_TEMPLATES } from '../../utils/studio/ModelTemplates';
 import tmDetector from '../../utils/teachableMachineDetector';
 import roboflowDetector from '../../utils/roboflowDetector';
 
-const ModelBuilder = ({ model, onClose, onSave }) => {
+const ModelBuilder = ({ model, onClose, onSave, isLaboratory, challenge, videoSrc: initialVideoSrc }) => {
     const [currentModel, setCurrentModel, undoModel, redoModel, canUndoModel, canRedoModel] = useHistory({
         ...model,
         states: model.statesList || [{ id: 's_start', name: 'Start' }],
@@ -30,7 +30,7 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
 
     // RESTORED STATES
     const [activeTab, setActiveTab] = useState('rules'); // rules, states, test
-    const [videoSrc, setVideoSrc] = useState(null);
+    const [videoSrc, setVideoSrc] = useState(initialVideoSrc || null);
     const [isMaximized, setIsMaximized] = useState(false); // Maximize editor area
     const [leftPanelWidth, setLeftPanelWidth] = useState(60); // Percentage
     const [isResizing, setIsResizing] = useState(false);
@@ -43,12 +43,21 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [recordedChunks, setRecordedChunks] = useState([]);
 
-    // VISUALIZATION TOGGLES
     const [visOptions, setVisOptions] = useState({
         skeleton: true,
         rules: true,
         roi: true
     });
+
+    // LABORATORY STATE
+    const [labTasks, setLabTasks] = useState(challenge?.tasks || []);
+    const [showChallengePanel, setShowChallengePanel] = useState(true);
+
+    const toggleTask = (taskId) => {
+        setLabTasks(prev => prev.map(t =>
+            t.id === taskId ? { ...t, completed: !t.completed } : t
+        ));
+    };
     const mediaRecorderRef = useRef(null);
     const ipCameraRef = useRef(null);
     const [isDrawingROI, setIsDrawingROI] = useState(false);
@@ -3913,6 +3922,112 @@ const ModelBuilder = ({ model, onClose, onSave }) => {
                                 </div>
                             </div>
                         </div>
+                    )}
+
+                    {/* LABORATORY OVERLAYS */}
+                    {isLaboratory && showChallengePanel && (
+                        <div style={{
+                            position: 'fixed',
+                            right: '24px',
+                            top: '80px',
+                            width: '320px',
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                            backdropFilter: 'blur(12px)',
+                            borderRadius: '1.5rem',
+                            border: '1px solid rgba(139, 92, 246, 0.5)',
+                            padding: '1.5rem',
+                            zIndex: 2001,
+                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '1rem',
+                            animation: 'slideIn 0.3s ease-out'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <FlaskConical size={18} /> Tantangan: {challenge?.name}
+                                </h3>
+                                <button onClick={() => setShowChallengePanel(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>✕</button>
+                            </div>
+
+                            <p style={{ fontSize: '0.85rem', color: '#cbd5e1', margin: 0 }}>{challenge?.target}</p>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                                {labTasks.map(task => (
+                                    <div
+                                        key={task.id}
+                                        onClick={() => toggleTask(task.id)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'flex-start',
+                                            gap: '10px',
+                                            fontSize: '0.85rem',
+                                            color: task.completed ? '#4ade80' : '#d1d5db',
+                                            cursor: 'pointer',
+                                            padding: '8px',
+                                            borderRadius: '8px',
+                                            backgroundColor: task.completed ? 'rgba(74, 222, 128, 0.1)' : 'rgba(255,255,255,0.05)',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        {task.completed ? <CheckCircle size={16} /> : <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #4b5563', flexShrink: 0 }} />}
+                                        <span>{task.text}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button
+                                style={{
+                                    marginTop: '1rem',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.75rem',
+                                    border: 'none',
+                                    background: labTasks.every(t => t.completed) ? 'linear-gradient(to right, #10b981, #059669)' : '#334155',
+                                    color: 'white',
+                                    fontWeight: '600',
+                                    cursor: labTasks.every(t => t.completed) ? 'pointer' : 'not-allowed',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    transition: 'all 0.3s'
+                                }}
+                                disabled={!labTasks.every(t => t.completed)}
+                                onClick={() => {
+                                    alert("Selamat! Tantangan berhasil diselesaikan! MAVi Master Badge diperoleh!");
+                                    onClose();
+                                }}
+                            >
+                                Submit Solution <Trophy size={16} />
+                            </button>
+                        </div>
+                    )}
+
+                    {isLaboratory && !showChallengePanel && (
+                        <button
+                            onClick={() => setShowChallengePanel(true)}
+                            style={{
+                                position: 'fixed',
+                                right: '24px',
+                                bottom: '24px',
+                                width: '56px',
+                                height: '56px',
+                                borderRadius: '50%',
+                                backgroundColor: '#8b5cf6',
+                                color: 'white',
+                                border: 'none',
+                                cursor: 'pointer',
+                                zIndex: 2001,
+                                boxShadow: '0 10px 15px -3px rgba(139, 92, 246, 0.5)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                animation: 'bounce 2s infinite'
+                            }}
+                            title="Buka Panel Tantangan"
+                        >
+                            <FlaskConical size={24} />
+                        </button>
                     )}
                 </div>
             </div>
