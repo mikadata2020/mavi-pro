@@ -363,247 +363,249 @@ function AppContent() {
   const isDashboard = location.pathname === '/';
 
   return (
-    <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <CollaborationOverlay remoteCursors={remoteCursors} lastDrawingAction={lastDrawingAction} />
+    <LicenseGuard>
+      <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+        <CollaborationOverlay remoteCursors={remoteCursors} lastDrawingAction={lastDrawingAction} />
 
-      <BroadcastControls
-        isBroadcasting={isBroadcasting}
-        isMuted={isMuted}
-        onToggleMute={handleToggleMute}
-        chatMessages={chatMessages}
-        onSendMessage={handleSendMessage}
-        onStopBroadcast={handleStopBroadcast}
-        userName={user?.email || "Host"}
-        isRecording={isRecording}
-        onToggleRecording={handleToggleRecording}
-        isWebcamOn={isWebcamOn}
-        onToggleWebcam={handleToggleWebcam}
-        onTakeScreenshot={handleTakeScreenshot}
-        connectedPeers={connectedPeers}
-      />
-
-      <div style={{ display: 'none' }}>
-        <BroadcastManager
-          ref={broadcastManagerRef}
-          onRemoteInteraction={handleRemoteInteraction}
+        <BroadcastControls
           isBroadcasting={isBroadcasting}
-          setIsBroadcasting={setIsBroadcasting}
           isMuted={isMuted}
-          setIsMuted={setIsMuted}
+          onToggleMute={handleToggleMute}
           chatMessages={chatMessages}
-          setChatMessages={setChatMessages}
+          onSendMessage={handleSendMessage}
+          onStopBroadcast={handleStopBroadcast}
+          userName={user?.email || "Host"}
           isRecording={isRecording}
-          setIsRecording={setIsRecording}
+          onToggleRecording={handleToggleRecording}
           isWebcamOn={isWebcamOn}
-          setIsWebcamOn={setIsWebcamOn}
+          onToggleWebcam={handleToggleWebcam}
+          onTakeScreenshot={handleTakeScreenshot}
           connectedPeers={connectedPeers}
-          setConnectedPeers={setConnectedPeers}
         />
-      </div>
 
-      <button
-        className="sidebar-toggle"
-        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-        style={{
-          position: 'absolute',
-          right: sidebarCollapsed ? '10px' : '70px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-          color: 'var(--text-primary)',
-          borderRadius: '50%',
-          width: '30px',
-          height: '30px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          fontSize: '1.2rem',
-          zIndex: 1001,
-          transition: 'right 0.3s ease',
-          boxShadow: '-2px 0 8px rgba(0,0,0,0.3)'
-        }}
-        title={sidebarCollapsed ? 'Show Menu' : 'Hide Menu'}
-      >
-        {sidebarCollapsed ? '◀' : '▶'}
-      </button>
-
-      <div className="main-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-        {/* Persistent VideoWorkspace - hidden when not on dashboard */}
-        <div
-          className="workspace-area"
-          style={{
-            flex: 1,
-            display: isDashboard ? 'flex' : 'none',
-            flexDirection: 'column',
-            padding: '10px',
-            gap: '10px'
-          }}
-        >
-          <VideoWorkspace
-            measurements={measurements}
-            onUpdateMeasurements={setMeasurements}
-            videoSrc={videoSrc}
-            onVideoChange={setVideoSrc}
-            videoName={videoName}
-            onVideoNameChange={setVideoName}
-            currentProject={currentProject}
-            onNewProject={() => setShowNewProjectDialog(true)}
-            onOpenProject={() => setShowOpenProjectDialog(true)}
-            onExportProject={handleExportProject}
-            onImportProject={handleImportProject}
-            onLogout={handleLogout}
+        <div style={{ display: 'none' }}>
+          <BroadcastManager
+            ref={broadcastManagerRef}
+            onRemoteInteraction={handleRemoteInteraction}
+            isBroadcasting={isBroadcasting}
+            setIsBroadcasting={setIsBroadcasting}
+            isMuted={isMuted}
+            setIsMuted={setIsMuted}
+            chatMessages={chatMessages}
+            setChatMessages={setChatMessages}
+            isRecording={isRecording}
+            setIsRecording={setIsRecording}
+            isWebcamOn={isWebcamOn}
+            setIsWebcamOn={setIsWebcamOn}
+            connectedPeers={connectedPeers}
+            setConnectedPeers={setConnectedPeers}
           />
         </div>
 
-        {/* Other Views Rendered via Routes with Lazy Loading */}
-        <div style={{ flex: 1, display: isDashboard ? 'none' : 'block', overflow: 'hidden' }}>
-          <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
-              <Route path="/" element={null} /> {/* Handled by persistent div */}
-              <Route path="/analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AnalysisDashboard measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
-              <Route path="/rearrangement" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><ElementRearrangement measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} /></div>} />
-              <Route path="/cycle-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleTimeAnalysis /></div>} />
-              <Route path="/swcs" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardWorkCombinationSheet currentProject={currentProject} /></div>} />
-              <Route path="/aggregation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleAggregation measurements={measurements} /></div>} />
-              <Route path="/standard-time" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardTime measurements={measurements} /></div>} />
-              <Route path="/waste-elimination" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><WasteElimination measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
-              <Route path="/therblig" element={<div style={{ overflow: 'hidden', height: '100%' }}><TherbligAnalysis measurements={measurements} /></div>} />
-              <Route path="/statistical-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StatisticalAnalysis measurements={measurements} /></div>} />
-              <Route path="/mtm" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MTMCalculator /></div>} />
-              <Route path="/allowance" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AllowanceCalculator /></div>} />
-              <Route path="/best-worst" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><BestWorstCycle measurements={measurements} /></div>} />
-              <Route path="/yamazumi" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><YamazumiChart measurements={measurements} /></div>} />
-              <Route path="/multi-axial" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MultiAxialAnalysis /></div>} />
-              <Route path="/manual-creation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ManualCreation /></div>} />
-              <Route path="/spaghetti-chart" element={<div style={{ overflow: 'hidden', height: '100%' }}><SpaghettiChart currentProject={currentProject} projectMeasurements={measurements} /></div>} />
-              <Route path="/ml-data" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MachineLearningData videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
-              <Route path="/object-tracking" element={<div style={{ overflow: 'hidden', height: '100%' }}><ObjectTracking videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
-              <Route path="/predictive-maintenance" element={<div style={{ overflow: 'hidden', height: '100%' }}><PredictiveMaintenance measurements={measurements} /></div>} />
-              <Route path="/comparison" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><VideoComparison /></div>} />
-              <Route path="/mavi-class" element={<div style={{ overflow: 'hidden', height: '100%' }}><MaviClass /></div>} />
-              <Route path="/motion-laboratory" element={<div style={{ overflow: 'hidden', height: '100%' }}><MotionLaboratory /></div>} />
-              <Route path="/multi-camera" element={<div style={{ overflow: 'hidden', height: '100%' }}><MultiCameraFusion /></div>} />
-              <Route path="/vr-training" element={<div style={{ overflow: 'hidden', height: '100%' }}><VRTrainingMode measurements={measurements} videoSrc={videoSrc} videoName={videoName} currentProject={currentProject} /></div>} />
-              <Route path="/knowledge-base" element={<div style={{ overflow: 'hidden', height: '100%' }}><KnowledgeBase onLoadVideo={handleLoadVideoFromKB} /></div>} />
-              <Route path="/broadcast" element={
-                <div style={{
-                  padding: '10px',
-                  paddingLeft: isBroadcasting ? '420px' : '10px',
-                  overflowY: 'auto',
-                  height: '100%',
-                  transition: 'padding-left 0.3s ease'
-                }}>
-                  <div style={{ maxWidth: '600px', margin: isBroadcasting ? '0' : '0 auto' }}>
-                    <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
-                    <p style={{ color: 'var(--text-secondary)' }}>Share your video stream with other devices in real-time.</p>
-                    {/* UI Portal for BroadcastManager */}
-                    <div id="broadcast-manager-ui-portal"></div>
-                    {!isBroadcasting && (
-                      <div style={{
-                        padding: '20px',
-                        backgroundColor: 'var(--bg-secondary)',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border-color)',
-                        textAlign: 'center'
-                      }}>
-                        <p>Broadcast is not active.</p>
-                        <button
-                          onClick={() => broadcastManagerRef.current?.startBroadcast()}
-                          style={{
-                            padding: '10px 20px',
-                            backgroundColor: 'var(--accent-blue)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          Start New Broadcast
-                        </button>
-                      </div>
-                    )}
+        <button
+          className="sidebar-toggle"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          style={{
+            position: 'absolute',
+            right: sidebarCollapsed ? '10px' : '70px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)',
+            borderRadius: '50%',
+            width: '30px',
+            height: '30px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.2rem',
+            zIndex: 1001,
+            transition: 'right 0.3s ease',
+            boxShadow: '-2px 0 8px rgba(0,0,0,0.3)'
+          }}
+          title={sidebarCollapsed ? 'Show Menu' : 'Hide Menu'}
+        >
+          {sidebarCollapsed ? '◀' : '▶'}
+        </button>
+
+        <div className="main-content" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+          {/* Persistent VideoWorkspace - hidden when not on dashboard */}
+          <div
+            className="workspace-area"
+            style={{
+              flex: 1,
+              display: isDashboard ? 'flex' : 'none',
+              flexDirection: 'column',
+              padding: '10px',
+              gap: '10px'
+            }}
+          >
+            <VideoWorkspace
+              measurements={measurements}
+              onUpdateMeasurements={setMeasurements}
+              videoSrc={videoSrc}
+              onVideoChange={setVideoSrc}
+              videoName={videoName}
+              onVideoNameChange={setVideoName}
+              currentProject={currentProject}
+              onNewProject={() => setShowNewProjectDialog(true)}
+              onOpenProject={() => setShowOpenProjectDialog(true)}
+              onExportProject={handleExportProject}
+              onImportProject={handleImportProject}
+              onLogout={handleLogout}
+            />
+          </div>
+
+          {/* Other Views Rendered via Routes with Lazy Loading */}
+          <div style={{ flex: 1, display: isDashboard ? 'none' : 'block', overflow: 'hidden' }}>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
+                <Route path="/" element={null} /> {/* Handled by persistent div */}
+                <Route path="/analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AnalysisDashboard measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
+                <Route path="/rearrangement" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><ElementRearrangement measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} /></div>} />
+                <Route path="/cycle-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleTimeAnalysis /></div>} />
+                <Route path="/swcs" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardWorkCombinationSheet currentProject={currentProject} /></div>} />
+                <Route path="/aggregation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><CycleAggregation measurements={measurements} /></div>} />
+                <Route path="/standard-time" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardTime measurements={measurements} /></div>} />
+                <Route path="/waste-elimination" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><WasteElimination measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
+                <Route path="/therblig" element={<div style={{ overflow: 'hidden', height: '100%' }}><TherbligAnalysis measurements={measurements} /></div>} />
+                <Route path="/statistical-analysis" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StatisticalAnalysis measurements={measurements} /></div>} />
+                <Route path="/mtm" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MTMCalculator /></div>} />
+                <Route path="/allowance" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><AllowanceCalculator /></div>} />
+                <Route path="/best-worst" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><BestWorstCycle measurements={measurements} /></div>} />
+                <Route path="/yamazumi" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><YamazumiChart measurements={measurements} /></div>} />
+                <Route path="/multi-axial" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MultiAxialAnalysis /></div>} />
+                <Route path="/manual-creation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ManualCreation /></div>} />
+                <Route path="/spaghetti-chart" element={<div style={{ overflow: 'hidden', height: '100%' }}><SpaghettiChart currentProject={currentProject} projectMeasurements={measurements} /></div>} />
+                <Route path="/ml-data" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MachineLearningData videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
+                <Route path="/object-tracking" element={<div style={{ overflow: 'hidden', height: '100%' }}><ObjectTracking videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />
+                <Route path="/predictive-maintenance" element={<div style={{ overflow: 'hidden', height: '100%' }}><PredictiveMaintenance measurements={measurements} /></div>} />
+                <Route path="/comparison" element={<div style={{ padding: '10px', overflow: 'hidden', height: '100%' }}><VideoComparison /></div>} />
+                <Route path="/mavi-class" element={<div style={{ overflow: 'hidden', height: '100%' }}><MaviClass /></div>} />
+                <Route path="/motion-laboratory" element={<div style={{ overflow: 'hidden', height: '100%' }}><MotionLaboratory /></div>} />
+                <Route path="/multi-camera" element={<div style={{ overflow: 'hidden', height: '100%' }}><MultiCameraFusion /></div>} />
+                <Route path="/vr-training" element={<div style={{ overflow: 'hidden', height: '100%' }}><VRTrainingMode measurements={measurements} videoSrc={videoSrc} videoName={videoName} currentProject={currentProject} /></div>} />
+                <Route path="/knowledge-base" element={<div style={{ overflow: 'hidden', height: '100%' }}><KnowledgeBase onLoadVideo={handleLoadVideoFromKB} /></div>} />
+                <Route path="/broadcast" element={
+                  <div style={{
+                    padding: '10px',
+                    paddingLeft: isBroadcasting ? '420px' : '10px',
+                    overflowY: 'auto',
+                    height: '100%',
+                    transition: 'padding-left 0.3s ease'
+                  }}>
+                    <div style={{ maxWidth: '600px', margin: isBroadcasting ? '0' : '0 auto' }}>
+                      <h2 style={{ color: 'var(--text-primary)' }}>📡 Broadcast Video</h2>
+                      <p style={{ color: 'var(--text-secondary)' }}>Share your video stream with other devices in real-time.</p>
+                      {/* UI Portal for BroadcastManager */}
+                      <div id="broadcast-manager-ui-portal"></div>
+                      {!isBroadcasting && (
+                        <div style={{
+                          padding: '20px',
+                          backgroundColor: 'var(--bg-secondary)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          textAlign: 'center'
+                        }}>
+                          <p>Broadcast is not active.</p>
+                          <button
+                            onClick={() => broadcastManagerRef.current?.startBroadcast()}
+                            style={{
+                              padding: '10px 20px',
+                              backgroundColor: 'var(--accent-blue)',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Start New Broadcast
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              } />
-              <Route path="/action-recognition" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ActionRecognition videoSrc={videoSrc} onActionsDetected={setMeasurements} /></div>} />
+                } />
+                <Route path="/action-recognition" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ActionRecognition videoSrc={videoSrc} onActionsDetected={setMeasurements} /></div>} />
 
-              <Route path="/value-stream-map" element={<div style={{ overflow: 'hidden', height: '100%' }}><ValueStreamMap /></div>} />
+                <Route path="/value-stream-map" element={<div style={{ overflow: 'hidden', height: '100%' }}><ValueStreamMap /></div>} />
 
-              {/* Cycle Segmentation */}
-              <Route path="/cycle-segmentation" element={<div style={{ overflow: 'hidden', height: '100%' }}><CycleSegmentation /></div>} />
+                {/* Cycle Segmentation */}
+                <Route path="/cycle-segmentation" element={<div style={{ overflow: 'hidden', height: '100%' }}><CycleSegmentation /></div>} />
 
-              {/* Workflow Guide */}
-              <Route path="/workflow-guide" element={<div style={{ overflow: 'hidden', height: '100%' }}><WorkflowGuide /></div>} />
+                {/* Workflow Guide */}
+                <Route path="/workflow-guide" element={<div style={{ overflow: 'hidden', height: '100%' }}><WorkflowGuide /></div>} />
 
-              {/* File Explorer */}
-              <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
+                {/* File Explorer */}
+                <Route path="/files" element={<div style={{ overflow: 'hidden', height: '100%' }}><FileExplorer /></div>} />
 
-              {/* AI Process Studio */}
-              <Route path="/ai-process" element={<AIProcessWorkspace measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} onVideoChange={setVideoSrc} videoName={videoName} onVideoNameChange={setVideoName} />} />
+                {/* AI Process Studio */}
+                <Route path="/ai-process" element={<AIProcessWorkspace measurements={measurements} onUpdateMeasurements={setMeasurements} videoSrc={videoSrc} onVideoChange={setVideoSrc} videoName={videoName} onVideoNameChange={setVideoName} />} />
 
-              {/* Teachable Machine Studio */}
-              <Route path="/teachable-machine" element={<TeachableMachineStudio videoSrc={videoSrc} />} />
+                {/* Teachable Machine Studio */}
+                <Route path="/teachable-machine" element={<TeachableMachineStudio videoSrc={videoSrc} />} />
 
-              {/* Real-time Compliance */}
-              <Route path="/realtime-compliance" element={<RealtimeCompliance projectName={currentProject?.name} />} />
+                {/* Real-time Compliance */}
+                <Route path="/realtime-compliance" element={<RealtimeCompliance projectName={currentProject?.name} />} />
 
-              {/* Admin Panel */}
-              <Route path="/admin" element={<div style={{ overflow: 'hidden', height: '100%' }}><AdminPanel /></div>} />
+                {/* Admin Panel */}
+                <Route path="/admin" element={<div style={{ overflow: 'hidden', height: '100%' }}><AdminPanel /></div>} />
 
-              {/* System Diagnostics */}
-              <Route path="/diagnostics" element={<div style={{ overflow: 'hidden', height: '100%' }}><SystemDiagnostics /></div>} />
+                {/* System Diagnostics */}
+                <Route path="/diagnostics" element={<div style={{ overflow: 'hidden', height: '100%' }}><SystemDiagnostics /></div>} />
 
-              {/* Studio Model */}
-              <Route path="/studio-model" element={<div style={{ overflow: 'hidden', height: '100%' }}><StudioModel /></div>} />
+                {/* Studio Model */}
+                <Route path="/studio-model" element={<div style={{ overflow: 'hidden', height: '100%' }}><StudioModel /></div>} />
 
-              {/* Pitch Deck */}
-              <Route path="/pitch-deck" element={<PitchDeck onClose={() => navigate('/')} />} />
+                {/* Pitch Deck */}
+                <Route path="/pitch-deck" element={<PitchDeck onClose={() => navigate('/')} />} />
 
-              {/* Main Menu */}
-              <Route path="/menu" element={<div style={{ overflow: 'hidden', height: '100%' }}><MainMenu /></div>} />
+                {/* Main Menu */}
+                <Route path="/menu" element={<div style={{ overflow: 'hidden', height: '100%' }}><MainMenu /></div>} />
 
-              {/* Fallback */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
+                {/* Fallback */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </div>
         </div>
-      </div>
 
-      <Header
-        videoName={videoName}
-        onUpload={(file) => {
-          const url = URL.createObjectURL(file);
-          setVideoSrc(url);
-          setVideoName(file.name);
-        }}
-        onOpenSessionManager={() => setShowSessionManager(true)}
-        theme={theme}
-        toggleTheme={toggleTheme}
-        sidebarCollapsed={sidebarCollapsed}
-      />
-
-      {showSessionManager && (
-        <SessionManager
-          onLoadSession={handleLoadSession}
-          onClose={() => setShowSessionManager(false)}
+        <Header
+          videoName={videoName}
+          onUpload={(file) => {
+            const url = URL.createObjectURL(file);
+            setVideoSrc(url);
+            setVideoName(file.name);
+          }}
+          onOpenSessionManager={() => setShowSessionManager(true)}
+          theme={theme}
+          toggleTheme={toggleTheme}
+          sidebarCollapsed={sidebarCollapsed}
         />
-      )}
 
-      <NewProjectDialog
-        isOpen={showNewProjectDialog}
-        onClose={() => setShowNewProjectDialog(false)}
-        onSubmit={handleNewProject}
-      />
+        {showSessionManager && (
+          <SessionManager
+            onLoadSession={handleLoadSession}
+            onClose={() => setShowSessionManager(false)}
+          />
+        )}
 
-      <OpenProjectDialog
-        isOpen={showOpenProjectDialog}
-        onClose={() => setShowOpenProjectDialog(false)}
-        onOpenProject={handleOpenProject}
-      />
-    </div>
+        <NewProjectDialog
+          isOpen={showNewProjectDialog}
+          onClose={() => setShowNewProjectDialog(false)}
+          onSubmit={handleNewProject}
+        />
+
+        <OpenProjectDialog
+          isOpen={showOpenProjectDialog}
+          onClose={() => setShowOpenProjectDialog(false)}
+          onOpenProject={handleOpenProject}
+        />
+      </div>
+    </LicenseGuard>
   );
 }
 
@@ -613,9 +615,7 @@ function App() {
       <AuthProvider>
         <ErrorBoundary>
           <BrowserRouter>
-            <LicenseGuard>
-              <AppContent />
-            </LicenseGuard>
+            <AppContent />
           </BrowserRouter>
         </ErrorBoundary>
       </AuthProvider>
