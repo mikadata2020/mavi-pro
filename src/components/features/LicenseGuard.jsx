@@ -1,38 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, CheckCircle, AlertCircle, Key, ShieldCheck } from 'lucide-react';
+import { Lock, CheckCircle, AlertCircle, Key, ShieldCheck, Mail, Send } from 'lucide-react';
 import { getSupabase } from '../../utils/supabaseClient';
+import { useAuth } from '../../contexts/AuthContext';
+import { validateKeyFormat } from '../../utils/licenseUtils';
 
 const LICENSE_STORAGE_KEY = 'mavi_app_license';
-const SECRET_SALT = 'MAVI_ROCKS_2024';
 
 const LicenseGuard = ({ children }) => {
+    const { user } = useAuth();
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [licenseKey, setLicenseKey] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [verifying, setVerifying] = useState(false);
 
-    // Simple custom hash for validation (Client-side)
-    const validateHash = (key) => {
-        try {
-            const parts = key.toUpperCase().trim().split('-');
-            if (parts.length !== 4) return false;
-            if (parts[0] !== 'MAVI') return false;
-
-            const [prefix, part1, part2, checksum] = parts;
-            const input = part1 + part2 + SECRET_SALT;
-            let hash = 0;
-            for (let i = 0; i < input.length; i++) {
-                const char = input.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            const expectedChecksum = Math.abs(hash).toString(16).substring(0, 4).toUpperCase().padStart(4, '0');
-            return checksum === expectedChecksum;
-        } catch (e) {
-            return false;
-        }
-    };
+    // License Request States
+    const [showRequestForm, setShowRequestForm] = useState(false);
+    const [requestSubmitted, setRequestSubmitted] = useState(false);
+    const [requestError, setRequestError] = useState('');
+    const [submittingRequest, setSubmittingRequest] = useState(false);
 
     const checkCloudLicense = async (key) => {
         try {
@@ -70,7 +56,7 @@ const LicenseGuard = ({ children }) => {
 
     const performValidation = async (key) => {
         // 1. Check Hash (Fast local check)
-        if (!validateHash(key)) return { valid: false, reason: 'Invalid license format.' };
+        if (!validateKeyFormat(key)) return { valid: false, reason: 'Invalid license format.' };
 
         // 2. Check Cloud (Async)
         return await checkCloudLicense(key);
@@ -80,7 +66,7 @@ const LicenseGuard = ({ children }) => {
         const checkStoredLicense = async () => {
             const storedKey = localStorage.getItem(LICENSE_STORAGE_KEY);
             if (storedKey) {
-                if (validateHash(storedKey)) {
+                if (validateKeyFormat(storedKey)) {
                     // Optimistically set true for UI speed, but verify in background?
                     // No, for security we must verify.
                     const result = await checkCloudLicense(storedKey);
@@ -113,6 +99,54 @@ const LicenseGuard = ({ children }) => {
             setError(result.reason || 'License validation failed.');
         }
         setVerifying(false);
+    };
+
+    const handleRequestLicense = async () => {
+        if (!user) {
+            setRequestError('You must be logged in to request a license.');
+            return;
+        }
+
+        setSubmittingRequest(true);
+        setRequestError('');
+
+        try {
+            const supabase = getSupabase();
+
+            // Check if user already has a pending request
+            const { data: existingRequest, error: checkError } = await supabase
+                .from('license_requests')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('status', 'pending')
+                .single();
+
+            if (existingRequest) {
+                setRequestError('You already have a pending license request.');
+                setSubmittingRequest(false);
+                return;
+            }
+
+            // Insert new license request
+            const { error: insertError } = await supabase
+                .from('license_requests')
+                .insert({
+                    user_id: user.id,
+                    email: user.email,
+                    status: 'pending',
+                    created_at: new Date().toISOString()
+                });
+
+            if (insertError) throw insertError;
+
+            setRequestSubmitted(true);
+            setShowRequestForm(false);
+        } catch (err) {
+            console.error('Error submitting license request:', err);
+            setRequestError(err.message || 'Failed to submit license request. Please try again.');
+        } finally {
+            setSubmittingRequest(false);
+        }
     };
 
     if (loading) return (
@@ -232,8 +266,147 @@ const LicenseGuard = ({ children }) => {
                 </form>
 
                 <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '0.8rem', color: '#555' }}>
-                    <div style={{ marginBottom: '5px' }}>Requires Internet Connection</div>
-                    Don't have a key? Contact support@maviai.com
+                    {requestSubmitted ? (
+                        <div style={{
+                            padding: '16px',
+                            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                            border: '1px solid rgba(76, 175, 80, 0.3)',
+                            borderRadius: '12px',
+                            color: '#4CAF50',
+                            marginBottom: '16px'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
+                                <CheckCircle size={20} />
+                                <strong>Request Submitted!</strong>
+                            </div>
+                            <div style={{ fontSize: '0.85rem' }}>
+                                Your license request has been sent to the admin. You will receive your license key via email once approved.
+                            </div>
+                        </div>
+                    ) : showRequestForm ? (
+                        <div style={{
+                            padding: '20px',
+                            backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            marginBottom: '16px'
+                        }}>
+                            <h3 style={{ color: '#fff', margin: '0 0 16px 0', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                                <Mail size={20} />
+                                Request License Key
+                            </h3>
+                            <p style={{ color: '#aaa', fontSize: '0.85rem', marginBottom: '16px' }}>
+                                Your request will be sent to the admin for approval.
+                            </p>
+                            {user && (
+                                <div style={{
+                                    padding: '12px',
+                                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                                    borderRadius: '8px',
+                                    marginBottom: '16px',
+                                    textAlign: 'left'
+                                }}>
+                                    <div style={{ color: '#888', fontSize: '0.75rem', marginBottom: '4px' }}>Account Email</div>
+                                    <div style={{ color: '#fff', fontSize: '0.9rem', fontFamily: 'monospace' }}>{user.email}</div>
+                                </div>
+                            )}
+                            {requestError && (
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    color: '#ff4444',
+                                    fontSize: '0.85rem',
+                                    marginBottom: '12px',
+                                    padding: '8px',
+                                    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+                                    borderRadius: '6px'
+                                }}>
+                                    <AlertCircle size={14} />
+                                    {requestError}
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button
+                                    onClick={handleRequestLicense}
+                                    disabled={submittingRequest || !user}
+                                    style={{
+                                        flex: 1,
+                                        padding: '12px',
+                                        background: submittingRequest ? '#444' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        color: '#fff',
+                                        fontSize: '0.9rem',
+                                        fontWeight: '600',
+                                        cursor: submittingRequest || !user ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '8px',
+                                        opacity: submittingRequest || !user ? 0.6 : 1
+                                    }}
+                                >
+                                    <Send size={16} />
+                                    {submittingRequest ? 'Sending...' : 'Send Request'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setShowRequestForm(false);
+                                        setRequestError('');
+                                    }}
+                                    disabled={submittingRequest}
+                                    style={{
+                                        padding: '12px 20px',
+                                        background: 'transparent',
+                                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                                        borderRadius: '8px',
+                                        color: '#aaa',
+                                        fontSize: '0.9rem',
+                                        fontWeight: '600',
+                                        cursor: submittingRequest ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div style={{ marginBottom: '5px' }}>Requires Internet Connection</div>
+                            <div style={{ marginBottom: '16px' }}>
+                                Don't have a key?{' '}
+                                <button
+                                    onClick={() => setShowRequestForm(true)}
+                                    disabled={!user}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: user ? '#667eea' : '#555',
+                                        textDecoration: 'underline',
+                                        cursor: user ? 'pointer' : 'not-allowed',
+                                        fontSize: '0.8rem',
+                                        padding: 0
+                                    }}
+                                    title={!user ? 'Please log in first to request a license' : 'Request a license key from admin'}
+                                >
+                                    Request License
+                                </button>
+                            </div>
+                            {!user && (
+                                <div style={{
+                                    padding: '12px',
+                                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                                    border: '1px solid rgba(255, 193, 7, 0.3)',
+                                    borderRadius: '8px',
+                                    color: '#FFC107',
+                                    fontSize: '0.75rem'
+                                }}>
+                                    ⚠️ Please log in to your account to request a license key
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
         </div>
