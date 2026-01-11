@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import LanguageSelector from './LanguageSelector';
+import LanguageSwitcher from './LanguageSwitcher';
 import { useLanguage } from '../i18n/LanguageContext';
 import GlobalSettingsDialog from './GlobalSettingsDialog';
 
@@ -154,7 +154,7 @@ function Header({ videoName, onUpload, onOpenSessionManager, theme, toggleTheme,
                     {theme === 'dark' ? '☀️' : '🌙'}
                 </button>
 
-                <LanguageSelector />
+                <LanguageSwitcher />
 
                 <div style={{ width: '30px', height: '1px', backgroundColor: '#555', margin: '5px 0' }}></div>
 
