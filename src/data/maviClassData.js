@@ -750,6 +750,81 @@ export const modules = [
         }
     },
     {
+        id: 'pmts-standard-data',
+        title: '🏭 Standard Time & PMTS',
+        description: 'Tentukan waktu standar tanpa stopwatch menggunakan MTM-1',
+        duration: '40 menit',
+        color: '#795548',
+        hasCertificate: true,
+        lessons: [
+            {
+                id: 'pmts-1',
+                title: 'Introduction to PMTS',
+                type: 'video',
+                duration: '10 min',
+                xp: 30,
+                content: {
+                    description: 'Apa itu Predetermined Motion Time System (PMTS)?',
+                    keyPoints: [
+                        'Menghitung waktu standar dari tabel data sintetis',
+                        'Tidak perlu stopwatch atau rating factor',
+                        'MTM-1 (Methods-Time Measurement) adalah standar global',
+                        'Satuan TMU (Time Measurement Unit): 1 TMU = 0.036 detik'
+                    ],
+                    tryIt: '/pmts-builder',
+                    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                }
+            },
+            {
+                id: 'pmts-2',
+                title: 'MTM-1 Basics',
+                type: 'interactive',
+                duration: '15 min',
+                xp: 40,
+                content: {
+                    description: 'Pelajari kode gerakan dasar MTM-1.',
+                    keyPoints: [
+                        'Reach (R) - Menjangkau objek (contoh: R10A)',
+                        'Grasp (G) - Memegang objek (contoh: G1A)',
+                        'Move (M) - Memindahkan objek (contoh: M20B)',
+                        'Position (P) & Release (RL) - Memposisikan & Melepas'
+                    ],
+                    tryIt: '/pmts-builder',
+                    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                }
+            },
+            {
+                id: 'pmts-3',
+                title: 'Using PMTS Builder',
+                type: 'hands-on',
+                duration: '15 min',
+                xp: 50,
+                content: {
+                    description: 'Praktek membuat analisa MTM menggunakan MAVi Builder.',
+                    keyPoints: [
+                        'Buka menu Standard Data (PMTS)',
+                        'Cari kode gerakan di Library sebelah kiri',
+                        'Klik untuk menambahkan ke Sequence',
+                        'Export hasil analisa ke JSON'
+                    ],
+                    tryIt: '/pmts-builder',
+                    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                }
+            }
+        ],
+        practice: {
+            title: 'Misi 9: Master of Time 🏭',
+            description: 'Buat standar kerja rakitan pulpen menggunakan MTM-1.',
+            tasks: [
+                'Tambahkan gerakan Reach (R20A) dan Grasp (G1A)',
+                'Tambahkan gerakan Move (M20B) dan Release (RL1)',
+                'Pastikan total TMU sudah terhitung otomatis'
+            ],
+            actionLabel: 'Buka PMTS Builder',
+            actionLink: '/pmts-builder'
+        }
+    },
+    {
         id: 'studio-model',
         title: '🎬 Studio Model & Compliance',
         description: 'Buat model AI kustom dan monitor compliance real-time',
