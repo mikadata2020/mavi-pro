@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { simulateLinePerformance } from '../utils/monteCarloSimulation';
 import {
     DndContext,
     DragOverlay,
@@ -18,7 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 // Sortable Task Item
-function SortableTask({ id, task }) {
+function SortableTask({ id, task, isStochastic, onUpdate }) {
     const {
         attributes,
         listeners,
@@ -56,31 +57,72 @@ function SortableTask({ id, task }) {
 
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '10px' }}>
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '10px', flex: 1 }}>
                 <div style={{ color: '#fff', fontSize: '0.9rem' }}>{task.elementName || task.name}</div>
                 <div style={{ color: '#888', fontSize: '0.75rem' }}>{task.category}</div>
             </div>
-            <div style={{ color: '#00ff00', fontWeight: 'bold', fontSize: '0.9rem', minWidth: '50px', textAlign: 'right' }}>
-                {operatorTime.toFixed(2)}s
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <div style={{ color: '#00ff00', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                    {operatorTime.toFixed(2)}s
+                </div>
+                {isStochastic && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#888' }}>±</span>
+                        <input
+                            type="number"
+                            step="0.1"
+                            value={task.stdDev !== undefined ? task.stdDev : (operatorTime * 0.1).toFixed(2)}
+                            onChange={(e) => onUpdate && onUpdate(task.id, 'stdDev', parseFloat(e.target.value))}
+                            style={{
+                                width: '40px',
+                                backgroundColor: '#222',
+                                border: '1px solid #555',
+                                color: '#ccc',
+                                fontSize: '0.7rem',
+                                padding: '1px 2px'
+                            }}
+                            onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on input
+                            onKeyDown={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                )}
             </div>
         </div>
     );
 }
 
 // Station Container
-function StationColumn({ id, title, tasks, totalTime, taktTime }) {
+function StationColumn({ id, title, tasks, totalTime, taktTime, isStochastic, simData, onUpdateTask }) {
     const { setNodeRef } = useSortable({ id });
 
     const isOverTakt = totalTime > taktTime;
+
+    // Simulation colors
+    let borderColor = isOverTakt ? '#c50f1f' : '#333';
+    let bgColor = '#1a1a1a';
+
+    if (isStochastic && simData) {
+        if (simData.failRate > 50) {
+            borderColor = '#c50f1f';
+            bgColor = 'rgba(197, 15, 31, 0.1)';
+        } else if (simData.failRate > 10) {
+            borderColor = '#ff9800';
+            bgColor = 'rgba(255, 152, 0, 0.1)';
+        } else {
+            borderColor = '#0a5';
+            bgColor = 'rgba(0, 170, 85, 0.1)';
+        }
+    }
 
     return (
         <div
             ref={setNodeRef}
             style={{
-                backgroundColor: '#1a1a1a',
+                backgroundColor: bgColor,
                 padding: '15px',
                 borderRadius: '8px',
-                border: `1px solid ${isOverTakt ? '#c50f1f' : '#333'}`,
+                border: `1px solid ${borderColor}`,
                 minWidth: '250px',
                 width: '250px',
                 display: 'flex',
@@ -101,17 +143,33 @@ function StationColumn({ id, title, tasks, totalTime, taktTime }) {
                 ) : (
                     <h3 style={{ margin: 0, color: '#fff', fontSize: '1rem' }}>{title}</h3>
                 )}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
                     <span style={{ color: '#888', fontSize: '0.85rem' }}>Total:</span>
                     <span style={{ color: isOverTakt ? '#c50f1f' : '#fff', fontWeight: 'bold' }}>
                         {totalTime.toFixed(2)}s
                     </span>
                 </div>
+
+                {isStochastic && simData && (
+                    <div style={{ marginTop: '5px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#888' }}>Fail Rate:</span>
+                        <span style={{ color: simData.failRate > 10 ? '#c50f1f' : '#0a5', fontWeight: 'bold' }}>
+                            {simData.failRate.toFixed(1)}%
+                        </span>
+                    </div>
+                )}
             </div>
             <div style={{ flex: 1, overflowY: 'auto', minHeight: '100px' }}>
                 <SortableContext id={id} items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     {tasks.map((task) => (
-                        <SortableTask key={task.id} id={task.id} task={task} />
+                        <SortableTask
+                            key={task.id}
+                            id={task.id}
+                            task={task}
+                            isStochastic={isStochastic}
+                            onUpdate={onUpdateTask}
+                        />
                     ))}
                 </SortableContext>
             </div>
@@ -123,6 +181,11 @@ export default function LineBalancingBoard({ measurements, onUpdateMeasurements,
     const [activeId, setActiveId] = useState(null);
     const [items, setItems] = useState({});
 
+    // Simulation State
+    const [isStochasticMode, setIsStochasticMode] = useState(false);
+    const [isSimulating, setIsSimulating] = useState(false);
+    const [simResults, setSimResults] = useState(null);
+
     // Initialize items from measurements
     useEffect(() => {
         const grouped = measurements.reduce((acc, m) => {
@@ -132,7 +195,38 @@ export default function LineBalancingBoard({ measurements, onUpdateMeasurements,
             return acc;
         }, {});
         setItems(grouped);
+        setSimResults(null); // Reset sim on data change
     }, [measurements]);
+
+    const runSimulation = async () => {
+        setIsSimulating(true);
+
+        // Prepare data for simulation
+        const stations = {};
+        Object.keys(items).forEach(stationId => {
+            stations[stationId] = items[stationId].map(t => {
+                const man = parseFloat(t.manualTime) || 0;
+                const walk = parseFloat(t.walkTime) || 0;
+                const wait = parseFloat(t.waitingTime) || 0;
+                const auto = parseFloat(t.autoTime) || 0;
+                let opTime = man + walk + wait;
+                if (opTime === 0 && auto === 0 && t.duration > 0) opTime = t.duration;
+
+                return {
+                    id: t.id,
+                    time: opTime,
+                    stdDev: t.stdDev // will use default if undefined in util
+                };
+            });
+        });
+
+        // Run async to not block UI
+        setTimeout(() => {
+            const results = simulateLinePerformance(stations, taktTime);
+            setSimResults(results);
+            setIsSimulating(false);
+        }, 100);
+    };
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -243,47 +337,129 @@ export default function LineBalancingBoard({ measurements, onUpdateMeasurements,
     };
 
     return (
-        <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', padding: '20px 0', minHeight: '400px' }}>
-            <DndContext
-                sensors={sensors}
-                collisionDetection={closestCorners}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-            >
-                {Object.keys(items).sort().map((station) => (
-                    <StationColumn
-                        key={station}
-                        id={station}
-                        title={station}
-                        tasks={items[station]}
-                        totalTime={items[station].reduce((sum, t) => {
-                            const man = parseFloat(t.manualTime) || 0;
-                            const walk = parseFloat(t.walkTime) || 0;
-                            const wait = parseFloat(t.waitingTime) || 0;
-                            const auto = parseFloat(t.autoTime) || 0;
-                            let opTime = man + walk + wait;
-                            if (opTime === 0 && auto === 0 && t.duration > 0) opTime = t.duration;
-                            return sum + opTime;
-                        }, 0)}
-                        taktTime={taktTime}
-                    />
-                ))}
-                <DragOverlay>
-                    {activeId ? (
-                        <div style={{
-                            padding: '10px',
-                            backgroundColor: '#2a2a2a',
-                            border: '1px solid #444',
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Toolbar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1e1e1e', padding: '10px 20px', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <h3 style={{ margin: 0, color: 'white' }}>Line Balancing</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#333', padding: '5px 10px', borderRadius: '4px' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#ccc' }}>Stochastic Mode</span>
+                        <input
+                            type="checkbox"
+                            checked={isStochasticMode}
+                            onChange={(e) => setIsStochasticMode(e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                        />
+                    </div>
+                </div>
+
+                {isStochasticMode && (
+                    <button
+                        onClick={runSimulation}
+                        style={{
+                            backgroundColor: '#0078d4',
+                            color: 'white',
+                            border: 'none',
+                            padding: '8px 16px',
                             borderRadius: '4px',
-                            color: '#fff',
-                            boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
-                        }}>
-                            Dragging Task...
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            opacity: isSimulating ? 0.7 : 1
+                        }}
+                        disabled={isSimulating}
+                    >
+                        {isSimulating ? 'Running...' : '🎲 Run Monte Carlo Sim'}
+                    </button>
+                )}
+            </div>
+
+            {/* Simulation Results */}
+            {simResults && isStochasticMode && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', marginBottom: '10px' }}>
+                    <div style={{ backgroundColor: simResults.reliability > 90 ? 'rgba(0, 170, 85, 0.2)' : 'rgba(197, 15, 31, 0.2)', padding: '15px', borderRadius: '8px', border: `1px solid ${simResults.reliability > 90 ? '#0a5' : '#c50f1f'}` }}>
+                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Reliability (Meet Takt)</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: simResults.reliability > 90 ? '#0a5' : '#c50f1f' }}>
+                            {simResults.reliability.toFixed(1)}%
                         </div>
-                    ) : null}
-                </DragOverlay>
-            </DndContext>
+                    </div>
+                    <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
+                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Avg Cycle Time</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                            {simResults.avgCycleTime.toFixed(2)}s
+                        </div>
+                    </div>
+                    <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
+                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Risk (95th Percentile)</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ff9800' }}>
+                            {simResults.p95CycleTime.toFixed(2)}s
+                        </div>
+                    </div>
+                    <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
+                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Critical Station</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {simResults.stationAnalysis.sort((a, b) => b.failRate - a.failRate)[0]?.id || '-'}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', padding: '0 0 20px 0', minHeight: '400px' }}>
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCorners}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragEnd={handleDragEnd}
+                >
+                    {Object.keys(items).sort().map((station) => (
+                        <StationColumn
+                            key={station}
+                            id={station}
+                            title={station}
+                            tasks={items[station]}
+                            totalTime={items[station].reduce((sum, t) => {
+                                const man = parseFloat(t.manualTime) || 0;
+                                const walk = parseFloat(t.walkTime) || 0;
+                                const wait = parseFloat(t.waitingTime) || 0;
+                                const auto = parseFloat(t.autoTime) || 0;
+                                let opTime = man + walk + wait;
+                                if (opTime === 0 && auto === 0 && t.duration > 0) opTime = t.duration;
+                                return sum + opTime;
+                            }, 0)}
+                            taktTime={taktTime}
+                            isStochastic={isStochasticMode}
+                            simData={simResults?.stationAnalysis?.find(s => s.id === station)}
+                            onUpdateTask={(taskId, field, value) => {
+                                // Update local logic to handle task updates
+                                // This is a bit complex as we need to bubble up to parent
+                                // For now, we assume simple mutation or passing a handler down
+                                const newItems = { ...items };
+                                const task = newItems[station].find(t => t.id === taskId);
+                                if (task) {
+                                    task[field] = value;
+                                    setItems(newItems);
+                                }
+                            }}
+                        />
+                    ))}
+                    <DragOverlay>
+                        {activeId ? (
+                            <div style={{
+                                padding: '10px',
+                                backgroundColor: '#2a2a2a',
+                                border: '1px solid #444',
+                                borderRadius: '4px',
+                                color: '#fff',
+                                boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
+                            }}>
+                                Dragging Task...
+                            </div>
+                        ) : null}
+                    </DragOverlay>
+                </DndContext>
+            </div>
         </div>
     );
 }
