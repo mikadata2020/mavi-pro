@@ -752,8 +752,8 @@ export const modules = [
     {
         id: 'pmts-standard-data',
         title: '🏭 Standard Time & PMTS',
-        description: 'Tentukan waktu standar tanpa stopwatch menggunakan MTM-1',
-        duration: '40 menit',
+        description: 'Tentukan waktu standar menggunakan MTM-1 & MODAPTS',
+        duration: '45 menit',
         color: '#795548',
         hasCertificate: true,
         lessons: [
@@ -768,8 +768,8 @@ export const modules = [
                     keyPoints: [
                         'Menghitung waktu standar dari tabel data sintetis',
                         'Tidak perlu stopwatch atau rating factor',
-                        'MTM-1 (Methods-Time Measurement) adalah standar global',
-                        'Satuan TMU (Time Measurement Unit): 1 TMU = 0.036 detik'
+                        'Mendukung MTM-1 (TMU) dan MODAPTS (MOD)',
+                        'Konversi: 1 TMU = 0.036s, 1 MOD = 0.129s'
                     ],
                     tryIt: '/pmts-builder',
                     videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
@@ -795,17 +795,35 @@ export const modules = [
             },
             {
                 id: 'pmts-3',
+                title: 'MODAPTS Overview',
+                type: 'interactive',
+                duration: '10 min',
+                xp: 40,
+                content: {
+                    description: 'Modular Arrangement of Predetermined Time Standards.',
+                    keyPoints: [
+                        'Sistem yang lebih sederhana dibanding MTM-1',
+                        'Codes berdasarkan bagian tubuh: M1 (Jari) - M7 (Badan)',
+                        'Terminal codes: G (Get), P (Put)',
+                        'Auxiliary: L (Load), W (Walk), E (Eye)'
+                    ],
+                    tryIt: '/pmts-builder',
+                    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                }
+            },
+            {
+                id: 'pmts-4',
                 title: 'Using PMTS Builder',
                 type: 'hands-on',
                 duration: '15 min',
                 xp: 50,
                 content: {
-                    description: 'Praktek membuat analisa MTM menggunakan MAVi Builder.',
+                    description: 'Praktek membuat analisa MTM & MODAPTS.',
                     keyPoints: [
-                        'Buka menu Standard Data (PMTS)',
-                        'Cari kode gerakan di Library sebelah kiri',
+                        'Pilih library (MTM-1 atau MODAPTS) di atas sidebar',
+                        'Cari kode gerakan di Library',
                         'Klik untuk menambahkan ke Sequence',
-                        'Export hasil analisa ke JSON'
+                        'Lihat perbandingan hasil konversi waktu'
                     ],
                     tryIt: '/pmts-builder',
                     videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
@@ -814,11 +832,12 @@ export const modules = [
         ],
         practice: {
             title: 'Misi 9: Master of Time 🏭',
-            description: 'Buat standar kerja rakitan pulpen menggunakan MTM-1.',
+            description: 'Buat standar kerja rakitan pulpen menggunakan MODAPTS.',
             tasks: [
-                'Tambahkan gerakan Reach (R20A) dan Grasp (G1A)',
-                'Tambahkan gerakan Move (M20B) dan Release (RL1)',
-                'Pastikan total TMU sudah terhitung otomatis'
+                'Ganti library ke MODAPTS',
+                'Gunakan gerakan M3 (Lower Arm) dan G1 (Simple Grasp)',
+                'Gunakan gerakan M3 (Lower Arm) dan P0 (Place)',
+                'Pastikan total MOD terhitung'
             ],
             actionLabel: 'Buka PMTS Builder',
             actionLink: '/pmts-builder'
