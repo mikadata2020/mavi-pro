@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { simulateLinePerformance } from '../utils/monteCarloSimulation';
+import DigitalTwinSimulator from './DigitalTwinSimulator';
 import {
     DndContext,
     DragOverlay,
@@ -17,6 +18,7 @@ import {
     useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Layout, Activity, PlayCircle, StopCircle } from 'lucide-react'; // Icons
 
 // Sortable Task Item
 function SortableTask({ id, task, isStochastic, onUpdate }) {
@@ -122,7 +124,7 @@ function StationColumn({ id, title, tasks, totalTime, taktTime, isStochastic, si
                 backgroundColor: bgColor,
                 padding: '15px',
                 borderRadius: '8px',
-                border: `1px solid ${borderColor}`,
+                border: `1px solid ${borderColor} `,
                 minWidth: '250px',
                 width: '250px',
                 display: 'flex',
@@ -180,11 +182,13 @@ function StationColumn({ id, title, tasks, totalTime, taktTime, isStochastic, si
 export default function LineBalancingBoard({ measurements, onUpdateMeasurements, taktTime }) {
     const [activeId, setActiveId] = useState(null);
     const [items, setItems] = useState({});
+    const [viewMode, setViewMode] = useState('BOARD'); // 'BOARD' or 'DIGITAL_TWIN'
 
     // Simulation State
     const [isStochasticMode, setIsStochasticMode] = useState(false);
     const [isSimulating, setIsSimulating] = useState(false);
     const [simResults, setSimResults] = useState(null);
+    const [isDigitalTwinRunning, setIsDigitalTwinRunning] = useState(false);
 
     // Initialize items from measurements
     useEffect(() => {
@@ -342,18 +346,47 @@ export default function LineBalancingBoard({ measurements, onUpdateMeasurements,
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1e1e1e', padding: '10px 20px', borderRadius: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <h3 style={{ margin: 0, color: 'white' }}>Line Balancing</h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#333', padding: '5px 10px', borderRadius: '4px' }}>
-                        <span style={{ fontSize: '0.9rem', color: '#ccc' }}>Stochastic Mode</span>
-                        <input
-                            type="checkbox"
-                            checked={isStochasticMode}
-                            onChange={(e) => setIsStochasticMode(e.target.checked)}
-                            style={{ cursor: 'pointer' }}
-                        />
+
+                    {/* View Switcher */}
+                    <div style={{ display: 'flex', backgroundColor: '#333', borderRadius: '4px', padding: '2px' }}>
+                        <button
+                            onClick={() => setViewMode('BOARD')}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '5px',
+                                border: 'none', background: viewMode === 'BOARD' ? '#444' : 'transparent',
+                                color: viewMode === 'BOARD' ? 'white' : '#888',
+                                padding: '4px 10px', borderRadius: '4px', cursor: 'pointer'
+                            }}
+                        >
+                            <Layout size={14} /> Board
+                        </button>
+                        <button
+                            onClick={() => setViewMode('DIGITAL_TWIN')}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: '5px',
+                                border: 'none', background: viewMode === 'DIGITAL_TWIN' ? '#444' : 'transparent',
+                                color: viewMode === 'DIGITAL_TWIN' ? 'white' : '#888',
+                                padding: '4px 10px', borderRadius: '4px', cursor: 'pointer'
+                            }}
+                        >
+                            <Activity size={14} /> Digital Twin
+                        </button>
                     </div>
+
+                    {viewMode === 'BOARD' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#333', padding: '5px 10px', borderRadius: '4px' }}>
+                            <span style={{ fontSize: '0.9rem', color: '#ccc' }}>Stochastic Mode</span>
+                            <input
+                                type="checkbox"
+                                checked={isStochasticMode}
+                                onChange={(e) => setIsStochasticMode(e.target.checked)}
+                                style={{ cursor: 'pointer' }}
+                            />
+                        </div>
+                    )}
                 </div>
 
-                {isStochasticMode && (
+                {viewMode === 'BOARD' && isStochasticMode && (
                     <button
                         onClick={runSimulation}
                         style={{
@@ -373,93 +406,122 @@ export default function LineBalancingBoard({ measurements, onUpdateMeasurements,
                         {isSimulating ? 'Running...' : '🎲 Run Monte Carlo Sim'}
                     </button>
                 )}
+
+                {viewMode === 'DIGITAL_TWIN' && (
+                    <button
+                        onClick={() => setIsDigitalTwinRunning(!isDigitalTwinRunning)}
+                        style={{
+                            backgroundColor: isDigitalTwinRunning ? '#c50f1f' : '#0a5',
+                            color: 'white',
+                            border: 'none',
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}
+                    >
+                        {isDigitalTwinRunning ? <StopCircle size={18} /> : <PlayCircle size={18} />}
+                        {isDigitalTwinRunning ? 'Stop Simulation' : 'Start Simulation'}
+                    </button>
+                )}
             </div>
 
-            {/* Simulation Results */}
-            {simResults && isStochasticMode && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', marginBottom: '10px' }}>
-                    <div style={{ backgroundColor: simResults.reliability > 90 ? 'rgba(0, 170, 85, 0.2)' : 'rgba(197, 15, 31, 0.2)', padding: '15px', borderRadius: '8px', border: `1px solid ${simResults.reliability > 90 ? '#0a5' : '#c50f1f'}` }}>
-                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Reliability (Meet Takt)</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: simResults.reliability > 90 ? '#0a5' : '#c50f1f' }}>
-                            {simResults.reliability.toFixed(1)}%
-                        </div>
-                    </div>
-                    <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
-                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Avg Cycle Time</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
-                            {simResults.avgCycleTime.toFixed(2)}s
-                        </div>
-                    </div>
-                    <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
-                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Risk (95th Percentile)</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ff9800' }}>
-                            {simResults.p95CycleTime.toFixed(2)}s
-                        </div>
-                    </div>
-                    <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
-                        <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Critical Station</div>
-                        <div style={{ fontSize: '1.2rem', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {simResults.stationAnalysis.sort((a, b) => b.failRate - a.failRate)[0]?.id || '-'}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', padding: '0 0 20px 0', minHeight: '400px' }}>
-                <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCorners}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                >
-                    {Object.keys(items).sort().map((station) => (
-                        <StationColumn
-                            key={station}
-                            id={station}
-                            title={station}
-                            tasks={items[station]}
-                            totalTime={items[station].reduce((sum, t) => {
-                                const man = parseFloat(t.manualTime) || 0;
-                                const walk = parseFloat(t.walkTime) || 0;
-                                const wait = parseFloat(t.waitingTime) || 0;
-                                const auto = parseFloat(t.autoTime) || 0;
-                                let opTime = man + walk + wait;
-                                if (opTime === 0 && auto === 0 && t.duration > 0) opTime = t.duration;
-                                return sum + opTime;
-                            }, 0)}
-                            taktTime={taktTime}
-                            isStochastic={isStochasticMode}
-                            simData={simResults?.stationAnalysis?.find(s => s.id === station)}
-                            onUpdateTask={(taskId, field, value) => {
-                                // Update local logic to handle task updates
-                                // This is a bit complex as we need to bubble up to parent
-                                // For now, we assume simple mutation or passing a handler down
-                                const newItems = { ...items };
-                                const task = newItems[station].find(t => t.id === taskId);
-                                if (task) {
-                                    task[field] = value;
-                                    setItems(newItems);
-                                }
-                            }}
-                        />
-                    ))}
-                    <DragOverlay>
-                        {activeId ? (
-                            <div style={{
-                                padding: '10px',
-                                backgroundColor: '#2a2a2a',
-                                border: '1px solid #444',
-                                borderRadius: '4px',
-                                color: '#fff',
-                                boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
-                            }}>
-                                Dragging Task...
+            {/* CONTENT AREA */}
+            {viewMode === 'DIGITAL_TWIN' ? (
+                <DigitalTwinSimulator
+                    stationsData={items}
+                    isRunning={isDigitalTwinRunning}
+                    onStop={() => setIsDigitalTwinRunning(false)}
+                />
+            ) : (
+                <>
+                    {/* Simulation Results (Static) */}
+                    {simResults && isStochasticMode && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', marginBottom: '10px' }}>
+                            <div style={{ backgroundColor: simResults.reliability > 90 ? 'rgba(0, 170, 85, 0.2)' : 'rgba(197, 15, 31, 0.2)', padding: '15px', borderRadius: '8px', border: `1px solid ${simResults.reliability > 90 ? '#0a5' : '#c50f1f'} ` }}>
+                                <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Reliability (Meet Takt)</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: simResults.reliability > 90 ? '#0a5' : '#c50f1f' }}>
+                                    {simResults.reliability.toFixed(1)}%
+                                </div>
                             </div>
-                        ) : null}
-                    </DragOverlay>
-                </DndContext>
-            </div>
+                            <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
+                                <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Avg Cycle Time</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                                    {simResults.avgCycleTime.toFixed(2)}s
+                                </div>
+                            </div>
+                            <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
+                                <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Risk (95th Percentile)</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#ff9800' }}>
+                                    {simResults.p95CycleTime.toFixed(2)}s
+                                </div>
+                            </div>
+                            <div style={{ backgroundColor: '#252526', padding: '15px', borderRadius: '8px' }}>
+                                <div style={{ color: '#aaa', fontSize: '0.8rem', marginBottom: '5px' }}>Critical Station</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {simResults.stationAnalysis.sort((a, b) => b.failRate - a.failRate)[0]?.id || '-'}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* DRAG AND DROP BOARD */}
+                    <div style={{ display: 'flex', gap: '15px', overflowX: 'auto', padding: '0 0 20px 0', minHeight: '400px' }}>
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCorners}
+                            onDragStart={handleDragStart}
+                            onDragOver={handleDragOver}
+                            onDragEnd={handleDragEnd}
+                        >
+                            {Object.keys(items).sort().map((station) => (
+                                <StationColumn
+                                    key={station}
+                                    id={station}
+                                    title={station}
+                                    tasks={items[station]}
+                                    totalTime={items[station].reduce((sum, t) => {
+                                        const man = parseFloat(t.manualTime) || 0;
+                                        const walk = parseFloat(t.walkTime) || 0;
+                                        const wait = parseFloat(t.waitingTime) || 0;
+                                        const auto = parseFloat(t.autoTime) || 0;
+                                        let opTime = man + walk + wait;
+                                        if (opTime === 0 && auto === 0 && t.duration > 0) opTime = t.duration;
+                                        return sum + opTime;
+                                    }, 0)}
+                                    taktTime={taktTime}
+                                    isStochastic={isStochasticMode}
+                                    simData={simResults?.stationAnalysis?.find(s => s.id === station)}
+                                    onUpdateTask={(taskId, field, value) => {
+                                        const newItems = { ...items };
+                                        const task = newItems[station].find(t => t.id === taskId);
+                                        if (task) {
+                                            task[field] = value;
+                                            setItems(newItems);
+                                        }
+                                    }}
+                                />
+                            ))}
+                            <DragOverlay>
+                                {activeId ? (
+                                    <div style={{
+                                        padding: '10px',
+                                        backgroundColor: '#2a2a2a',
+                                        border: '1px solid #444',
+                                        borderRadius: '4px',
+                                        color: '#fff',
+                                        boxShadow: '0 5px 15px rgba(0,0,0,0.5)'
+                                    }}>
+                                        Dragging Task...
+                                    </div>
+                                ) : null}
+                            </DragOverlay>
+                        </DndContext>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

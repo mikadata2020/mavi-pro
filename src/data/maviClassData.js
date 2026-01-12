@@ -844,6 +844,127 @@ export const modules = [
         }
     },
     {
+        id: 'line-balancing',
+        title: '⚖️ Line Balancing & Digital Twin',
+        description: 'Optimasi aliran produksi dengan Simulasi & Digital Twin.',
+        duration: '40 menit',
+        color: '#ff9800',
+        objectives: [
+            'Memahami konsep Line Balancing & Takt Time',
+            'Menggunakan Yamazumi Chart untuk visualisasi beban',
+            'Analisa risiko dengan Stochastic Modelling',
+            'Menjalankan Digital Twin untuk simulasi real-time'
+        ],
+        prerequisite: 'pmts-standard-data',
+        hasCertificate: true,
+        quiz: {
+            passingScore: 80,
+            questions: [
+                {
+                    id: 'lb-q1',
+                    question: 'Apa tujuan utama dari Line Balancing?',
+                    options: [
+                        'Membuat semua orang sibuk',
+                        'Menyeimbangkan beban kerja antar stasiun kerja (meet Takt Time)',
+                        'Menghilangkan semua operator',
+                        'Meningkatkan inventory'
+                    ],
+                    correctAnswer: 1
+                },
+                {
+                    id: 'lb-q2',
+                    question: 'Dalam mode Stochastic, apa arti zona merah pada stasiun?',
+                    options: [
+                        'Stasiun rusak',
+                        'Stasiun memiliki risiko tinggi (>50%) gagal memenuhi Takt Time',
+                        'Operator sedang istirahat',
+                        'Kualitas produk buruk'
+                    ],
+                    correctAnswer: 1
+                },
+                {
+                    id: 'lb-q3',
+                    question: 'Apa fungsi Digital Twin di MAVi?',
+                    options: [
+                        'Hanya untuk backup data',
+                        'Simulasi visual real-time untuk melihat flow & bottleneck',
+                        'Membuat kembaran operator',
+                        'Game untuk hiburan'
+                    ],
+                    correctAnswer: 1
+                }
+            ]
+        },
+        lessons: [
+            {
+                id: 'lb-1',
+                title: 'Konsep Line Balancing',
+                type: 'video',
+                duration: '8 min',
+                xp: 30,
+                content: {
+                    description: 'Dasar-dasar penyeimbangan lini produksi.',
+                    keyPoints: [
+                        'Takt Time: Irama permintaan pelanggan',
+                        'Cycle Time: Waktu proses aktual',
+                        'Bottleneck: Proses terlama yang menghambat flow',
+                        'Efficiency: Ratio output vs input'
+                    ],
+                    tryIt: '/line-balancing',
+                    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                }
+            },
+            {
+                id: 'lb-2',
+                title: 'Stochastic & Risk Analysis',
+                type: 'interactive',
+                duration: '12 min',
+                xp: 45,
+                content: {
+                    description: 'Mengelola variabilitas dalam produksi.',
+                    keyPoints: [
+                        'Manusia tidak stabil (ada variasi waktu)',
+                        'Gunakan Standard Deviation (±) di MAVi',
+                        'Monte Carlo Sim: Jalankan 1000 iterasi',
+                        'Lihat % Reliability untuk prediksi kegagalan'
+                    ],
+                    tryIt: '/line-balancing',
+                    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                }
+            },
+            {
+                id: 'lb-3',
+                title: 'Digital Twin Simulation',
+                type: 'hands-on',
+                duration: '15 min',
+                xp: 60,
+                content: {
+                    description: 'Pabrik virtual yang hidup di layar Anda.',
+                    keyPoints: [
+                        'Ubah view dari Board ke Digital Twin',
+                        'Monitor status: Busy vs Blocked vs Starved',
+                        'Lihat tumpukan barang (Buffer) secara visual',
+                        'Percepat waktu (20x) untuk melihat efek jangka panjang'
+                    ],
+                    tryIt: '/line-balancing',
+                    videoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+                }
+            }
+        ],
+        practice: {
+            title: 'Misi 10: The Digital Factory 🏭',
+            description: 'Selamatkan pabrik macet dengan simulasi Digital Twin.',
+            tasks: [
+                'Buka Line Balancing & Nyalakan Stochastic Mode',
+                'Set Std Dev (±) di stasiun kritis',
+                'Jalankan "Digital Twin" dan identifikasi stasiun yang sering "Blocked"',
+                'Pindahkan tugas sampai aliran lancar (tidak ada merah)'
+            ],
+            actionLabel: 'Buka Digital Twin',
+            actionLink: '/line-balancing'
+        }
+    },
+    {
         id: 'studio-model',
         title: '🎬 Studio Model & Compliance',
         description: 'Buat model AI kustom dan monitor compliance real-time',
