@@ -16,6 +16,7 @@ const MENU_CATEGORIES = {
 const MENU_ITEMS = [
     // MAIN MENU
     { path: '/menu', icon: '🏠', labelKey: 'header.mainMenu', title: 'Main Menu', category: 'CORE' },
+    { path: '/mavi-class', icon: '🎓', title: 'MAVi Class', labelKey: 'header.maviClass', category: 'CORE' },
 
     // CORE
     { path: '/', icon: '🎬', labelKey: 'header.video', exact: true, category: 'CORE' },
@@ -46,7 +47,6 @@ const MENU_ITEMS = [
     { path: '/cycle-segmentation', icon: '🔄', labelKey: 'header.cycleSegmentation', title: 'Cycle Segmentation', category: 'ADVANCED' },
 
     // LEARNING & COLLABORATION
-    { path: '/mavi-class', icon: '🎓', title: 'MAVi Class', labelKey: 'header.maviClass', category: 'LEARNING' },
     { path: '/knowledge-base', icon: '📚', labelKey: 'header.knowledgeBase', title: 'Knowledge Base', category: 'LEARNING' },
     { path: '/broadcast', icon: '📡', labelKey: 'header.broadcast', title: 'Broadcast', category: 'LEARNING' },
     { path: '/help', icon: '❓', labelKey: 'header.help', category: 'LEARNING' },
