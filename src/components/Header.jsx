@@ -42,6 +42,7 @@ const MENU_ITEMS = [
     { path: '/comparison', icon: '🎥', labelKey: 'header.comparison', category: 'ADVANCED' },
     { path: '/multi-camera', icon: '📹', labelKey: 'header.multiCamera', title: 'Multi-Camera 3D Fusion', category: 'ADVANCED' },
     { path: '/vr-training', icon: '🥽', labelKey: 'header.vrTraining', title: 'VR Training Mode', category: 'ADVANCED' },
+    { path: '/multi-axial', icon: '🛤️', labelKey: 'header.multiAxial', title: 'Multi-Axial Analysis', category: 'ADVANCED' },
     { path: '/cycle-segmentation', icon: '🔄', labelKey: 'header.cycleSegmentation', title: 'Cycle Segmentation', category: 'ADVANCED' },
 
     // LEARNING & COLLABORATION

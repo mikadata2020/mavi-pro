@@ -215,6 +215,15 @@ const MENU_ITEMS = [
         descriptionId: 'Segmentasi siklus kerja otomatis',
         category: 'ADVANCED'
     },
+    {
+        path: '/multi-axial',
+        icon: '🛤️',
+        label: 'Multi-Axial Analysis',
+        labelId: 'Multi-Axial Analysis',
+        description: 'Multi-project timeline comparison',
+        descriptionId: 'Perbandingan timeline multi-proyek',
+        category: 'ADVANCED'
+    },
 
     // LEARNING & COLLABORATION
     {

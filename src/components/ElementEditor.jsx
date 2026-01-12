@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Bot, X, CheckCircle, Eye, EyeOff, Settings } from 'lucide-react';
 import { saveMeasurementSession } from '../utils/database';
 import { exportToExcel } from '../utils/excelExport';
 import NarrationRecorder from './NarrationRecorder';
@@ -18,10 +19,26 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     const [editAuto, setEditAuto] = useState(0);
     const [editWalk, setEditWalk] = useState(0);
     const [editWait, setEditWait] = useState(0);
+    const [editRating, setEditRating] = useState(100);
     const [searchQuery, setSearchQuery] = useState('');
-    const [filterCategory, setFilterCategory] = useState('all');
-    const [filterTherblig, setFilterTherblig] = useState('all');
+
     const [sortBy, setSortBy] = useState('order');
+
+    // Standard Time State
+    const [allowances, setAllowances] = useState({
+        personal: 5,
+        fatigue: 4,
+        delay: 2
+    });
+    const [showAllowanceModal, setShowAllowanceModal] = useState(false);
+
+    const calculateStandardTime = (duration, rating) => {
+        const ratingFactor = (rating || 100) / 100;
+        const normalTime = duration * ratingFactor;
+        const totalAllowance = allowances.personal + allowances.fatigue + allowances.delay;
+        const standardTime = normalTime * (1 + totalAllowance / 100);
+        return { normalTime, standardTime };
+    };
 
     // AI Chat State
     const [showChat, setShowChat] = useState(false);
@@ -51,6 +68,69 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
             </svg>
         );
     };
+
+    // Avatar Component for consistent use
+    const SenseiAvatar = ({ size = 40, animated = false, isSpeaking = false }) => (
+        <div style={{
+            position: 'relative',
+            width: size,
+            height: size,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: animated ? 'bounce 3s ease-in-out infinite' : 'none'
+        }}>
+            <div style={{
+                position: 'absolute',
+                width: '100%',
+                height: '100%',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                opacity: 0.2,
+                filter: 'blur(8px)',
+                animation: isSpeaking ? 'pulse 1s ease-in-out infinite' : 'none'
+            }} />
+            <div style={{
+                width: size * 0.8,
+                height: size * 0.8,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid rgba(255,255,255,0.3)',
+                boxShadow: isSpeaking ? '0 0 15px #667eea' : 'none',
+                transition: 'all 0.3s ease',
+                zIndex: 2
+            }}>
+                <Bot size={size * 0.5} color="#fff" />
+            </div>
+            {isSpeaking && (
+                <div style={{
+                    position: 'absolute',
+                    top: -10,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    display: 'flex',
+                    gap: '2px',
+                    height: '10px',
+                    alignItems: 'flex-end',
+                    zIndex: 2
+                }}>
+                    {[1, 2, 3].map(i => (
+                        <div key={i} style={{
+                            width: '2px',
+                            backgroundColor: '#667eea',
+                            borderRadius: '1px',
+                            animation: `soundWave ${0.5 + i * 0.1}s ease-in-out infinite`,
+                            height: '100%'
+                        }} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+
 
     const totalTime = measurements.reduce((sum, m) => sum + m.duration, 0);
     const valueAddedTime = measurements.filter(m => m.category === 'Value-added').reduce((sum, m) => sum + m.duration, 0);
@@ -82,7 +162,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     };
 
     const handleExport = () => {
-        exportToExcel(measurements, videoName);
+        exportToExcel(measurements, videoName, allowances);
     };
 
     const handleDelete = (id) => {
@@ -93,6 +173,34 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
 
     const [editStartTime, setEditStartTime] = useState(0);
     const [editEndTime, setEditEndTime] = useState(0);
+
+    // Column Visibility State
+    const [visibleColumns, setVisibleColumns] = useState({
+        no: true,
+        cycle: true,
+        process: true,
+        category: true,
+        manual: true,
+        auto: true,
+        walk: true,
+        loss: true,
+        therblig: true,
+        start: true,
+        finish: true,
+        duration: true,
+        rating: true,
+        normalTime: true,
+        standardTime: true,
+        actions: true
+    });
+    const [showColumnMenu, setShowColumnMenu] = useState(false);
+
+    const toggleColumn = (column) => {
+        setVisibleColumns(prev => ({
+            ...prev,
+            [column]: !prev[column]
+        }));
+    };
 
     const handleStartEdit = (element) => {
         setEditingId(element.id);
@@ -105,6 +213,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         setEditWalk(element.walkTime || 0);
         setEditStartTime(element.startTime);
         setEditEndTime(element.endTime);
+        setEditRating(element.rating || 100);
     };
 
     const handleSaveEdit = () => {
@@ -144,13 +253,14 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
             category: editCategory,
             therblig: editTherblig,
             cycle: parseInt(editCycle) || 1,
-            manualTime: parseFloat(editManual) || 0,
-            autoTime: parseFloat(editAuto) || 0,
-            walkTime: parseFloat(editWalk) || 0,
-            waitingTime: parseFloat(editWait) || 0,
+            manualTime: manual,
+            autoTime: auto,
+            walkTime: walk,
+            waitingTime: waiting,
             startTime: startTime,
             endTime: endTime,
-            duration: endTime - startTime
+            duration: duration,
+            rating: parseFloat(editRating) || 100
         } : m));
         setEditingId(null);
     };
@@ -274,12 +384,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
         if (searchQuery) {
             filtered = filtered.filter(m => m.elementName.toLowerCase().includes(searchQuery.toLowerCase()));
         }
-        if (filterCategory !== 'all') {
-            filtered = filtered.filter(m => m.category === filterCategory);
-        }
-        if (filterTherblig !== 'all') {
-            filtered = filtered.filter(m => m.therblig === filterTherblig);
-        }
+
+
 
         switch (sortBy) {
             case 'duration':
@@ -299,6 +405,11 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     };
 
     const filteredMeasurements = getFilteredAndSortedMeasurements();
+
+    const visibleColumnCount = Object.values(visibleColumns).filter(Boolean).length;
+    // Columns that appear before the 'Duration' column
+    const columnsBeforeDuration = ['no', 'cycle', 'process', 'category', 'manual', 'auto', 'walk', 'loss', 'therblig', 'start', 'finish'];
+    const visibleBeforeDuration = columnsBeforeDuration.filter(c => visibleColumns[c]).length;
 
     const handleSendMessage = async () => {
         if (!chatInput.trim()) return;
@@ -341,49 +452,91 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
     return (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-secondary)', padding: '10px' }}>
             {/* Filter Row with Action Buttons */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto 2fr 1fr 1fr 1fr 1fr', gap: '4px', marginBottom: '6px', padding: '3px 6px', backgroundColor: '#2a2a2a', borderRadius: '4px', alignItems: 'center' }}>
-                <button onClick={handleSave} disabled={isSaving || measurements.length === 0} style={{ padding: '3px 8px', fontSize: '0.9rem', backgroundColor: measurements.length > 0 ? 'var(--accent-blue)' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '3px', color: 'white' }} title="Simpan ke Database">
-                    {isSaving ? '⌛' : '💾'}
-                </button>
-                <button onClick={handleExport} disabled={measurements.length === 0} style={{ padding: '3px 8px', fontSize: '0.9rem', backgroundColor: measurements.length > 0 ? '#217346' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '3px', color: 'white' }} title="Export ke Excel">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ verticalAlign: 'middle' }}>
-                        <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6zm2-8h8v2H8v-2zm0 4h8v2H8v-2zm0-8h5v2H8V8z" />
-                        <text x="12" y="15" fontSize="10" fontWeight="bold" textAnchor="middle" fill="white">X</text>
-                    </svg>
-                </button>
-                <button
-                    onClick={() => setShowChat(!showChat)}
-                    style={{ padding: '3px 8px', fontSize: '0.9rem', backgroundColor: showChat ? '#0078d4' : '#444', cursor: 'pointer', border: 'none', borderRadius: '3px', color: 'white' }}
-                    title="AI Industrial Engineer Chat"
-                >
-                    → AI
-                </button>
-                <NarrationRecorder
-                    sessionId={null}
-                    existingNarration={narration}
-                    onNarrationSaved={onNarrationChange}
-                />
-                <input type="text" placeholder="🔍 Cari elemen..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: '3px 8px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.8rem' }} />
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
-                    <option value="all">Semua Kategori</option>
-                    <option value="Value-added">Value-added</option>
-                    <option value="Non value-added">Non value-added</option>
-                    <option value="Waste">Waste</option>
-                </select>
-                <select value={filterTherblig} onChange={(e) => setFilterTherblig(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
-                    <option value="all">Semua Therblig</option>
-                    {Object.entries(THERBLIGS).map(([code, { name }]) => (
-                        <option key={code} value={code}>{code} - {name}</option>
-                    ))}
-                </select>
+            {/* Filter Row with Action Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '4px', marginBottom: '6px', padding: '4px', backgroundColor: '#2a2a2a', borderRadius: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button onClick={handleSave} disabled={isSaving || measurements.length === 0} style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', backgroundColor: measurements.length > 0 ? 'var(--accent-blue)' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '4px', color: 'white' }} title="Simpan ke Database">
+                        {isSaving ? '⌛' : '💾'}
+                    </button>
+                    <button onClick={handleExport} disabled={measurements.length === 0} style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', backgroundColor: measurements.length > 0 ? '#217346' : '#555', cursor: measurements.length > 0 ? 'pointer' : 'not-allowed', border: 'none', borderRadius: '4px', color: 'white' }} title="Export ke Excel">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ verticalAlign: 'middle' }}>
+                            <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6zm2-8h8v2H8v-2zm0 4h8v2H8v-2zm0-8h5v2H8V8z" />
+                            <text x="12" y="15" fontSize="10" fontWeight="bold" textAnchor="middle" fill="white">X</text>
+                        </svg>
+                    </button>
+                    <button onClick={() => setShowAllowanceModal(true)} style={{ width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', backgroundColor: '#333', cursor: 'pointer', border: 'none', borderRadius: '4px', color: 'white' }} title="Pengaturan Allowance">
+                        <Settings size={16} />
+                    </button>
+                    <NarrationRecorder
+                        sessionId={null}
+                        existingNarration={narration}
+                        onNarrationSaved={onNarrationChange}
+                    />
 
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '3px 6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '3px', color: '#fff', fontSize: '0.75rem' }}>
-                    <option value="order">Urutan Asli</option>
-                    <option value="cycle">Cycle</option>
-                    <option value="duration">Durasi (Terbesar)</option>
+                    {/* Column Visibility Toggle */}
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <button
+                            onClick={() => setShowColumnMenu(!showColumnMenu)}
+                            style={{
+                                width: '30px',
+                                height: '30px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.9rem',
+                                backgroundColor: showColumnMenu ? '#444' : '#2a2a2a',
+                                border: '1px solid #444',
+                                borderRadius: '4px',
+                                color: '#ccc',
+                                cursor: 'pointer'
+                            }}
+                            title="Hide/Show Columns"
+                        >
+                            {showColumnMenu ? <Eye size={16} /> : <EyeOff size={16} />}
+                        </button>
+                        {showColumnMenu && (
+                            <div style={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: 0,
+                                zIndex: 1000,
+                                backgroundColor: '#1a1a1a',
+                                border: '1px solid #444',
+                                borderRadius: '4px',
+                                padding: '8px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                minWidth: '150px',
+                                boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
+                            }}>
+                                <div style={{ padding: '4px', borderBottom: '1px solid #333', marginBottom: '4px', fontWeight: 'bold', fontSize: '0.8rem', color: '#888' }}>
+                                    Toggle Columns
+                                </div>
+                                {Object.keys(visibleColumns).map(col => (
+                                    <label key={col} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#ccc', cursor: 'pointer', padding: '2px 4px', borderRadius: '3px', ':hover': { backgroundColor: '#333' } }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={visibleColumns[col]}
+                                            onChange={() => toggleColumn(col)}
+                                            style={{ accentColor: '#0078d4' }}
+                                        />
+                                        {col.charAt(0).toUpperCase() + col.slice(1)}
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
-                    <option value="name">Nama (A-Z)</option>
-                </select>
+                    {/* Search and Sort - Moved here */}
+                    <input type="text" placeholder="🔍 Cari elemen..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: '6px 12px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.85rem', minWidth: '200px' }} />
+                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '6px', backgroundColor: '#1a1a1a', border: '1px solid #444', borderRadius: '4px', color: '#fff', fontSize: '0.85rem' }}>
+                        <option value="order">Urutan Asli</option>
+                        <option value="cycle">Cycle</option>
+                        <option value="duration">Durasi (Terbesar)</option>
+                        <option value="name">Nama (A-Z)</option>
+                    </select>
+                </div>
             </div>
 
             {saveMessage && (
@@ -392,7 +545,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                 </div>
             )}
 
-            {(searchQuery || filterCategory !== 'all' || filterTherblig !== 'all') && (
+            {(searchQuery) && (
                 <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px', padding: '4px 8px', backgroundColor: '#2a2a2a', borderRadius: '4px' }}>
                     Menampilkan {filteredMeasurements.length} dari {measurements.length} elemen
                 </div>
@@ -402,26 +555,29 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                 <table style={{ width: '100%', minWidth: '1000px', borderCollapse: 'collapse', color: '#fff', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                     <thead style={{ position: 'sticky', top: 0, backgroundColor: '#333', zIndex: 1 }}>
                         <tr>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '40px', fontSize: '0.7rem' }}>No.</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem' }}>Cycle</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', fontSize: '0.7rem' }}>Proses</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '150px', fontSize: '0.7rem' }}>Kategori</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ffd700' }}>Manual</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#00ff00' }}>Auto</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ff4d4d' }}>Walk</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#f97316' }}>Loss (L)</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '100px', fontSize: '0.7rem' }}>Therblig</th>
+                            {visibleColumns.no && <th style={{ padding: '4px', border: '1px solid #444', width: '40px', fontSize: '0.7rem' }}>No.</th>}
+                            {visibleColumns.cycle && <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem' }}>Cycle</th>}
+                            {visibleColumns.process && <th style={{ padding: '4px', border: '1px solid #444', fontSize: '0.7rem' }}>Proses</th>}
+                            {visibleColumns.category && <th style={{ padding: '4px', border: '1px solid #444', width: '150px', fontSize: '0.7rem' }}>Kategori</th>}
+                            {visibleColumns.manual && <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ffd700' }}>Manual</th>}
+                            {visibleColumns.auto && <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#00ff00' }}>Auto</th>}
+                            {visibleColumns.walk && <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#ff4d4d' }}>Walk</th>}
+                            {visibleColumns.loss && <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#f97316' }}>Loss (L)</th>}
+                            {visibleColumns.therblig && <th style={{ padding: '4px', border: '1px solid #444', width: '100px', fontSize: '0.7rem' }}>Therblig</th>}
 
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Start (s)</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Finish (s)</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '80px', fontSize: '0.7rem' }}>Waktu (s)</th>
-                            <th style={{ padding: '4px', border: '1px solid #444', width: '150px', fontSize: '0.7rem' }}>Aksi</th>
+                            {visibleColumns.start && <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Start (s)</th>}
+                            {visibleColumns.finish && <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem' }}>Finish (s)</th>}
+                            {visibleColumns.duration && <th style={{ padding: '4px', border: '1px solid #444', width: '80px', fontSize: '0.7rem' }}>Waktu (s)</th>}
+                            {visibleColumns.rating && <th style={{ padding: '4px', border: '1px solid #444', width: '60px', fontSize: '0.7rem', color: '#00a6ff' }}>Rating %</th>}
+                            {visibleColumns.normalTime && <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem', color: '#00a6ff' }}>NT (s)</th>}
+                            {visibleColumns.standardTime && <th style={{ padding: '4px', border: '1px solid #444', width: '70px', fontSize: '0.7rem', color: '#00d4ff' }}>ST (s)</th>}
+                            {visibleColumns.actions && <th style={{ padding: '4px', border: '1px solid #444', width: '150px', fontSize: '0.7rem' }}>Aksi</th>}
                         </tr>
                     </thead>
                     <tbody>
                         {filteredMeasurements.length === 0 ? (
                             <tr>
-                                <td colSpan="10" style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                                <td colSpan={visibleColumnCount} style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
                                     {measurements.length === 0 ? 'Belum ada elemen. Mulai pengukuran untuk menambahkan elemen.' : 'Tidak ada elemen yang sesuai dengan filter.'}
                                 </td>
                             </tr>
@@ -430,8 +586,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                 const originalIndex = measurements.findIndex(m => m.id === el.id);
                                 return (
                                     <tr key={el.id} style={{ borderBottom: '1px solid #333' }}>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>{originalIndex + 1}</td>
-                                        <td
+                                        {visibleColumns.no && <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>{originalIndex + 1}</td>}
+                                        {visibleColumns.cycle && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'center', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
@@ -449,16 +605,16 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     {el.cycle || 1}
                                                 </span>
                                             )}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.process && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
                                             {editingId === el.id ? (
                                                 <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()} style={{ width: '100%', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: 'white', fontSize: '0.85rem' }} />
                                             ) : el.elementName}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.category && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
@@ -469,8 +625,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                             ) : (
                                                 <span style={{ display: 'inline-block', padding: '3px 8px', backgroundColor: getCategoryColor(el.category), borderRadius: '3px', fontSize: '0.8rem' }}>{el.category}</span>
                                             )}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.manual && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'center', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
@@ -486,8 +642,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                             ) : (
                                                 <span style={{ color: '#ffd700' }}>{el.manualTime ? el.manualTime.toFixed(2) : '-'}</span>
                                             )}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.auto && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'center', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
@@ -503,8 +659,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                             ) : (
                                                 <span style={{ color: '#00ff00' }}>{el.autoTime ? el.autoTime.toFixed(2) : '-'}</span>
                                             )}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.walk && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'center', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
@@ -520,8 +676,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                             ) : (
                                                 <span style={{ color: '#ff4d4d' }}>{el.walkTime ? el.walkTime.toFixed(2) : '-'}</span>
                                             )}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.loss && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'center', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
@@ -537,8 +693,8 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                             ) : (
                                                 <span style={{ color: '#f97316' }}>{el.waitingTime ? el.waitingTime.toFixed(2) : '-'}</span>
                                             )}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.therblig && <td
                                             onClick={() => editingId !== el.id && handleStartEdit(el)}
                                             style={{ padding: '6px', border: '1px solid #444', cursor: editingId !== el.id ? 'pointer' : 'default' }}
                                         >
@@ -557,22 +713,43 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                     </span>
                                                 ) : '-'
                                             )}
-                                        </td>
+                                        </td>}
 
-                                        <td
+                                        {visibleColumns.start && <td
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#888' }}
                                         >
                                             {el.startTime.toFixed(2)}
-                                        </td>
-                                        <td
+                                        </td>}
+                                        {visibleColumns.finish && <td
                                             style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontSize: '0.8rem', color: '#888' }}
                                         >
                                             {el.endTime.toFixed(2)}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontWeight: 'bold' }}>
+                                        </td>}
+                                        {visibleColumns.duration && <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontWeight: 'bold' }}>
                                             {(el.endTime - el.startTime).toFixed(2)}
-                                        </td>
-                                        <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
+                                        </td>}
+                                        {visibleColumns.rating && <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
+                                            {editingId === el.id ? (
+                                                <input
+                                                    type="number"
+                                                    value={editRating}
+                                                    onChange={(e) => setEditRating(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                                                    min="0"
+                                                    max="200"
+                                                    style={{ width: '50px', padding: '4px', backgroundColor: '#222', border: '1px solid #555', color: '#00a6ff', fontSize: '0.85rem', textAlign: 'center' }}
+                                                />
+                                            ) : (
+                                                <span style={{ color: '#00a6ff' }}>{el.rating || 100}%</span>
+                                            )}
+                                        </td>}
+                                        {visibleColumns.normalTime && <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', color: '#888' }}>
+                                            {calculateStandardTime(el.duration, el.rating).normalTime.toFixed(2)}
+                                        </td>}
+                                        {visibleColumns.standardTime && <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'right', fontWeight: 'bold', color: '#00d4ff' }}>
+                                            {calculateStandardTime(el.duration, el.rating).standardTime.toFixed(2)}
+                                        </td>}
+                                        {visibleColumns.actions && <td style={{ padding: '6px', border: '1px solid #444', textAlign: 'center' }}>
                                             {editingId === el.id ? (
                                                 <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                                                     <button onClick={handleSaveEdit} style={{ padding: '4px 8px', fontSize: '0.75rem', backgroundColor: '#0a0', border: 'none', color: 'white', cursor: 'pointer', borderRadius: '3px' }} title="Simpan">✓</button>
@@ -662,7 +839,7 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                                                 </div>
                                             )
                                             }
-                                        </td>
+                                        </td>}
                                     </tr>
                                 );
                             })
@@ -671,12 +848,12 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                             measurements.length > 0 && (
                                 <>
                                     <tr style={{ backgroundColor: '#222', fontWeight: 'bold' }}>
-                                        <td colSpan="7" style={{ padding: '8px', border: '1px solid #444' }}>Total</td>
-                                        <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{totalTime.toFixed(2)}</td>
-                                        <td style={{ border: '1px solid #444' }}></td>
+                                        <td colSpan={visibleBeforeDuration} style={{ padding: '8px', border: '1px solid #444' }}>Total</td>
+                                        {visibleColumns.duration && <td style={{ padding: '8px', border: '1px solid #444', textAlign: 'right' }}>{totalTime.toFixed(2)}</td>}
+                                        {visibleColumns.actions && <td style={{ border: '1px solid #444' }}></td>}
                                     </tr>
                                     <tr style={{ backgroundColor: '#1a1a1a', fontSize: '0.8rem' }}>
-                                        <td colSpan="9" style={{ padding: '10px', border: '1px solid #444' }}>
+                                        <td colSpan={visibleColumnCount} style={{ padding: '10px', border: '1px solid #444' }}>
                                             <div style={{ display: 'flex', gap: '20px', justifyContent: 'space-around', flexWrap: 'wrap' }}>
                                                 <div><span style={{ color: '#005a9e' }}>■</span> Value-added: {valueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((valueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>
                                                 <div><span style={{ color: '#bfa900' }}>■</span> Non value-added: {nonValueAddedTime.toFixed(2)}s {totalTime > 0 && `(${((nonValueAddedTime / totalTime) * 100).toFixed(1)}%)`}</div>
@@ -784,7 +961,150 @@ function ElementEditor({ measurements = [], videoName = 'Untitled', onUpdateMeas
                     </div>
                 )
             }
-        </div >
+            {/* AI Sensei Floating Button */}
+            <div
+                onClick={() => setShowChat(!showChat)}
+                style={{
+                    position: 'fixed',
+                    bottom: '30px',
+                    right: '30px',
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 0 15px rgba(102, 126, 234, 0.3)',
+                    zIndex: 1000,
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    animation: showChat ? 'none' : 'bounce 3s ease-in-out infinite'
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.1) translateY(-5px)';
+                    e.currentTarget.style.boxShadow = '0 12px 40px rgba(102, 126, 234, 0.5)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1) translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
+                }}
+                title="MAVi Sensei - AI Assistant"
+            >
+                {showChat ? (
+                    <X size={24} color="#fff" />
+                ) : (
+                    <div style={{ position: 'relative' }}>
+                        <SenseiAvatar size={40} animated={!showChat} />
+                        {!showChat && (
+                            <span style={{
+                                position: 'absolute',
+                                top: '0',
+                                right: '0',
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                backgroundColor: '#4CAF50',
+                                border: '2px solid #0a0a0a',
+                                boxShadow: '0 0 10px #4CAF50'
+                            }} />
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <style>{`
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); }
+                    50% { transform: scale(1.05); }
+                }
+                @keyframes bounce {
+                    0%, 100% { transform: translateY(0); }
+                    50% { transform: translateY(-5px); }
+                }
+                @keyframes soundWave {
+                    0%, 100% { height: 4px; }
+                    50% { height: 12px; }
+                }
+            `}</style>
+            {/* Allowance Modal */}
+            {showAllowanceModal && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    zIndex: 2000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }} onClick={() => setShowAllowanceModal(false)}>
+                    <div style={{
+                        backgroundColor: '#1e1e1e',
+                        padding: '20px',
+                        borderRadius: '8px',
+                        width: '300px',
+                        border: '1px solid #444',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+                    }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                            <h3 style={{ margin: 0, color: 'white' }}>⚙️ Pengaturan Allowance</h3>
+                            <button onClick={() => setShowAllowanceModal(false)} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '1.2rem' }}>✕</button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            <div>
+                                <label style={{ display: 'block', color: '#ccc', marginBottom: '5px', fontSize: '0.9rem' }}>Personal (%)</label>
+                                <input
+                                    type="number"
+                                    value={allowances.personal}
+                                    onChange={(e) => setAllowances({ ...allowances, personal: parseFloat(e.target.value) || 0 })}
+                                    style={{ width: '100%', padding: '8px', backgroundColor: '#333', border: '1px solid #555', color: 'white', borderRadius: '4px' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', color: '#ccc', marginBottom: '5px', fontSize: '0.9rem' }}>Basic Fatigue (%)</label>
+                                <input
+                                    type="number"
+                                    value={allowances.fatigue}
+                                    onChange={(e) => setAllowances({ ...allowances, fatigue: parseFloat(e.target.value) || 0 })}
+                                    style={{ width: '100%', padding: '8px', backgroundColor: '#333', border: '1px solid #555', color: 'white', borderRadius: '4px' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', color: '#ccc', marginBottom: '5px', fontSize: '0.9rem' }}>Delay (%)</label>
+                                <input
+                                    type="number"
+                                    value={allowances.delay}
+                                    onChange={(e) => setAllowances({ ...allowances, delay: parseFloat(e.target.value) || 0 })}
+                                    style={{ width: '100%', padding: '8px', backgroundColor: '#333', border: '1px solid #555', color: 'white', borderRadius: '4px' }}
+                                />
+                            </div>
+
+                            <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#2a2a2a', borderRadius: '4px', fontSize: '0.9rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#888' }}>
+                                    <span>Total Allowance:</span>
+                                    <span style={{ color: '#00d4ff', fontWeight: 'bold' }}>
+                                        {allowances.personal + allowances.fatigue + allowances.delay}%
+                                    </span>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setShowAllowanceModal(false)}
+                                style={{ width: '100%', padding: '10px', backgroundColor: '#0078d4', border: 'none', color: 'white', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                Selesai
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 

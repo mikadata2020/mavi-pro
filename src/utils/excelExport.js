@@ -1,25 +1,40 @@
 import * as XLSX from 'xlsx';
 
 // Export measurements to Excel
-export const exportToExcel = (measurements, videoName = 'Untitled') => {
+export const exportToExcel = (measurements, videoName = 'Untitled', allowances = null) => {
     if (!measurements || measurements.length === 0) {
         alert('Tidak ada data untuk di-export!');
         return;
     }
 
     // Prepare data for Excel
-    const data = measurements.map((m, index) => ({
-        'No.': index + 1,
-        'Nama Elemen': m.elementName,
-        'Kategori': m.category,
-        'M (Manual)': (Number(m.manualTime) || 0).toFixed(2),
-        'A (Auto)': (Number(m.autoTime) || 0).toFixed(2),
-        'W (Walk)': (Number(m.walkTime) || 0).toFixed(2),
-        'L (Loss)': (Number(m.waitingTime) || 0).toFixed(2),
-        'Waktu Mulai (s)': (Number(m.startTime) || 0).toFixed(2),
-        'Waktu Selesai (s)': (Number(m.endTime) || 0).toFixed(2),
-        'Durasi (s)': (Number(m.duration) || 0).toFixed(2)
-    }));
+    const data = measurements.map((m, index) => {
+        const rating = m.rating || 100;
+        const ratingFactor = rating / 100;
+        const normalTime = (Number(m.duration) || 0) * ratingFactor;
+
+        let standardTime = normalTime;
+        if (allowances) {
+            const totalAllowance = (allowances.personal || 0) + (allowances.fatigue || 0) + (allowances.delay || 0);
+            standardTime = normalTime * (1 + totalAllowance / 100);
+        }
+
+        return {
+            'No.': index + 1,
+            'Nama Elemen': m.elementName,
+            'Kategori': m.category,
+            'Rating (%)': rating,
+            'M (Manual)': (Number(m.manualTime) || 0).toFixed(2),
+            'A (Auto)': (Number(m.autoTime) || 0).toFixed(2),
+            'W (Walk)': (Number(m.walkTime) || 0).toFixed(2),
+            'L (Loss)': (Number(m.waitingTime) || 0).toFixed(2),
+            'Waktu Mulai (s)': (Number(m.startTime) || 0).toFixed(2),
+            'Waktu Selesai (s)': (Number(m.endTime) || 0).toFixed(2),
+            'Durasi (s)': (Number(m.duration) || 0).toFixed(2),
+            'Normal Time (s)': normalTime.toFixed(2),
+            'Standard Time (s)': standardTime.toFixed(2)
+        };
+    });
 
     // Calculate statistics
     const totalTime = measurements.reduce((sum, m) => sum + (Number(m.duration) || 0), 0);
@@ -117,7 +132,9 @@ export const exportToExcel = (measurements, videoName = 'Untitled') => {
         { wch: 12 }, // L
         { wch: 18 }, // Waktu Mulai
         { wch: 18 }, // Waktu Selesai
-        { wch: 15 }  // Durasi
+        { wch: 15 }, // Durasi
+        { wch: 15 }, // Normal Time
+        { wch: 15 }  // Standard Time
     ];
 
     // Generate filename with timestamp
