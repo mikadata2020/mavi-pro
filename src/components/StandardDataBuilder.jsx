@@ -1,12 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { mtm1Data } from '../data/mtm1Data';
-import { Plus, Trash2, Save, Download, FileText, ChevronRight, ChevronDown } from 'lucide-react';
+import { modaptsData } from '../data/modaptsData';
+import { Plus, Trash2, Save, Download, FileText, ChevronRight, ChevronDown, Repeat } from 'lucide-react';
 
 function StandardDataBuilder() {
+    const [library, setLibrary] = useState('MTM-1'); // 'MTM-1' or 'MODAPTS'
     const [sequence, setSequence] = useState([]);
-    const [expandedCategory, setExpandedCategory] = useState('reach');
+    const [expandedCategory, setExpandedCategory] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [title, setTitle] = useState('New Standard Operation');
+
+    // Data source based on selection
+    const currentData = library === 'MTM-1' ? mtm1Data : modaptsData;
+    const unitLabel = library === 'MTM-1' ? 'TMU' : 'MOD';
+    const conversionFactor = library === 'MTM-1' ? 0.036 : 0.129;
 
     const addToSequence = (item) => {
         setSequence(prev => [...prev, { ...item, id: Date.now(), frequency: 1 }]);
@@ -22,13 +29,19 @@ function StandardDataBuilder() {
         setSequence(newSeq);
     };
 
-    const categories = Object.keys(mtm1Data);
+    const categories = Object.keys(currentData);
 
-    const totalTMU = sequence.reduce((sum, item) => sum + (item.tmu * item.frequency), 0);
-    const totalSeconds = (totalTMU * 0.036).toFixed(3);
+    // Safety check for category selection when switching libraries
+    useEffect(() => {
+        setExpandedCategory(categories[0]);
+    }, [library, categories]);
+
+    const totalUnits = sequence.reduce((sum, item) => sum + (item.tmu * item.frequency), 0);
+    const totalSeconds = (totalUnits * conversionFactor).toFixed(3);
 
     const filteredCodes = (category) => {
-        const codes = mtm1Data[category].codes;
+        if (!currentData[category]) return [];
+        const codes = currentData[category].codes;
         if (!searchQuery) return codes;
         return codes.filter(c =>
             c.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -37,12 +50,19 @@ function StandardDataBuilder() {
     };
 
     const handleExport = () => {
-        const dataStr = JSON.stringify({ title, sequence, totalTMU, totalSeconds }, null, 2);
+        const dataStr = JSON.stringify({
+            title,
+            library,
+            sequence,
+            totalUnits,
+            unitLabel,
+            totalSeconds
+        }, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${title.replace(/\s+/g, '_')}_PMTS.json`;
+        a.download = `${title.replace(/\s+/g, '_')}_${library}.json`;
         a.click();
     };
 
@@ -52,11 +72,46 @@ function StandardDataBuilder() {
             <div style={{ width: '350px', backgroundColor: 'var(--bg-secondary)', borderRight: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)' }}>
                     <h2 style={{ fontSize: '1.2rem', margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        📚 MTM-1 Library
+                        📚 Standard Library
                     </h2>
+
+                    {/* Library Selector */}
+                    <div style={{ display: 'flex', marginBottom: '15px', backgroundColor: '#1e1e1e', borderRadius: '8px', padding: '4px' }}>
+                        <button
+                            onClick={() => setLibrary('MTM-1')}
+                            style={{
+                                flex: 1,
+                                padding: '8px',
+                                border: 'none',
+                                borderRadius: '6px',
+                                backgroundColor: library === 'MTM-1' ? 'var(--accent-blue)' : 'transparent',
+                                color: library === 'MTM-1' ? 'white' : '#888',
+                                cursor: 'pointer',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            MTM-1
+                        </button>
+                        <button
+                            onClick={() => setLibrary('MODAPTS')}
+                            style={{
+                                flex: 1,
+                                padding: '8px',
+                                border: 'none',
+                                borderRadius: '6px',
+                                backgroundColor: library === 'MODAPTS' ? 'var(--accent-blue)' : 'transparent',
+                                color: library === 'MODAPTS' ? 'white' : '#888',
+                                cursor: 'pointer',
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            MODAPTS
+                        </button>
+                    </div>
+
                     <input
                         type="text"
-                        placeholder="Search codes (e.g., R10)..."
+                        placeholder={`Search ${library} codes...`}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         style={{
@@ -85,14 +140,14 @@ function StandardDataBuilder() {
                                     fontWeight: '600'
                                 }}
                             >
-                                <span>{mtm1Data[cat].title}</span>
+                                <span>{currentData[cat].title}</span>
                                 {expandedCategory === cat ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </div>
 
                             {expandedCategory === cat && (
                                 <div style={{ padding: '10px', backgroundColor: '#1e1e1e' }}>
                                     <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '10px', padding: '0 5px' }}>
-                                        {mtm1Data[cat].description}
+                                        {currentData[cat].description}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                         {filteredCodes(cat).map((item) => (
@@ -117,8 +172,8 @@ function StandardDataBuilder() {
                                                     <div style={{ fontWeight: 'bold', color: 'var(--accent-blue)' }}>{item.code}</div>
                                                     <div style={{ fontSize: '0.8rem', color: '#ccc' }}>{item.desc}</div>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <span style={{ fontWeight: 'bold' }}>{item.tmu}</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '60px', justifyContent: 'flex-end' }}>
+                                                    <span style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>{item.tmu} <span style={{ fontSize: '0.7em', color: '#888' }}>{unitLabel}</span></span>
                                                     <Plus size={14} color="#0a5" />
                                                 </div>
                                             </div>
@@ -152,8 +207,18 @@ function StandardDataBuilder() {
                             onFocus={(e) => e.target.style.borderColor = 'var(--accent-blue)'}
                             onBlur={(e) => e.target.style.borderColor = 'transparent'}
                         />
-                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '5px' }}>
-                            Standard Data Builder (PMTS)
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginTop: '5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: library === 'MTM-1' ? '#4CAF50' : '#FF9800',
+                                color: 'white',
+                                fontSize: '0.8rem',
+                                fontWeight: 'bold'
+                            }}>
+                                {library}
+                            </span>
+                            Standard Data Builder
                         </div>
                     </div>
 
@@ -172,7 +237,7 @@ function StandardDataBuilder() {
                 <div style={{ flex: 1, backgroundColor: '#1e1e1e', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '50px 100px 1fr 80px 80px 80px 50px',
+                        gridTemplateColumns: '50px 100px 1fr 100px 80px 100px 50px',
                         padding: '15px',
                         backgroundColor: '#252526',
                         borderBottom: '1px solid var(--border-color)',
@@ -182,7 +247,7 @@ function StandardDataBuilder() {
                         <div>#</div>
                         <div>Code</div>
                         <div>Description</div>
-                        <div style={{ textAlign: 'right' }}>TMU</div>
+                        <div style={{ textAlign: 'right' }}>Value ({unitLabel})</div>
                         <div style={{ textAlign: 'center' }}>Freq</div>
                         <div style={{ textAlign: 'right' }}>Total</div>
                         <div></div>
@@ -193,13 +258,13 @@ function StandardDataBuilder() {
                             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
                                 <FileText size={48} style={{ marginBottom: '15px', opacity: 0.5 }} />
                                 <p>No operations added yet.</p>
-                                <p style={{ fontSize: '0.9rem' }}>Click items from the library on the left to build your sequence.</p>
+                                <p style={{ fontSize: '0.9rem' }}>Click items from the library to build your sequence.</p>
                             </div>
                         ) : (
                             sequence.map((item, index) => (
                                 <div key={item.id} style={{
                                     display: 'grid',
-                                    gridTemplateColumns: '50px 100px 1fr 80px 80px 80px 50px',
+                                    gridTemplateColumns: '50px 100px 1fr 100px 80px 100px 50px',
                                     padding: '12px 15px',
                                     borderBottom: '1px solid #333',
                                     alignItems: 'center',
@@ -253,11 +318,11 @@ function StandardDataBuilder() {
                         fontSize: '1.2rem'
                     }}>
                         <div>
-                            <span style={{ color: '#888', marginRight: '10px' }}>Total TMU:</span>
-                            <span style={{ fontWeight: 'bold', color: 'white' }}>{totalTMU.toFixed(1)}</span>
+                            <span style={{ color: '#888', marginRight: '10px' }}>Total {unitLabel}:</span>
+                            <span style={{ fontWeight: 'bold', color: 'white' }}>{totalUnits.toFixed(1)}</span>
                         </div>
                         <div>
-                            <span style={{ color: '#888', marginRight: '10px' }}>Time (sec):</span>
+                            <span style={{ color: '#888', marginRight: '10px' }}>Total Time:</span>
                             <span style={{ fontWeight: 'bold', color: '#0a5' }}>{totalSeconds}s</span>
                         </div>
                     </div>
