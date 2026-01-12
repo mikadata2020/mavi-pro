@@ -142,6 +142,15 @@ const MENU_ITEMS = [
         category: 'IE'
     },
     {
+        path: '/pmts-builder',
+        icon: '🏗️',
+        label: 'Standard Data Builder',
+        labelId: 'Pembuat Data Standar',
+        description: 'Build standard times using PMTS (MTM/MODAPTS)',
+        descriptionId: 'Buat waktu standar menggunakan PMTS (MTM/MODAPTS)',
+        category: 'IE'
+    },
+    {
         path: '/best-worst',
         icon: '🏆',
         label: 'Best/Worst Cycle',

@@ -58,6 +58,7 @@ const CycleSegmentation = React.lazy(() => import('./components/CycleSegmentatio
 const ValueStreamMap = React.lazy(() => import('./components/ValueStreamMap'));
 const AIProcessWorkspace = React.lazy(() => import('./components/AIProcessWorkspace'));
 const TeachableMachineStudio = React.lazy(() => import('./components/TeachableMachineStudio'));
+const StandardDataBuilder = React.lazy(() => import('./components/StandardDataBuilder'));
 
 const RealtimeCompliance = React.lazy(() => import('./components/RealtimeCompliance'));
 const StudioModel = React.lazy(() => import('./components/studio/StudioModel'));
@@ -478,6 +479,7 @@ function AppContent() {
                 <Route path="/best-worst" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><BestWorstCycle measurements={measurements} /></div>} />
                 <Route path="/yamazumi" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><YamazumiChart measurements={measurements} /></div>} />
                 <Route path="/multi-axial" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MultiAxialAnalysis /></div>} />
+                <Route path="/pmts-builder" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><StandardDataBuilder /></div>} />
                 <Route path="/manual-creation" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><ManualCreation /></div>} />
                 <Route path="/spaghetti-chart" element={<div style={{ overflow: 'hidden', height: '100%' }}><SpaghettiChart currentProject={currentProject} projectMeasurements={measurements} /></div>} />
                 <Route path="/ml-data" element={<div style={{ padding: '10px', overflowY: 'auto', height: '100%' }}><MachineLearningData videoSrc={videoSrc} measurements={measurements} onUpdateMeasurements={setMeasurements} /></div>} />

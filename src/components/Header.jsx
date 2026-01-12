@@ -34,6 +34,7 @@ const MENU_ITEMS = [
     { path: '/value-stream-map', icon: '🏭', labelKey: 'header.valueStreamMap', title: 'Value Stream Map', category: 'IE' },
     { path: '/therblig', icon: '📍', labelKey: 'header.therblig', title: 'Therblig Analysis', category: 'IE' },
     { path: '/statistical-analysis', icon: '📉', labelKey: 'header.statisticalAnalysis', title: 'Statistical Analysis', category: 'IE' },
+    { path: '/pmts-builder', icon: '🏗️', labelKey: 'header.pmtsBuilder', title: 'Standard Data (PMTS)', category: 'IE' },
     { path: '/best-worst', icon: '🏆', labelKey: 'header.bestWorst', category: 'IE' },
     { path: '/rearrangement', icon: '🔄', labelKey: 'header.rearrange', category: 'IE' },
     { path: '/waste-elimination', icon: '🗑️', labelKey: 'header.waste', category: 'IE' },
